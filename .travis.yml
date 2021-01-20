@@ -1,0 +1,28 @@
+language: dart
+dart:
+  - stable
+os:
+  - linux
+sudo: false
+addons:
+  apt:
+    sources:
+      - ubuntu-toolchain-r-test 
+    packages:
+      - libstdc++6
+      - fonts-droid-fallback
+before_script:
+  - git clone https://github.com/flutter/flutter.git -b beta
+  - ./flutter/bin/flutter doctor
+script:
+  - cd $TRAVIS_BUILD_DIR
+  - flutter packages get
+  - flutter analyze --no-pub --no-current-package lib
+  - flutter test
+  - flutter packages pub publish --dry-run
+branches:
+  only:
+  - master
+cache:
+  directories:
+    - $HOME/.pub-cache

@@ -1,0 +1,25 @@
+name: mixpanel_flutter
+description: Official Flutter Tracking Library for Mixpanel Analytics
+version: 0.0.2
+homepage: https://github.com/mixpanel/mixpanel-flutter
+
+environment:
+  sdk: ">=2.7.0 <3.0.0"
+  flutter: ">=1.20.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+flutter:
+  plugin:
+    platforms:
+      android:
+        package: com.mixpanel.mixpanel_flutter
+        pluginClass: MixpanelFlutterPlugin
+      ios:
+        pluginClass: MixpanelFlutterPlugin
