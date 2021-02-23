@@ -1,0 +1,31 @@
+PODS:
+  - Flutter (1.0.0)
+  - Mixpanel-swift (2.8.1):
+    - Mixpanel-swift/Complete (= 2.8.1)
+  - Mixpanel-swift/Complete (2.8.1)
+  - mixpanel_flutter (0.0.1):
+    - Flutter
+    - Mixpanel-swift (= 2.8.1)
+
+DEPENDENCIES:
+  - Flutter (from `Flutter`)
+  - mixpanel_flutter (from `.symlinks/plugins/mixpanel_flutter/ios`)
+
+SPEC REPOS:
+  trunk:
+    - Mixpanel-swift
+
+EXTERNAL SOURCES:
+  Flutter:
+    :path: Flutter
+  mixpanel_flutter:
+    :path: ".symlinks/plugins/mixpanel_flutter/ios"
+
+SPEC CHECKSUMS:
+  Flutter: 0e3d915762c693b495b44d77113d4970485de6ec
+  Mixpanel-swift: 9d3a2597ef015f187abae0bfa5fda5997d5e4429
+  mixpanel_flutter: 78b688d373cd5f0bb5bee423e323124ba3048353
+
+PODFILE CHECKSUM: aafe91acc616949ddb318b77800a7f51bffa2a4c
+
+COCOAPODS: 1.10.1
