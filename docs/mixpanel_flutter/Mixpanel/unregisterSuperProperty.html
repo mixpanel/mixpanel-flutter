@@ -129,8 +129,14 @@ To clear all superProperties, use clearSuperProperties()</p>
     <section class="summary source-code" id="source">
       <h2><span>Implementation</span></h2>
       <pre class="language-dart"><code class="language-dart">void unregisterSuperProperty(String propertyName) {
-  _channel.invokeMethod&lt;void&gt;(&#39;unregisterSuperProperty&#39;,
-      &lt;String, dynamic&gt;{&#39;propertyName&#39;: propertyName});
+  if (_MixpanelHelper.isValidString(propertyName)) {
+    _channel.invokeMethod&lt;void&gt;(&#39;unregisterSuperProperty&#39;,
+        &lt;String, dynamic&gt;{&#39;propertyName&#39;: propertyName});
+  } else {
+    developer.log(
+        &#39;`unregisterSuperProperty` failed: propertyName cannot be blank&#39;,
+        name: &#39;mixpanel&#39;);
+  }
 }</code></pre>
     </section>
 

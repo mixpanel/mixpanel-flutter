@@ -114,8 +114,14 @@ If the property exists and is not list-valued, the remove will be ignored.</p>
       <h2><span>Implementation</span></h2>
       <pre class="language-dart"><code class="language-dart">void remove(String name, dynamic value) {
   if (_MixpanelHelper.isValidString(name)) {
-    _channel.invokeMethod&lt;void&gt;(&#39;remove&#39;,
-        &lt;String, dynamic&gt;{&#39;token&#39;: this._token, &#39;name&#39;: name, &#39;value&#39;: value});
+    _channel.invokeMethod&lt;void&gt;(&#39;remove&#39;, &lt;String, dynamic&gt;{
+      &#39;token&#39;: this._token,
+      &#39;name&#39;: name,
+      &#39;value&#39;: value
+    });
+  } else {
+    developer.log(&#39;`people remove` failed: name cannot be blank&#39;,
+        name: &#39;mixpanel&#39;);
   }
 }</code></pre>
     </section>

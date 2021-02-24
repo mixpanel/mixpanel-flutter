@@ -129,7 +129,8 @@ This method will internally track an opt-in event to your project.</p>
     _channel.invokeMethod&lt;void&gt;(
         &#39;identify&#39;, &lt;String, dynamic&gt;{&#39;distinctId&#39;: distinctId});
   } else {
-    developer.log(&#39;cannot identify blank distinct id&#39;, name: &#39;mixpanel&#39;);
+    developer.log(&#39;`identify` failed: distinctId cannot be blank&#39;,
+        name: &#39;mixpanel&#39;);
   }
 }</code></pre>
     </section>

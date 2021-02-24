@@ -105,13 +105,15 @@
       <h2><span>Implementation</span></h2>
       <pre class="language-dart"><code class="language-dart">void unset(String prop) {
   if (_MixpanelHelper.isValidString(prop)) {
-
     _channel.invokeMethod&lt;void&gt;(&#39;groupUnsetProperty&#39;, &lt;String, dynamic&gt;{
       &#39;token&#39;: this._token,
       &#39;groupKey&#39;: this._groupKey,
       &#39;groupID&#39;: this._groupID,
       &#39;propertyName&#39;: prop
     });
+  } else {
+    developer.log(&#39;`group unset` failed: prop cannot be blank&#39;,
+        name: &#39;mixpanel&#39;);
   }
 }</code></pre>
     </section>

@@ -137,7 +137,8 @@ that event.</p>
     _channel.invokeMethod&lt;void&gt;(&#39;track&#39;,
         &lt;String, dynamic&gt;{&#39;eventName&#39;: eventName, &#39;properties&#39;: properties});
   } else {
-    developer.log(&#39;cannot track blank event name&#39;, name: &#39;mixpanel&#39;);
+    developer.log(&#39;`track` failed: eventName cannot be blank&#39;,
+        name: &#39;mixpanel&#39;);
   }
 }</code></pre>
     </section>

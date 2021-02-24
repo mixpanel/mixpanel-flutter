@@ -133,6 +133,9 @@ to Group Analytics using the same group value will create and store new values.<
   if (_MixpanelHelper.isValidString(groupKey)) {
     _channel.invokeMethod&lt;void&gt;(&#39;deleteGroup&#39;,
         &lt;String, dynamic&gt;{&#39;groupKey&#39;: groupKey, &#39;groupID&#39;: groupID});
+  } else {
+    developer.log(&#39;`deleteGroup` failed: groupKey cannot be blank&#39;,
+        name: &#39;mixpanel&#39;);
   }
 }</code></pre>
     </section>

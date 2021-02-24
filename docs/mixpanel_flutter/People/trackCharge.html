@@ -111,8 +111,16 @@
     <section class="summary source-code" id="source">
       <h2><span>Implementation</span></h2>
       <pre class="language-dart"><code class="language-dart">void trackCharge(double amount, {Map&lt;String, dynamic&gt; properties}) {
-  _channel.invokeMethod&lt;void&gt;(&#39;trackCharge&#39;,
-        &lt;String, dynamic&gt;{&#39;token&#39;: this._token, &#39;amount&#39;: amount, &#39;properties&#39;: properties});
+  if (amount != null) {
+    _channel.invokeMethod&lt;void&gt;(&#39;trackCharge&#39;, &lt;String, dynamic&gt;{
+      &#39;token&#39;: this._token,
+      &#39;amount&#39;: amount,
+      &#39;properties&#39;: properties
+    });
+  } else {
+    developer.log(&#39;`people trackCharge` failed: amount cannot be blank&#39;,
+        name: &#39;mixpanel&#39;);
+  }
 }</code></pre>
     </section>
 

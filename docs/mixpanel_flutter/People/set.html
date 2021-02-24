@@ -115,9 +115,11 @@ possibly overwriting an existing property with the same name.</p>
       <pre class="language-dart"><code class="language-dart">void set(String prop, dynamic to) {
   if (_MixpanelHelper.isValidString(prop)) {
     Map&lt;String, dynamic&gt; properties = {prop: to};
-
     _channel.invokeMethod&lt;void&gt;(&#39;set&#39;,
         &lt;String, dynamic&gt;{&#39;token&#39;: this._token, &#39;properties&#39;: properties});
+  } else {
+    developer.log(&#39;`people set` failed: prop cannot be blank&#39;,
+        name: &#39;mixpanel&#39;);
   }
 }</code></pre>
     </section>

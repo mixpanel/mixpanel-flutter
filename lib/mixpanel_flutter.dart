@@ -80,7 +80,7 @@ class Mixpanel {
   }
 
   /// Will return true if the user has opted out from tracking.
-  /// return [true] if user has opted out from tracking. Defaults to false.
+  /// return true if user has opted out from tracking. Defaults to false.
   Future<bool> hasOptedOutTracking() async {
     return await _channel.invokeMethod<bool>('hasOptedOutTracking');
   }

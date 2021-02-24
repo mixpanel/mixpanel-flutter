@@ -1,6 +1,6 @@
 
 <div align="center" style="text-align: center">
-  <img src="https://github.com/mixpanel/mixpanel-android/blob/assets/mixpanel.png?raw=true" alt="Mixpanel Flutter Library" height="150"/>
+  <img src="https://github.com/mixpanel/mixpanel-android/blob/assets/mixpanel.png?raw=true" alt="Mixpanel Flutter SDK" height="150"/>
 </div>
 
 #####
@@ -17,8 +17,8 @@
 
 
 # Introduction
-Welcome to the official Mixpanel Flutter library.
-The Mixpanel Flutter library is an open-source project, and we'd love to see your contributions!
+Welcome to the official Mixpanel Flutter SDK.
+The Mixpanel Flutter SDK is an open-source project, and we'd love to see your contributions!
 We'd also love for you to come and work with us! Check out **[Jobs](https://mixpanel.com/jobs/#openings)** for details
 
 # Quick Start Guide
@@ -48,7 +48,7 @@ import 'package:mixpanel_flutter/mixpanel_flutter.dart';
 ```
 ## Integration
 ### Initialization
-To start tracking with the library you must first initialize with your project token. To initialize the library, first add `import 'package:mixpanel_flutter/mixpanel_flutter.dart';` and call `Mixpanel.init(token);` with your project token as it's argument.
+To start tracking with the SDK you must first initialize with your project token. To initialize the SDK, first add `import 'package:mixpanel_flutter/mixpanel_flutter.dart';` and call `Mixpanel.init(token);` with your project token as it's argument.
 ```dart
 import 'package:mixpanel_flutter/mixpanel_flutter.dart';
 ...
@@ -68,7 +68,7 @@ class _YourClassState extends State<YourClass> {
 ```
 Once you've called this method once, you can access `mixpanel` throughout the rest of your application.
 ### Tracking
-Once you've initialized the library, Mixpanel will <a href="https://mixpanel.com/help/questions/articles/which-common-mobile-events-can-mixpanel-collect-on-my-behalf-automatically" target="_blank">automatically collect common mobile events</a>. You can enable/ disable automatic collection through your <a href="https://mixpanel.com/help/questions/articles/how-do-i-enable-common-mobile-events-if-i-have-already-implemented-mixpanel" target="_blank">project settings</a>.
+Once you've initialized the SDK, Mixpanel will <a href="https://mixpanel.com/help/questions/articles/which-common-mobile-events-can-mixpanel-collect-on-my-behalf-automatically" target="_blank">automatically collect common mobile events</a>. You can enable/ disable automatic collection through your <a href="https://mixpanel.com/help/questions/articles/how-do-i-enable-common-mobile-events-if-i-have-already-implemented-mixpanel" target="_blank">project settings</a>.
 With the `mixpanel` object created in [the last step](#integration) a call to `track` is all you need to send additional events to Mixpanel.
 ```js
 // Track with event-name

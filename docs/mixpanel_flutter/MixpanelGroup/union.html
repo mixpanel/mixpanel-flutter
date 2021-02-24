@@ -90,8 +90,8 @@
     <section class="multi-line-signature">
       <span class="returntype">void</span>
             <span class="name ">union</span>
-(<wbr><ol class="parameter-list"><li><span class="parameter" id="union-param-name"><span class="type-annotation">dynamic</span> <span class="parameter-name">name</span>, </span></li>
-<li><span class="parameter" id="union-param-value"><span class="type-annotation">dynamic</span> <span class="parameter-name">value</span></span></li>
+(<wbr><ol class="parameter-list"><li><span class="parameter" id="union-param-name"><span class="type-annotation"><a href="https://api.flutter.dev/flutter/dart-core/String-class.html">String</a></span> <span class="parameter-name">name</span>, </span></li>
+<li><span class="parameter" id="union-param-value"><span class="type-annotation"><a href="https://api.flutter.dev/flutter/dart-core/List-class.html">List</a></span> <span class="parameter-name">value</span></span></li>
 </ol>)
       
     </section>
@@ -101,22 +101,30 @@ If the property does not currently exist, it will be created with the given list
 If the property exists and is not list-valued, the union will be ignored.</p>
 <ul>
 <li><code>name</code> name of the list-valued property to set or modify</li>
-<li><code>value</code> value an array of values to add to the property value if not already present</li>
+<li><code>value</code> an array of values to add to the property value if not already present</li>
 </ul>
     </section>
     
     <section class="summary source-code" id="source">
       <h2><span>Implementation</span></h2>
-      <pre class="language-dart"><code class="language-dart">void union(name, dynamic value) {
-  if (_MixpanelHelper.isValidString(name)) {
-    _channel.invokeMethod&lt;void&gt;(&#39;groupUnionProperty&#39;, &lt;String, dynamic&gt;{
-      &#39;token&#39;: this._token,
-      &#39;groupKey&#39;: this._groupKey,
-      &#39;groupID&#39;: this._groupID,
-      &#39;name&#39;: name,
-      &#39;value&#39;: value
-    });
+      <pre class="language-dart"><code class="language-dart">void union(String name, List&lt;dynamic&gt; value) {
+  if (!_MixpanelHelper.isValidString(name)) {
+    developer.log(&#39;`group union` failed: name cannot be blank&#39;,
+        name: &#39;mixpanel&#39;);
+    return;
   }
+  if (value == null) {
+    developer.log(&#39;`group union` failed: value cannot be blank&#39;,
+        name: &#39;mixpanel&#39;);
+    return;
+  }
+  _channel.invokeMethod&lt;void&gt;(&#39;groupUnionProperty&#39;, &lt;String, dynamic&gt;{
+    &#39;token&#39;: this._token,
+    &#39;groupKey&#39;: this._groupKey,
+    &#39;groupID&#39;: this._groupID,
+    &#39;name&#39;: name,
+    &#39;value&#39;: value
+  });
 }</code></pre>
     </section>
 

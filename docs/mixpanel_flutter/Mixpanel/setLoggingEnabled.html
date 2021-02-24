@@ -132,11 +132,17 @@ you are running into issues with the SDK that you want to debug</li>
     <section class="summary source-code" id="source">
       <h2><span>Implementation</span></h2>
       <pre class="language-dart"><code class="language-dart">void setLoggingEnabled(bool loggingEnabled) {
- if (Platform.isIOS) {
-     _channel.invokeMethod&lt;void&gt;(&#39;setLoggingEnabled&#39;,
-         &lt;String, dynamic&gt;{&#39;loggingEnabled&#39;: loggingEnabled});
- }
-  }</code></pre>
+  if (Platform.isIOS) {
+    if (loggingEnabled != null) {
+      _channel.invokeMethod&lt;void&gt;(&#39;setLoggingEnabled&#39;,
+          &lt;String, dynamic&gt;{&#39;loggingEnabled&#39;: loggingEnabled});
+    } else {
+      developer.log(
+          &#39;`setLoggingEnabled` failed: loggingEnabled cannot be blank&#39;,
+          name: &#39;mixpanel&#39;);
+    }
+  }
+}</code></pre>
     </section>
 
   </div> <!-- /.main-content -->

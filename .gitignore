@@ -3,5 +3,5 @@
 .idea/workspace.xml
 .packages
 .pub/
-
+.idea
 build/

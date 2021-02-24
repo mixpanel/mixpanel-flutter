@@ -134,12 +134,17 @@ that event. Group key/value pairs are upserted into the property map before trac
     
     <section class="summary source-code" id="source">
       <h2><span>Implementation</span></h2>
-      <pre class="language-dart"><code class="language-dart">void trackWithGroups(String eventName, Map&lt;String, dynamic&gt; properties, Map&lt;String, dynamic&gt; groups) {
+      <pre class="language-dart"><code class="language-dart">void trackWithGroups(String eventName, Map&lt;String, dynamic&gt; properties,
+    Map&lt;String, dynamic&gt; groups) {
   if (_MixpanelHelper.isValidString(eventName)) {
-    _channel.invokeMethod&lt;void&gt;(&#39;trackWithGroups&#39;,
-        &lt;String, dynamic&gt;{&#39;eventName&#39;: eventName, &#39;properties&#39;: properties, &#39;groups&#39;: groups});
+    _channel.invokeMethod&lt;void&gt;(&#39;trackWithGroups&#39;, &lt;String, dynamic&gt;{
+      &#39;eventName&#39;: eventName,
+      &#39;properties&#39;: properties,
+      &#39;groups&#39;: groups
+    });
   } else {
-    developer.log(&#39;cannot track blank event name&#39;, name: &#39;mixpanel&#39;);
+    developer.log(&#39;`trackWithGroups` failed: eventName cannot be blank&#39;,
+        name: &#39;mixpanel&#39;);
   }
 }</code></pre>
     </section>

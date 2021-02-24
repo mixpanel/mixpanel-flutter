@@ -129,7 +129,11 @@ property, representing the number of seconds between your calls.</p>
       <h2><span>Implementation</span></h2>
       <pre class="language-dart"><code class="language-dart">void timeEvent(String eventName) {
   if (_MixpanelHelper.isValidString(eventName)) {
-    _channel.invokeMethod&lt;void&gt;(&#39;timeEvent&#39;, &lt;String, dynamic&gt;{&#39;eventName&#39;: eventName});
+    _channel.invokeMethod&lt;void&gt;(
+        &#39;timeEvent&#39;, &lt;String, dynamic&gt;{&#39;eventName&#39;: eventName});
+  } else {
+    developer.log(&#39;`timeEvent` failed: eventName cannot be blank&#39;,
+        name: &#39;mixpanel&#39;);
   }
 }</code></pre>
     </section>

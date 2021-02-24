@@ -133,8 +133,8 @@ to remove a superProperty, call unregisterSuperProperty() or clearSuperPropertie
     <section class="summary source-code" id="source">
       <h2><span>Implementation</span></h2>
       <pre class="language-dart"><code class="language-dart">void registerSuperProperties(Map&lt;String, dynamic&gt; properties) {
-    _channel.invokeMethod&lt;void&gt;(&#39;registerSuperProperties&#39;,
-        &lt;String, dynamic&gt;{&#39;properties&#39;: properties});
+  _channel.invokeMethod&lt;void&gt;(
+      &#39;registerSuperProperties&#39;, &lt;String, dynamic&gt;{&#39;properties&#39;: properties});
 }</code></pre>
     </section>
 

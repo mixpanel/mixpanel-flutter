@@ -117,6 +117,9 @@ provide a negative number for the value.</p>
   if (_MixpanelHelper.isValidString(prop)) {
     _channel.invokeMethod&lt;void&gt;(&#39;increment&#39;,
         &lt;String, dynamic&gt;{&#39;token&#39;: this._token, &#39;properties&#39;: properties});
+  } else {
+    developer.log(&#39;`people increment` failed: prop cannot be blank&#39;,
+        name: &#39;mixpanel&#39;);
   }
 }</code></pre>
     </section>

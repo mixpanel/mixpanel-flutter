@@ -26,7 +26,7 @@
 <header id="title">
   <button id="sidenav-left-toggle" type="button">&nbsp;</button>
   <ol class="breadcrumbs gt-separated dark hidden-xs">
-    <li><a href="https://github.com/mixpanel/mixpanel-flutter">mixpanel_flutter package</a></li>
+    <li><a href="https://mixpanel.com">mixpanel_flutter package</a></li>
   </ol>
   <div class="self-name">mixpanel_flutter</div>
   <form class="search navbar-right" role="search">
@@ -44,7 +44,7 @@
     </header>
     
     <ol class="breadcrumbs gt-separated dark hidden-l" id="sidebar-nav">
-      <li><a href="https://github.com/mixpanel/mixpanel-flutter">mixpanel_flutter package</a></li>
+      <li><a href="https://mixpanel.com">mixpanel_flutter package</a></li>
     </ol>
     
     <h5 class="hidden-xs"><span class="package-name">mixpanel_flutter</span> <span class="package-kind">package</span></h5>
@@ -57,7 +57,7 @@
   <div id="dartdoc-main-content" class="main-content">
       <section class="desc markdown">
         <div align="center" style="text-align: center">
-  <img src="https://github.com/mixpanel/mixpanel-android/blob/assets/mixpanel.png?raw=true" alt="Mixpanel React Native Library" height="150">
+  <img src="https://github.com/mixpanel/mixpanel-android/blob/assets/mixpanel.png?raw=true" alt="Mixpanel Flutter SDK" height="150">
 </div>
 <p>#####</p>
 <h1 id="table-of-contents">Table of Contents</h1><!-- MarkdownTOC -->
@@ -72,8 +72,8 @@
 <li><a href="#i-want-to-know-more">I want to know more!</a></li>
 </ul><!-- /MarkdownTOC -->
 <h1 id="introduction">Introduction</h1>
-<p>Welcome to the official Mixpanel Flutter library.
-The Mixpanel Flutter library is an open-source project, and we'd love to see your contributions!
+<p>Welcome to the official Mixpanel Flutter SDK.
+The Mixpanel Flutter SDK is an open-source project, and we'd love to see your contributions!
 We'd also love for you to come and work with us! Check out <strong><a href="https://mixpanel.com/jobs/#openings">Jobs</a></strong> for details</p>
 <h1 id="quick-start-guide">Quick Start Guide</h1>
 <p>Check out our <strong><a href="https://developer.mixpanel.com/docs/flutter">official documentation</a></strong> for more in depth information on installing and using Mixpanel on Flutter.</p>
@@ -85,60 +85,58 @@ We'd also love for you to come and work with us! Check out <strong><a href="http
 </ul>
 <h3 id="steps">Steps</h3>
 <ol>
-<li>Depend on it
+<li>Depend on it  <br>
 Add this to your package's pubspec.yaml file:</li>
 </ol>
 <pre class="language-dart"><code>   dependencies:
-      mixpanel_flutter: ^1.0.0
+      mixpanel_flutter: ^1.0.0 # set this to your desired version
 </code></pre>
 <ol start="2">
-<li>Install it
-You can install packages from the command line:
-with Flutter:</li>
+<li>Install it <br>
+You can install packages from the command line:</li>
 </ol>
 <pre class="language-dart"><code>   $ flutter pub get
 </code></pre>
 <ol start="3">
-<li>Import it
+<li>Import it <br>
 Now in your Dart code, you can use:</li>
 </ol>
 <pre class="language-dart"><code>import 'package:mixpanel_flutter/mixpanel_flutter.dart';
 </code></pre>
 <h2 id="integration">Integration</h2>
 <h3 id="initialization">Initialization</h3>
-<p>To start tracking with the library you must first initialize with your project token. To initialize the library, first add <code>import 'package:mixpanel_flutter/mixpanel_flutter.dart';</code> and call <code>Mixpanel.init(token);</code> with your project token as it's argument.</p>
+<p>To start tracking with the SDK you must first initialize with your project token. To initialize the SDK, first add <code>import 'package:mixpanel_flutter/mixpanel_flutter.dart';</code> and call <code>Mixpanel.init(token);</code> with your project token as it's argument.</p>
 <pre class="language-dart"><code class="language-dart">import 'package:mixpanel_flutter/mixpanel_flutter.dart';
 ...
 class _YourClassState extends State&lt;YourClass&gt; {
-  Mixpanel _mixpanel;
+  Mixpanel mixpanel;
 
   @override
   void initState() {
-   super.initState();
-   initMixpanel();
+    super.initState();
+    initMixpanel();
   }
 
   Future&lt;void&gt; initMixpanel() async {
-   _mixpanel = await Mixpanel.init("5d9d3df08d1c34a272abf23d892820bf",
-               optOutTrackingDefault: false);
+    mixpanel = await Mixpanel.init("Your Mixpanel Token", optOutTrackingDefault: false);
   }
 ...
 </code></pre>
 <p>Once you've called this method once, you can access <code>mixpanel</code> throughout the rest of your application.</p>
 <h3 id="tracking">Tracking</h3>
-<p>Once you've initialized the library, Mixpanel will <a href="https://mixpanel.com/help/questions/articles/which-common-mobile-events-can-mixpanel-collect-on-my-behalf-automatically" target="_blank">automatically collect common mobile events</a>. You can enable/ disable automatic collection through your <a href="https://mixpanel.com/help/questions/articles/how-do-i-enable-common-mobile-events-if-i-have-already-implemented-mixpanel" target="_blank">project settings</a>.
+<p>Once you've initialized the SDK, Mixpanel will <a href="https://mixpanel.com/help/questions/articles/which-common-mobile-events-can-mixpanel-collect-on-my-behalf-automatically" target="_blank">automatically collect common mobile events</a>. You can enable/ disable automatic collection through your <a href="https://mixpanel.com/help/questions/articles/how-do-i-enable-common-mobile-events-if-i-have-already-implemented-mixpanel" target="_blank">project settings</a>.
 With the <code>mixpanel</code> object created in <a href="#integration">the last step</a> a call to <code>track</code> is all you need to send additional events to Mixpanel.</p>
 <pre class="language-js"><code class="language-js">// Track with event-name
 mixpanel.track('Sent Message');
 // Track with event-name and property
-mixpanel.track('Plan Selected', properties: {'Plan': 'Premium'});;
+mixpanel.track('Plan Selected', properties: {'Plan': 'Premium'});
 </code></pre>
-<p>You're done! You've successfully integrated the Mixpanel React Native SDK into your app. To stay up to speed on important SDK releases and updates, star or watch our repository on <a href="https://github.com/mixpanel/mixpanel-flutter">Github</a>.</p>
+<p>You're done! You've successfully integrated the Mixpanel Flutter SDK into your app. To stay up to speed on important SDK releases and updates, star or watch our repository on <a href="https://github.com/mixpanel/mixpanel-flutter">Github</a>.</p>
 <p><a name="i-want-to-know-more"></a></p>
 <h1 id="i-want-to-know-more">I want to know more!</h1>
 <p>No worries, here are some links that you will find useful:</p>
 <ul>
-<li><strong><a href="https://github.com/mixpanel/mixpanel-flutter/tree/master/example">Sample app</a></strong></li>
+<li><strong><a href="https://github.com/mixpanel/mixpanel-flutter/tree/main/example">Sample app</a></strong></li>
 <li><strong><a href="https://developer.mixpanel.com/docs/flutter">Full API Reference</a></strong></li>
 </ul>
 <p>Have any questions? Reach out to Mixpanel <a href="https://help.mixpanel.com/hc/en-us/requests/new">Support</a> to speak to someone smart, quickly.</p>

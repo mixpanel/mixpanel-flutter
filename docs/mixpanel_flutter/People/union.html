@@ -96,7 +96,7 @@
       <span class="returntype">void</span>
             <span class="name ">union</span>
 (<wbr><ol class="parameter-list"><li><span class="parameter" id="union-param-name"><span class="type-annotation"><a href="https://api.flutter.dev/flutter/dart-core/String-class.html">String</a></span> <span class="parameter-name">name</span>, </span></li>
-<li><span class="parameter" id="union-param-value"><span class="type-annotation">dynamic</span> <span class="parameter-name">value</span></span></li>
+<li><span class="parameter" id="union-param-value"><span class="type-annotation"><a href="https://api.flutter.dev/flutter/dart-core/List-class.html">List</a></span> <span class="parameter-name">value</span></span></li>
 </ol>)
       
     </section>
@@ -112,23 +112,22 @@ If the property exists and is not list-valued, the union will be ignored.</p>
     
     <section class="summary source-code" id="source">
       <h2><span>Implementation</span></h2>
-      <pre class="language-dart"><code class="language-dart">void union(String name, dynamic value) {
+      <pre class="language-dart"><code class="language-dart">void union(String name, List&lt;dynamic&gt; value) {
   if (_MixpanelHelper.isValidString(name)) {
     if (Platform.isIOS) {
       Map&lt;String, dynamic&gt; properties = {name: value};
       _channel.invokeMethod&lt;void&gt;(&#39;union&#39;,
-          &lt;String, dynamic&gt;{
-            &#39;token&#39;: this._token,
-            &#39;properties&#39;: properties
-          });
+          &lt;String, dynamic&gt;{&#39;token&#39;: this._token, &#39;properties&#39;: properties});
     } else {
-      _channel.invokeMethod&lt;void&gt;(&#39;union&#39;,
-          &lt;String, dynamic&gt;{
-            &#39;token&#39;: this._token,
-            &#39;name&#39;: name,
-            &#39;value&#39;: value
-          });
+      _channel.invokeMethod&lt;void&gt;(&#39;union&#39;, &lt;String, dynamic&gt;{
+        &#39;token&#39;: this._token,
+        &#39;name&#39;: name,
+        &#39;value&#39;: value
+      });
     }
+  } else {
+    developer.log(&#39;`people union` failed: name cannot be blank&#39;,
+        name: &#39;mixpanel&#39;);
   }
 }</code></pre>
     </section>

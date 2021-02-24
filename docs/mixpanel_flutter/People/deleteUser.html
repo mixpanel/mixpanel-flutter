@@ -107,8 +107,8 @@ to People Analytics using the same distinct id will create and store new values.
     <section class="summary source-code" id="source">
       <h2><span>Implementation</span></h2>
       <pre class="language-dart"><code class="language-dart">void deleteUser() {
-  _channel.invokeMethod&lt;void&gt;(&#39;deleteUser&#39;,
-      &lt;String, dynamic&gt;{&#39;token&#39;: this._token});
+  _channel.invokeMethod&lt;void&gt;(
+      &#39;deleteUser&#39;, &lt;String, dynamic&gt;{&#39;token&#39;: this._token});
 }</code></pre>
     </section>
 

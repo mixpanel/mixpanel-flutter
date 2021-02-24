@@ -134,9 +134,12 @@ People.identify() if you wish the new alias to be used for Events and People.</p
       <h2><span>Implementation</span></h2>
       <pre class="language-dart"><code class="language-dart">void alias(String alias, String distinctId) {
   if (!_MixpanelHelper.isValidString(alias)) {
+    developer.log(&#39;`alias` failed: alias cannot be blank&#39;, name: &#39;mixpanel&#39;);
     return;
   }
   if (!_MixpanelHelper.isValidString(distinctId)) {
+    developer.log(&#39;`alias` failed: distinctId cannot be blank&#39;,
+        name: &#39;mixpanel&#39;);
     return;
   }
   _channel.invokeMethod&lt;void&gt;(

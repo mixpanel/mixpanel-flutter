@@ -128,7 +128,8 @@
       <h2><span>Implementation</span></h2>
       <pre class="language-dart"><code class="language-dart">Future&lt;double&gt; eventElapsedTime(String eventName) async {
   if (_MixpanelHelper.isValidString(eventName)) {
-    return await _channel.invokeMethod&lt;double&gt;(&#39;eventElapsedTime&#39;, &lt;String, dynamic&gt;{&#39;eventName&#39;: eventName});
+    return await _channel.invokeMethod&lt;double&gt;(
+        &#39;eventElapsedTime&#39;, &lt;String, dynamic&gt;{&#39;eventName&#39;: eventName});
   } else {
     return 0;
   }

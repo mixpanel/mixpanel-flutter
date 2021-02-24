@@ -110,8 +110,11 @@
       <h2><span>Implementation</span></h2>
       <pre class="language-dart"><code class="language-dart">void unset(String name) {
   if (_MixpanelHelper.isValidString(name)) {
-    _channel.invokeMethod&lt;void&gt;(&#39;unset&#39;,
-        &lt;String, dynamic&gt;{&#39;token&#39;: this._token, &#39;name&#39;: name});
+    _channel.invokeMethod&lt;void&gt;(
+        &#39;unset&#39;, &lt;String, dynamic&gt;{&#39;token&#39;: this._token, &#39;name&#39;: name});
+  } else {
+    developer.log(&#39;`people unset` failed: name cannot be blank&#39;,
+        name: &#39;mixpanel&#39;);
   }
 }</code></pre>
     </section>

@@ -117,18 +117,17 @@ currently have a list value, the append will be ignored.</p>
     if (Platform.isIOS) {
       Map&lt;String, dynamic&gt; properties = {name: value};
       _channel.invokeMethod&lt;void&gt;(&#39;append&#39;,
-          &lt;String, dynamic&gt;{
-            &#39;token&#39;: this._token,
-            &#39;properties&#39;: properties
-          });
+          &lt;String, dynamic&gt;{&#39;token&#39;: this._token, &#39;properties&#39;: properties});
     } else {
-      _channel.invokeMethod&lt;void&gt;(&#39;append&#39;,
-          &lt;String, dynamic&gt;{
-            &#39;token&#39;: this._token,
-            &#39;name&#39;: name,
-            &#39;value&#39;: value
-          });
+      _channel.invokeMethod&lt;void&gt;(&#39;append&#39;, &lt;String, dynamic&gt;{
+        &#39;token&#39;: this._token,
+        &#39;name&#39;: name,
+        &#39;value&#39;: value
+      });
     }
+  } else {
+    developer.log(&#39;`people append` failed: name cannot be blank&#39;,
+        name: &#39;mixpanel&#39;);
   }
 }</code></pre>
     </section>

@@ -116,6 +116,9 @@ If the property exists and is not list-valued, the remove will be ignored.</p>
       &#39;name&#39;: name,
       &#39;value&#39;: value
     });
+  } else {
+    developer.log(&#39;`group remove` failed: name cannot be blank&#39;,
+        name: &#39;mixpanel&#39;);
   }
 }</code></pre>
     </section>

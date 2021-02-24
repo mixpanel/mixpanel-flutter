@@ -1,7 +1,5 @@
-
 import argparse
 import subprocess
-
 
 parser = argparse.ArgumentParser(description='Release Mixpanel Flutter SDK')
 parser.add_argument('--old', help='version for the release', action="store")
@@ -40,11 +38,17 @@ def add_tag():
     subprocess.call('git tag -a v{} -m "version {}"'.format(args.new, args.new), shell=True)
     subprocess.call('git push origin --tags', shell=True)
 
+def publish_dry_run():
+    subprocess.call('mv docs doc', shell=True)
+    subprocess.call('dart pub publish --dry-run', shell=True)
+    subprocess.call('mv doc docs', shell=True)
+
 def main():
     bump_version()
     generate_docs()
     add_tag()
-    print("Congratulations! " + args.new + " is now released!")
+    publish_dry_run()
+    print("Congratulations! " + args.new + " is now ready to be released!")
 
 if __name__ == '__main__':
     main()

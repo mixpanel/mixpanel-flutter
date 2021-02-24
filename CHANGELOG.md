@@ -1,3 +1,6 @@
-## 0.0.1
+## 1.0.0
 
-* initial release
+-   This is our first release!  🎉🎉🎉
+    Report issues or give us any feedback is appreciated!
+-   [integration guide](https://developer.mixpanel.com/docs/flutter)
+-   [full API reference](https://mixpanel.github.io/mixpanel-flutter)
