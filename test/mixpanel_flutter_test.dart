@@ -35,7 +35,7 @@ void main() {
             'token': "test token",
             'optOutTrackingDefault': false,
             'mixpanelProperties': {
-              '\$lib_version': '0.0.2',
+              '\$lib_version': '1.0.0',
               'mp_lib': 'flutter',
             },
           },
@@ -54,7 +54,7 @@ void main() {
             'token': "test token",
             'optOutTrackingDefault': true,
             'mixpanelProperties': {
-              '\$lib_version': '0.0.2',
+              '\$lib_version': '1.0.0',
               'mp_lib': 'flutter',
             },
           },
