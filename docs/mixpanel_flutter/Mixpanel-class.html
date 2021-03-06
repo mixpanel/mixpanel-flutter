@@ -225,9 +225,8 @@ return true if user has opted out from tracking. Defaults to false.
           </span>
                   </dt>
         <dd>
-          Use this method to opt-in an already opted-out user from tracking. People updates and track
-calls will be sent to Mixpanel after using this method.
-This method will internally track an opt-in event to your project. 
+          Associate all future calls to track() with the user identified by
+the given distinct id. <a href="../mixpanel_flutter/Mixpanel/identify.html">[...]</a>
                   
 </dd>
         <dt id="noSuchMethod" class="callable inherited">
@@ -471,7 +470,7 @@ property, representing the number of seconds between your calls. <a href="../mix
 <footer>
   <span class="no-break">
     mixpanel_flutter
-      1.0.0
+      1.0.1
   </span>
 
 </footer>
