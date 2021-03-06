@@ -3,7 +3,7 @@
   <img src="https://github.com/mixpanel/mixpanel-android/blob/assets/mixpanel.png?raw=true" alt="Mixpanel Flutter SDK" height="150"/>
 </div>
 
-#####
+
 # Table of Contents
 
 <!-- MarkdownTOC -->
