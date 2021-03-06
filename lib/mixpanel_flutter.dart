@@ -54,7 +54,7 @@ class Mixpanel {
             'setServerURL', <String, dynamic>{'serverURL': serverURL});
       } else {
         developer.log('`setServerURL` failed: serverURL cannot be blank',
-            name: 'mixpanel');
+            name: 'Mixpanel');
       }
     }
   }
@@ -74,7 +74,7 @@ class Mixpanel {
       } else {
         developer.log(
             '`setLoggingEnabled` failed: loggingEnabled cannot be blank',
-            name: 'mixpanel');
+            name: 'Mixpanel');
       }
     }
   }
@@ -101,16 +101,29 @@ class Mixpanel {
     _channel.invokeMethod<void>('optOutTracking');
   }
 
-  /// Use this method to opt-in an already opted-out user from tracking. People updates and track
-  /// calls will be sent to Mixpanel after using this method.
-  /// This method will internally track an opt-in event to your project.
+
+  /// Associate all future calls to track() with the user identified by
+  /// the given distinct id.
+  ///
+  /// <p>Calls to track() made before corresponding calls to identify
+  /// will use an anonymous locally generated distinct id, which means it is best to call identify
+  /// early to ensure that your Mixpanel funnels and retention analytics can continue to track the
+  /// user throughout their lifetime. We recommend calling identify when the user authenticates.
+  ///
+  /// <p>Once identify is called, the local distinct id persists across restarts of
+  /// your application.
+  ///
+  /// * [distinctId] a string uniquely identifying this user. Events sent to
+  /// Mixpanel using the same disinct_id will be considered associated with the
+  /// same visitor/customer for retention and funnel reporting, so be sure that the given
+  /// value is globally unique for each individual user you intend to track.
   void identify(String distinctId) {
     if (_MixpanelHelper.isValidString(distinctId)) {
       _channel.invokeMethod<void>(
           'identify', <String, dynamic>{'distinctId': distinctId});
     } else {
       developer.log('`identify` failed: distinctId cannot be blank',
-          name: 'mixpanel');
+          name: 'Mixpanel');
     }
   }
 
@@ -132,7 +145,7 @@ class Mixpanel {
     }
     if (!_MixpanelHelper.isValidString(distinctId)) {
       developer.log('`alias` failed: distinctId cannot be blank',
-          name: 'mixpanel');
+          name: 'Mixpanel');
       return;
     }
     _channel.invokeMethod<void>(
@@ -147,15 +160,14 @@ class Mixpanel {
   /// that event.
   ///
   /// * [eventName] The name of the event to send
-  /// * [properties] A Map containing the key value pairs of the properties to include in this event.
-  ///                   Pass null if no extra properties exist.
+  /// * [properties] An optional map containing the key value pairs of the properties to include in this event.
   void track(String eventName, {Map<String, dynamic> properties}) {
     if (_MixpanelHelper.isValidString(eventName)) {
       _channel.invokeMethod<void>('track',
           <String, dynamic>{'eventName': eventName, 'properties': properties});
     } else {
       developer.log('`track` failed: eventName cannot be blank',
-          name: 'mixpanel');
+          name: 'Mixpanel');
     }
   }
 
@@ -176,7 +188,6 @@ class Mixpanel {
   ///
   ///  * [eventName] The name of the event to send
   ///  * [properties] A Map containing the key value pairs of the properties to include in this event.
-  ///                     Pass null if no extra properties exist.
   ///  * [groups] A Map containing the group key value pairs for this event.
   void trackWithGroups(String eventName, Map<String, dynamic> properties,
       Map<String, dynamic> groups) {
@@ -188,7 +199,7 @@ class Mixpanel {
       });
     } else {
       developer.log('`trackWithGroups` failed: eventName cannot be blank',
-          name: 'mixpanel');
+          name: 'Mixpanel');
     }
   }
 
@@ -202,7 +213,7 @@ class Mixpanel {
           <String, dynamic>{'groupKey': groupKey, 'groupID': groupID});
     } else {
       developer.log('`setGroup` failed: groupKey cannot be blank',
-          name: 'mixpanel');
+          name: 'Mixpanel');
     }
   }
 
@@ -227,7 +238,7 @@ class Mixpanel {
           <String, dynamic>{'groupKey': groupKey, 'groupID': groupID});
     } else {
       developer.log('`addGroup` failed: groupKey cannot be blank',
-          name: 'mixpanel');
+          name: 'Mixpanel');
     }
   }
 
@@ -241,7 +252,7 @@ class Mixpanel {
           <String, dynamic>{'groupKey': groupKey, 'groupID': groupID});
     } else {
       developer.log('`removeGroup` failed: groupKey cannot be blank',
-          name: 'mixpanel');
+          name: 'Mixpanel');
     }
   }
 
@@ -258,7 +269,7 @@ class Mixpanel {
           <String, dynamic>{'groupKey': groupKey, 'groupID': groupID});
     } else {
       developer.log('`deleteGroup` failed: groupKey cannot be blank',
-          name: 'mixpanel');
+          name: 'Mixpanel');
     }
   }
 
@@ -305,7 +316,7 @@ class Mixpanel {
     } else {
       developer.log(
           '`unregisterSuperProperty` failed: propertyName cannot be blank',
-          name: 'mixpanel');
+          name: 'Mixpanel');
     }
   }
 
@@ -340,7 +351,7 @@ class Mixpanel {
           'timeEvent', <String, dynamic>{'eventName': eventName});
     } else {
       developer.log('`timeEvent` failed: eventName cannot be blank',
-          name: 'mixpanel');
+          name: 'Mixpanel');
     }
   }
 
@@ -422,7 +433,7 @@ class People {
           <String, dynamic>{'token': this._token, 'properties': properties});
     } else {
       developer.log('`people set` failed: prop cannot be blank',
-          name: 'mixpanel');
+          name: 'Mixpanel');
     }
   }
 
@@ -437,7 +448,7 @@ class People {
           <String, dynamic>{'token': this._token, 'properties': properties});
     } else {
       developer.log('`people setOnce` failed: prop cannot be blank',
-          name: 'mixpanel');
+          name: 'Mixpanel');
     }
   }
 
@@ -454,7 +465,7 @@ class People {
           <String, dynamic>{'token': this._token, 'properties': properties});
     } else {
       developer.log('`people increment` failed: prop cannot be blank',
-          name: 'mixpanel');
+          name: 'Mixpanel');
     }
   }
 
@@ -478,7 +489,7 @@ class People {
       }
     } else {
       developer.log('`people append` failed: name cannot be blank',
-          name: 'mixpanel');
+          name: 'Mixpanel');
     }
   }
 
@@ -503,13 +514,14 @@ class People {
       }
     } else {
       developer.log('`people union` failed: name cannot be blank',
-          name: 'mixpanel');
+          name: 'Mixpanel');
     }
   }
 
   /// Remove value from a list-valued property only if they are already present in the list.
   /// If the property does not currently exist, the remove will be ignored.
   /// If the property exists and is not list-valued, the remove will be ignored.
+  ///
   /// * [name] the People Analytics property that should have it's value removed from
   /// * [value] the value that will be removed from the property's list
   void remove(String name, dynamic value) {
@@ -521,11 +533,12 @@ class People {
       });
     } else {
       developer.log('`people remove` failed: name cannot be blank',
-          name: 'mixpanel');
+          name: 'Mixpanel');
     }
   }
 
   /// permanently removes the property with the given name from the user's profile
+  ///
   /// * [name] name of a property to unset
   void unset(String name) {
     if (_MixpanelHelper.isValidString(name)) {
@@ -533,7 +546,7 @@ class People {
           'unset', <String, dynamic>{'token': this._token, 'name': name});
     } else {
       developer.log('`people unset` failed: name cannot be blank',
-          name: 'mixpanel');
+          name: 'Mixpanel');
     }
   }
 
@@ -550,7 +563,7 @@ class People {
       });
     } else {
       developer.log('`people trackCharge` failed: amount cannot be blank',
-          name: 'mixpanel');
+          name: 'Mixpanel');
     }
   }
 
@@ -604,7 +617,7 @@ class MixpanelGroup {
       });
     } else {
       developer.log('`group set` failed: prop cannot be blank',
-          name: 'mixpanel');
+          name: 'Mixpanel');
     }
   }
 
@@ -624,7 +637,7 @@ class MixpanelGroup {
       });
     } else {
       developer.log('`group setOnce` failed: prop cannot be blank',
-          name: 'mixpanel');
+          name: 'Mixpanel');
     }
   }
 
@@ -641,7 +654,7 @@ class MixpanelGroup {
       });
     } else {
       developer.log('`group unset` failed: prop cannot be blank',
-          name: 'mixpanel');
+          name: 'Mixpanel');
     }
   }
 
@@ -662,7 +675,7 @@ class MixpanelGroup {
       });
     } else {
       developer.log('`group remove` failed: name cannot be blank',
-          name: 'mixpanel');
+          name: 'Mixpanel');
     }
   }
 
@@ -675,12 +688,12 @@ class MixpanelGroup {
   void union(String name, List<dynamic> value) {
     if (!_MixpanelHelper.isValidString(name)) {
       developer.log('`group union` failed: name cannot be blank',
-          name: 'mixpanel');
+          name: 'Mixpanel');
       return;
     }
     if (value == null) {
       developer.log('`group union` failed: value cannot be blank',
-          name: 'mixpanel');
+          name: 'Mixpanel');
       return;
     }
     _channel.invokeMethod<void>('groupUnionProperty', <String, dynamic>{
