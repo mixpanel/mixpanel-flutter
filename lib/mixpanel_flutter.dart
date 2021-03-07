@@ -11,13 +11,12 @@ class Mixpanel {
     'mp_lib': 'flutter',
   };
 
-  String _token;
-  People _people;
+  final String _token;
+  final People _people;
 
-  Mixpanel(String token) {
-    this._token = token;
-    this._people = new People(token);
-  }
+  Mixpanel(String token)
+      : _token = token,
+        _people = new People(token);
 
   ///
   ///  Initializes an instance of the API with the given project token.
@@ -27,7 +26,7 @@ class Mixpanel {
   ///  optOutTracking()
   ///
   static Future<Mixpanel> init(String token,
-      {bool optOutTrackingDefault = false}) async {
+      {bool? optOutTrackingDefault = false}) async {
     var properties = <String, dynamic>{'token': token};
 
     if (optOutTrackingDefault != null) {
@@ -66,7 +65,7 @@ class Mixpanel {
   /// you are running into issues with the SDK that you want to debug
   ///
   /// * [loggingEnabled] whether to enable logging
-  void setLoggingEnabled(bool loggingEnabled) {
+  void setLoggingEnabled(bool? loggingEnabled) {
     if (Platform.isIOS) {
       if (loggingEnabled != null) {
         _channel.invokeMethod<void>('setLoggingEnabled',
@@ -81,7 +80,7 @@ class Mixpanel {
 
   /// Will return true if the user has opted out from tracking.
   /// return true if user has opted out from tracking. Defaults to false.
-  Future<bool> hasOptedOutTracking() async {
+  Future<bool?> hasOptedOutTracking() async {
     return await _channel.invokeMethod<bool>('hasOptedOutTracking');
   }
 
@@ -100,7 +99,6 @@ class Mixpanel {
   void optOutTracking() {
     _channel.invokeMethod<void>('optOutTracking');
   }
-
 
   /// Associate all future calls to track() with the user identified by
   /// the given distinct id.
@@ -161,7 +159,7 @@ class Mixpanel {
   ///
   /// * [eventName] The name of the event to send
   /// * [properties] An optional map containing the key value pairs of the properties to include in this event.
-  void track(String eventName, {Map<String, dynamic> properties}) {
+  void track(String eventName, {Map<String, dynamic>? properties}) {
     if (_MixpanelHelper.isValidString(eventName)) {
       _channel.invokeMethod<void>('track',
           <String, dynamic>{'eventName': eventName, 'properties': properties});
@@ -326,7 +324,7 @@ class Mixpanel {
   /// and persist beyond the lifetime of your application.
   ///
   /// return Super properties for this Mixpanel instance.
-  Future<Map> getSuperProperties() async {
+  Future<Map?> getSuperProperties() async {
     return await _channel.invokeMethod<Map>('getSuperProperties');
   }
 
@@ -360,7 +358,7 @@ class Mixpanel {
   /// * [eventName] the name of the event to be tracked that was previously called with timeEvent()
   ///
   /// Time elapsed since timeEvent(String) was called for the given eventName.
-  Future<double> eventElapsedTime(String eventName) async {
+  Future<double?> eventElapsedTime(String eventName) async {
     if (_MixpanelHelper.isValidString(eventName)) {
       return await _channel.invokeMethod<double>(
           'eventElapsedTime', <String, dynamic>{'eventName': eventName});
@@ -386,7 +384,7 @@ class Mixpanel {
   /// ```
   ///
   /// return Future<String> the distinct id associated with Mixpanel event and People Analytics
-  Future<String> getDistinctId() {
+  Future<String?> getDistinctId() {
     return _channel.invokeMethod<String>('getDistinctId');
   }
 
@@ -413,11 +411,9 @@ class Mixpanel {
 class People {
   static const MethodChannel _channel = const MethodChannel('mixpanel_flutter');
 
-  String _token;
+  final String _token;
 
-  People(String token) {
-    this._token = token;
-  }
+  const People(String token) : _token = token;
 
   /// Sets a single property with the given name and value for this user.
   /// The given name and value will be assigned to the user in Mixpanel People Analytics,
@@ -554,17 +550,12 @@ class People {
   ///
   /// * [amount] the amount of money exchanged. Positive amounts represent purchases or income from the customer, negative amounts represent refunds or payments to the customer.
   /// * [properties] an optional collection of properties to associate with this transaction.
-  void trackCharge(double amount, {Map<String, dynamic> properties}) {
-    if (amount != null) {
-      _channel.invokeMethod<void>('trackCharge', <String, dynamic>{
-        'token': this._token,
-        'amount': amount,
-        'properties': properties
-      });
-    } else {
-      developer.log('`people trackCharge` failed: amount cannot be blank',
-          name: 'Mixpanel');
-    }
+  void trackCharge(double amount, {Map<String, dynamic>? properties}) {
+    _channel.invokeMethod<void>('trackCharge', <String, dynamic>{
+      'token': this._token,
+      'amount': amount,
+      'properties': properties
+    });
   }
 
   /// Permanently clear the whole transaction history for the identified people profile.
@@ -589,15 +580,14 @@ class People {
 class MixpanelGroup {
   static const MethodChannel _channel = const MethodChannel('mixpanel_flutter');
 
-  String _token;
-  String _groupKey;
-  dynamic _groupID;
+  final String _token;
+  final String _groupKey;
+  final dynamic _groupID;
 
-  MixpanelGroup(String token, String groupKey, dynamic groupID) {
-    this._token = token;
-    this._groupKey = groupKey;
-    this._groupID = groupID;
-  }
+  MixpanelGroup(String token, String groupKey, dynamic groupID)
+      : _token = token,
+        _groupKey = groupKey,
+        _groupID = groupID;
 
   /// Sets a single property with the given name and value for this group.
   /// The given name and value will be assigned to the user in Mixpanel Group Analytics,
@@ -691,11 +681,6 @@ class MixpanelGroup {
           name: 'Mixpanel');
       return;
     }
-    if (value == null) {
-      developer.log('`group union` failed: value cannot be blank',
-          name: 'Mixpanel');
-      return;
-    }
     _channel.invokeMethod<void>('groupUnionProperty', <String, dynamic>{
       'token': this._token,
       'groupKey': this._groupKey,
@@ -708,6 +693,6 @@ class MixpanelGroup {
 
 class _MixpanelHelper {
   static isValidString(String input) {
-    return input != null && input.isNotEmpty;
+    return input.isNotEmpty;
   }
 }

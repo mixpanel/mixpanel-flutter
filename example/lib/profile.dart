@@ -9,7 +9,7 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  Mixpanel _mixpanel;
+  late final Mixpanel _mixpanel;
 
   @override
   void initState() {
