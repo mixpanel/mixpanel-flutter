@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 class MixpanelButton extends StatelessWidget {
-  MixpanelButton({@required this.onPressed, @required this.text});
+  MixpanelButton({required this.onPressed, required this.text});
   final GestureTapCallback onPressed;
   final String text;
 
