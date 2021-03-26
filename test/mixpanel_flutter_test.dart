@@ -4,8 +4,8 @@ import 'package:mixpanel_flutter/mixpanel_flutter.dart';
 
 void main() {
   const MethodChannel channel = MethodChannel('mixpanel_flutter');
-  MethodCall methodCall;
-  Mixpanel _mixpanel;
+  MethodCall? methodCall;
+  late Mixpanel _mixpanel;
 
   TestWidgetsFlutterBinding.ensureInitialized();
 

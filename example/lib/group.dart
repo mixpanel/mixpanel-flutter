@@ -9,8 +9,8 @@ class GroupScreen extends StatefulWidget {
 }
 
 class _GroupScreenState extends State<GroupScreen> {
-  Mixpanel _mixpanel;
-  MixpanelGroup _mixpanelGroup;
+  late final Mixpanel _mixpanel;
+  late final MixpanelGroup _mixpanelGroup;
 
   @override
   void initState() {

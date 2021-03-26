@@ -9,7 +9,7 @@ class GDPRScreen extends StatefulWidget {
 }
 
 class _GDPRScreenState extends State<GDPRScreen> {
-  Mixpanel _mixpanel;
+  late final Mixpanel _mixpanel;
 
   @override
   void initState() {

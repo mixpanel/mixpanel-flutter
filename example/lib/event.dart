@@ -11,10 +11,10 @@ class EventScreen extends StatefulWidget {
 }
 
 class _EventScreenState extends State<EventScreen> {
-  Mixpanel _mixpanel;
+  late final Mixpanel _mixpanel;
 
   @override
-  Future<void> initState() {
+  initState() {
     super.initState();
     _initMixpanel();
   }
