@@ -20,6 +20,12 @@ jobs:
     - run: flutter pub get
     - run: flutter test
     - run: flutter analyze --no-pub --no-current-package lib
+    - name: Test iOS integration
+      working-directory: example
+      run: flutter build ios --debug --no-codesign
+    - name: Test Android integration
+      working-directory: example
+      run: flutter build apk
     - run: mv docs doc
     - run: dart pub publish --dry-run
     - run: mv doc docs
