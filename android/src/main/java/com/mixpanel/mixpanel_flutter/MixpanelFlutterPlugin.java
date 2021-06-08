@@ -175,13 +175,15 @@ public class MixpanelFlutterPlugin implements FlutterPlugin, MethodCallHandler {
         if (token == null) {
             throw new RuntimeException("Your Mixpanel Token was not set");
         }
-        Map<String, Object> properties = call.<HashMap<String, Object>>argument("mixpanelProperties");
-        mixpanelProperties = new JSONObject(properties == null ? EMPTY_HASHMAP : properties);
+        Map<String, Object> mixPanelproperties = call.<HashMap<String, Object>>argument("mixpanelProperties");
+        mixpanelProperties = new JSONObject(mixPanelproperties == null ? EMPTY_HASHMAP : mixPanelproperties);
+        Map<String, Object> argProperties = call.<HashMap<String, Object>>argument("properties");
+        JSONObject properties = new JSONObject(argProperties == null ? EMPTY_HASHMAP : argProperties);
         if (call.hasArgument("optOutTrackingDefault")) {
             Boolean optOutTrackingDefault = call.<Boolean>argument("optOutTrackingDefault");
-            mixpanel = MixpanelAPI.getInstance(context, token, optOutTrackingDefault == null ? false : optOutTrackingDefault);
+            mixpanel = MixpanelAPI.getInstance(context, token, optOutTrackingDefault == null ? false : optOutTrackingDefault, properties);
         } else {
-            mixpanel = MixpanelAPI.getInstance(context, token);
+            mixpanel = MixpanelAPI.getInstance(context, token, false, properties);
         }
         result.success(Integer.toString(mixpanel.hashCode()));
     }
@@ -273,7 +275,7 @@ public class MixpanelFlutterPlugin implements FlutterPlugin, MethodCallHandler {
     private void handleGetSuperProperties(MethodCall call, Result result) {
         try {
             result.success(MixpanelFlutterHelper.toMap(mixpanel.getSuperProperties()));
-        } catch ( JSONException e) {
+        } catch (JSONException e) {
             result.error("MixpanelFlutterException", e.getLocalizedMessage(), null);
             result.success(null);
         }
