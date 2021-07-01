@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1, user-scalable=no">
-  <meta name="description" content="API docs for the timeEvent method from the Mixpanel class, for the Dart programming language.">
-  <title>timeEvent method - Mixpanel class - mixpanel_flutter library - Dart API</title>
+  <meta name="description" content="API docs for the setUseIpAddressForGeolocation method from the Mixpanel class, for the Dart programming language.">
+  <title>setUseIpAddressForGeolocation method - Mixpanel class - mixpanel_flutter library - Dart API</title>
 
 
   
@@ -32,9 +32,9 @@
     <li><a href="../../index.html">mixpanel_flutter</a></li>
     <li><a href="../../mixpanel_flutter/mixpanel_flutter-library.html">mixpanel_flutter</a></li>
     <li><a href="../../mixpanel_flutter/Mixpanel-class.html">Mixpanel</a></li>
-    <li class="self-crumb">timeEvent method</li>
+    <li class="self-crumb">setUseIpAddressForGeolocation method</li>
   </ol>
-  <div class="self-name">timeEvent</div>
+  <div class="self-name">setUseIpAddressForGeolocation</div>
   <form class="search navbar-right" role="search">
     <input type="text" id="search-box" autocomplete="off" disabled class="form-control typeahead" placeholder="Loading search...">
   </form>
@@ -45,7 +45,7 @@
 
   <div id="dartdoc-main-content" class="main-content">
       <div>
-<h1><span class="kind-method">timeEvent</span> method 
+<h1><span class="kind-method">setUseIpAddressForGeolocation</span> method 
     <a href="https://dart.dev/null-safety" class="feature feature-null-safety" title="Supports the null safety language feature.">Null safety</a>
 </h1></div>
 
@@ -53,7 +53,7 @@
       
 
 <span class="returntype">void</span>
-<span class="name ">timeEvent</span>(<wbr><ol class="parameter-list"><li><span class="parameter" id="timeEvent-param-eventName"><span class="type-annotation"><a href="https://api.flutter.dev/flutter/dart-core/String-class.html">String</a></span> <span class="parameter-name">eventName</span></span></li>
+<span class="name ">setUseIpAddressForGeolocation</span>(<wbr><ol class="parameter-list"><li><span class="parameter" id="setUseIpAddressForGeolocation-param-useIpAddressForGeolocation"><span class="type-annotation"><a href="https://api.flutter.dev/flutter/dart-core/bool-class.html">bool</a></span> <span class="parameter-name">useIpAddressForGeolocation</span></span></li>
 </ol>)
 
       
@@ -61,11 +61,11 @@
     </section>
     
 <section class="desc markdown">
-  <p>Begin timing of an event. Calling timeEvent("Thing") will not send an event, but
-when you eventually call track("Thing"), your tracked event will be sent with a "$duration"
-property, representing the number of seconds between your calls.</p>
+  <p>This controls whether to automatically send the client IP Address as part of event tracking.
+With an IP address, geo-location is possible down to neighborhoods within a city,
+although the Mixpanel Dashboard will just show you city level location specificity.</p>
 <ul>
-<li><code>eventName</code> the name of the event to track with timing.</li>
+<li><code>useIpAddressForGeolocation</code> whether to automatically send the client IP Address. Defaults to true.</li>
 </ul>
 </section>
 
@@ -73,12 +73,13 @@ property, representing the number of seconds between your calls.</p>
     
 <section class="summary source-code" id="source">
   <h2><span>Implementation</span></h2>
-  <pre class="language-dart"><code class="language-dart">void timeEvent(String eventName) {
-  if (_MixpanelHelper.isValidString(eventName)) {
-    _channel.invokeMethod&lt;void&gt;(
-        &#39;timeEvent&#39;, &lt;String, dynamic&gt;{&#39;eventName&#39;: eventName});
+  <pre class="language-dart"><code class="language-dart">void setUseIpAddressForGeolocation(bool useIpAddressForGeolocation) {
+  if (useIpAddressForGeolocation != null) { &#47;&#47; ignore: unnecessary_null_comparison
+    _channel.invokeMethod&lt;void&gt;(&#39;setUseIpAddressForGeolocation&#39;,
+        &lt;String, dynamic&gt;{&#39;useIpAddressForGeolocation&#39;: useIpAddressForGeolocation});
   } else {
-    developer.log(&#39;`timeEvent` failed: eventName cannot be blank&#39;,
+    developer.log(
+        &#39;`setUseIpAddressForGeolocation` failed: useIpAddressForGeolocation cannot be blank&#39;,
         name: &#39;Mixpanel&#39;);
   }
 }</code></pre>
@@ -98,7 +99,7 @@ property, representing the number of seconds between your calls.</p>
   <li><a href="../../index.html">mixpanel_flutter</a></li>
   <li><a href="../../mixpanel_flutter/mixpanel_flutter-library.html">mixpanel_flutter</a></li>
   <li><a href="../../mixpanel_flutter/Mixpanel-class.html">Mixpanel</a></li>
-  <li class="self-crumb">timeEvent method</li>
+  <li class="self-crumb">setUseIpAddressForGeolocation method</li>
 </ol>
 
 

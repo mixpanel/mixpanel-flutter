@@ -7,15 +7,19 @@
   <meta name="description" content="API docs for the deleteUser method from the People class, for the Dart programming language.">
   <title>deleteUser method - People class - mixpanel_flutter library - Dart API</title>
 
+
   
   <link rel="preconnect" href="https://fonts.gstatic.com">
   <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:ital,wght@0,300;0,400;0,500;0,700;1,400&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
-  <link rel="stylesheet" href="../../static-assets/github.css">
-  <link rel="stylesheet" href="../../static-assets/styles.css">
-  <link rel="icon" href="../../static-assets/favicon.png">
+  
+  <link rel="stylesheet" href="../../static-assets/github.css?v1">
+  <link rel="stylesheet" href="../../static-assets/styles.css?v1">
+  <link rel="icon" href="../../static-assets/favicon.png?v1">
 
+  
 </head>
+
 
 <body data-base-href="../../"
       data-using-base-href="false">
@@ -38,20 +42,57 @@
 
 <main>
 
+
+  <div id="dartdoc-main-content" class="main-content">
+      <div>
+<h1><span class="kind-method">deleteUser</span> method 
+    <a href="https://dart.dev/null-safety" class="feature feature-null-safety" title="Supports the null safety language feature.">Null safety</a>
+</h1></div>
+
+    <section class="multi-line-signature">
+      
+
+<span class="returntype">void</span>
+<span class="name ">deleteUser</span>(<wbr>)
+
+      
+
+    </section>
+    
+<section class="desc markdown">
+  <p>Permanently deletes the identified user's record from People Analytics.</p>
+<p>Calling deleteUser deletes an entire record completely. Any future calls
+to People Analytics using the same distinct id will create and store new values.</p>
+</section>
+
+
+    
+<section class="summary source-code" id="source">
+  <h2><span>Implementation</span></h2>
+  <pre class="language-dart"><code class="language-dart">void deleteUser() {
+  _channel.invokeMethod&lt;void&gt;(
+      &#39;deleteUser&#39;, &lt;String, dynamic&gt;{&#39;token&#39;: this._token});
+}</code></pre>
+</section>
+
+
+  </div> <!-- /.main-content -->
+
   <div id="dartdoc-sidebar-left" class="sidebar sidebar-offcanvas-left">
     <header id="header-search-sidebar" class="hidden-l">
-      <form class="search-sidebar" role="search">
-        <input type="text" id="search-sidebar" autocomplete="off" disabled class="form-control typeahead" placeholder="Loading search...">
-      </form>
-    </header>
-    
-    <ol class="breadcrumbs gt-separated dark hidden-l" id="sidebar-nav">
-      <li><a href="../../index.html">mixpanel_flutter</a></li>
-      <li><a href="../../mixpanel_flutter/mixpanel_flutter-library.html">mixpanel_flutter</a></li>
-      <li><a href="../../mixpanel_flutter/People-class.html">People</a></li>
-      <li class="self-crumb">deleteUser method</li>
-    </ol>
-    
+  <form class="search-sidebar" role="search">
+    <input type="text" id="search-sidebar" autocomplete="off" disabled class="form-control typeahead" placeholder="Loading search...">
+  </form>
+</header>
+
+<ol class="breadcrumbs gt-separated dark hidden-l" id="sidebar-nav">
+  <li><a href="../../index.html">mixpanel_flutter</a></li>
+  <li><a href="../../mixpanel_flutter/mixpanel_flutter-library.html">mixpanel_flutter</a></li>
+  <li><a href="../../mixpanel_flutter/People-class.html">People</a></li>
+  <li class="self-crumb">deleteUser method</li>
+</ol>
+
+
     <h5>People class</h5>
     <ol>
 
@@ -89,31 +130,6 @@
 
   </div><!--/.sidebar-offcanvas-->
 
-  <div id="dartdoc-main-content" class="main-content">
-      <div><h1><span class="kind-method">deleteUser</span> method </h1></div>
-
-    <section class="multi-line-signature">
-      <span class="returntype">void</span>
-            <span class="name ">deleteUser</span>
-(<wbr>)
-      
-    </section>
-    <section class="desc markdown">
-      <p>Permanently deletes the identified user's record from People Analytics.</p>
-<p>Calling deleteUser deletes an entire record completely. Any future calls
-to People Analytics using the same distinct id will create and store new values.</p>
-    </section>
-    
-    <section class="summary source-code" id="source">
-      <h2><span>Implementation</span></h2>
-      <pre class="language-dart"><code class="language-dart">void deleteUser() {
-  _channel.invokeMethod&lt;void&gt;(
-      &#39;deleteUser&#39;, &lt;String, dynamic&gt;{&#39;token&#39;: this._token});
-}</code></pre>
-    </section>
-
-  </div> <!-- /.main-content -->
-
   <div id="dartdoc-sidebar-right" class="sidebar sidebar-offcanvas-right">
   </div><!--/.sidebar-offcanvas-->
 
@@ -122,17 +138,20 @@ to People Analytics using the same distinct id will create and store new values.
 <footer>
   <span class="no-break">
     mixpanel_flutter
-      1.0.1
+      1.2.0
   </span>
 
+  
 </footer>
 
-<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
-<script src="../../static-assets/typeahead.bundle.min.js"></script>
-<script src="../../static-assets/highlight.pack.js"></script>
-<script src="../../static-assets/script.js"></script>
+
+
+<script src="../../static-assets/highlight.pack.js?v1"></script>
+<script src="../../static-assets/script.js?v1"></script>
+
 
 
 </body>
 
 </html>
+

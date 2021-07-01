@@ -7,15 +7,19 @@
   <meta name="description" content="API docs for the increment method from the People class, for the Dart programming language.">
   <title>increment method - People class - mixpanel_flutter library - Dart API</title>
 
+
   
   <link rel="preconnect" href="https://fonts.gstatic.com">
   <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:ital,wght@0,300;0,400;0,500;0,700;1,400&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
-  <link rel="stylesheet" href="../../static-assets/github.css">
-  <link rel="stylesheet" href="../../static-assets/styles.css">
-  <link rel="icon" href="../../static-assets/favicon.png">
+  
+  <link rel="stylesheet" href="../../static-assets/github.css?v1">
+  <link rel="stylesheet" href="../../static-assets/styles.css?v1">
+  <link rel="icon" href="../../static-assets/favicon.png?v1">
 
+  
 </head>
+
 
 <body data-base-href="../../"
       data-using-base-href="false">
@@ -38,20 +42,69 @@
 
 <main>
 
+
+  <div id="dartdoc-main-content" class="main-content">
+      <div>
+<h1><span class="kind-method">increment</span> method 
+    <a href="https://dart.dev/null-safety" class="feature feature-null-safety" title="Supports the null safety language feature.">Null safety</a>
+</h1></div>
+
+    <section class="multi-line-signature">
+      
+
+<span class="returntype">void</span>
+<span class="name ">increment</span>(<wbr><ol class="parameter-list"><li><span class="parameter" id="increment-param-prop"><span class="type-annotation"><a href="https://api.flutter.dev/flutter/dart-core/String-class.html">String</a></span> <span class="parameter-name">prop</span>, </span></li>
+<li><span class="parameter" id="increment-param-by"><span class="type-annotation"><a href="https://api.flutter.dev/flutter/dart-core/double-class.html">double</a></span> <span class="parameter-name">by</span></span></li>
+</ol>)
+
+      
+
+    </section>
+    
+<section class="desc markdown">
+  <p>Add the given amount to an existing property on the identified user. If the user does not already
+have the associated property, the amount will be added to zero. To reduce a property,
+provide a negative number for the value.</p>
+<ul>
+<li><code>prop</code> the People Analytics property that should have its value changed</li>
+<li><code>by</code> the amount to be added to the current value of the named property</li>
+</ul>
+</section>
+
+
+    
+<section class="summary source-code" id="source">
+  <h2><span>Implementation</span></h2>
+  <pre class="language-dart"><code class="language-dart">void increment(String prop, double by) {
+  Map&lt;String, dynamic&gt; properties = {prop: by};
+  if (_MixpanelHelper.isValidString(prop)) {
+    _channel.invokeMethod&lt;void&gt;(&#39;increment&#39;,
+        &lt;String, dynamic&gt;{&#39;token&#39;: this._token, &#39;properties&#39;: properties});
+  } else {
+    developer.log(&#39;`people increment` failed: prop cannot be blank&#39;,
+        name: &#39;Mixpanel&#39;);
+  }
+}</code></pre>
+</section>
+
+
+  </div> <!-- /.main-content -->
+
   <div id="dartdoc-sidebar-left" class="sidebar sidebar-offcanvas-left">
     <header id="header-search-sidebar" class="hidden-l">
-      <form class="search-sidebar" role="search">
-        <input type="text" id="search-sidebar" autocomplete="off" disabled class="form-control typeahead" placeholder="Loading search...">
-      </form>
-    </header>
-    
-    <ol class="breadcrumbs gt-separated dark hidden-l" id="sidebar-nav">
-      <li><a href="../../index.html">mixpanel_flutter</a></li>
-      <li><a href="../../mixpanel_flutter/mixpanel_flutter-library.html">mixpanel_flutter</a></li>
-      <li><a href="../../mixpanel_flutter/People-class.html">People</a></li>
-      <li class="self-crumb">increment method</li>
-    </ol>
-    
+  <form class="search-sidebar" role="search">
+    <input type="text" id="search-sidebar" autocomplete="off" disabled class="form-control typeahead" placeholder="Loading search...">
+  </form>
+</header>
+
+<ol class="breadcrumbs gt-separated dark hidden-l" id="sidebar-nav">
+  <li><a href="../../index.html">mixpanel_flutter</a></li>
+  <li><a href="../../mixpanel_flutter/mixpanel_flutter-library.html">mixpanel_flutter</a></li>
+  <li><a href="../../mixpanel_flutter/People-class.html">People</a></li>
+  <li class="self-crumb">increment method</li>
+</ol>
+
+
     <h5>People class</h5>
     <ol>
 
@@ -89,43 +142,6 @@
 
   </div><!--/.sidebar-offcanvas-->
 
-  <div id="dartdoc-main-content" class="main-content">
-      <div><h1><span class="kind-method">increment</span> method </h1></div>
-
-    <section class="multi-line-signature">
-      <span class="returntype">void</span>
-            <span class="name ">increment</span>
-(<wbr><ol class="parameter-list"><li><span class="parameter" id="increment-param-prop"><span class="type-annotation"><a href="https://api.flutter.dev/flutter/dart-core/String-class.html">String</a></span> <span class="parameter-name">prop</span>, </span></li>
-<li><span class="parameter" id="increment-param-by"><span class="type-annotation"><a href="https://api.flutter.dev/flutter/dart-core/double-class.html">double</a></span> <span class="parameter-name">by</span></span></li>
-</ol>)
-      
-    </section>
-    <section class="desc markdown">
-      <p>Add the given amount to an existing property on the identified user. If the user does not already
-have the associated property, the amount will be added to zero. To reduce a property,
-provide a negative number for the value.</p>
-<ul>
-<li><code>prop</code> the People Analytics property that should have its value changed</li>
-<li><code>by</code> the amount to be added to the current value of the named property</li>
-</ul>
-    </section>
-    
-    <section class="summary source-code" id="source">
-      <h2><span>Implementation</span></h2>
-      <pre class="language-dart"><code class="language-dart">void increment(String prop, double by) {
-  Map&lt;String, dynamic&gt; properties = {prop: by};
-  if (_MixpanelHelper.isValidString(prop)) {
-    _channel.invokeMethod&lt;void&gt;(&#39;increment&#39;,
-        &lt;String, dynamic&gt;{&#39;token&#39;: this._token, &#39;properties&#39;: properties});
-  } else {
-    developer.log(&#39;`people increment` failed: prop cannot be blank&#39;,
-        name: &#39;Mixpanel&#39;);
-  }
-}</code></pre>
-    </section>
-
-  </div> <!-- /.main-content -->
-
   <div id="dartdoc-sidebar-right" class="sidebar sidebar-offcanvas-right">
   </div><!--/.sidebar-offcanvas-->
 
@@ -134,17 +150,20 @@ provide a negative number for the value.</p>
 <footer>
   <span class="no-break">
     mixpanel_flutter
-      1.0.1
+      1.2.0
   </span>
 
+  
 </footer>
 
-<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
-<script src="../../static-assets/typeahead.bundle.min.js"></script>
-<script src="../../static-assets/highlight.pack.js"></script>
-<script src="../../static-assets/script.js"></script>
+
+
+<script src="../../static-assets/highlight.pack.js?v1"></script>
+<script src="../../static-assets/script.js?v1"></script>
+
 
 
 </body>
 
 </html>
+

@@ -7,15 +7,19 @@
   <meta name="description" content="API docs for the getSuperProperties method from the Mixpanel class, for the Dart programming language.">
   <title>getSuperProperties method - Mixpanel class - mixpanel_flutter library - Dart API</title>
 
+
   
   <link rel="preconnect" href="https://fonts.gstatic.com">
   <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:ital,wght@0,300;0,400;0,500;0,700;1,400&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
-  <link rel="stylesheet" href="../../static-assets/github.css">
-  <link rel="stylesheet" href="../../static-assets/styles.css">
-  <link rel="icon" href="../../static-assets/favicon.png">
+  
+  <link rel="stylesheet" href="../../static-assets/github.css?v1">
+  <link rel="stylesheet" href="../../static-assets/styles.css?v1">
+  <link rel="icon" href="../../static-assets/favicon.png?v1">
 
+  
 </head>
+
 
 <body data-base-href="../../"
       data-using-base-href="false">
@@ -38,20 +42,57 @@
 
 <main>
 
+
+  <div id="dartdoc-main-content" class="main-content">
+      <div>
+<h1><span class="kind-method">getSuperProperties</span> method 
+    <a href="https://dart.dev/null-safety" class="feature feature-null-safety" title="Supports the null safety language feature.">Null safety</a>
+</h1></div>
+
+    <section class="multi-line-signature">
+      
+
+<span class="returntype"><a href="https://api.flutter.dev/flutter/dart-async/Future-class.html">Future</a><span class="signature">&lt;<wbr><span class="type-parameter"><a href="https://api.flutter.dev/flutter/dart-core/Map-class.html">Map</a>?</span>&gt;</span></span>
+<span class="name ">getSuperProperties</span>(<wbr>)
+
+      
+
+    </section>
+    
+<section class="desc markdown">
+  <p>Returns a Map of the user's current super properties</p>
+<p>SuperProperties are a collection of properties that will be sent with every event to Mixpanel,
+and persist beyond the lifetime of your application.</p>
+<p>return Super properties for this Mixpanel instance.</p>
+</section>
+
+
+    
+<section class="summary source-code" id="source">
+  <h2><span>Implementation</span></h2>
+  <pre class="language-dart"><code class="language-dart">Future&lt;Map?&gt; getSuperProperties() async {
+  return await _channel.invokeMethod&lt;Map&gt;(&#39;getSuperProperties&#39;);
+}</code></pre>
+</section>
+
+
+  </div> <!-- /.main-content -->
+
   <div id="dartdoc-sidebar-left" class="sidebar sidebar-offcanvas-left">
     <header id="header-search-sidebar" class="hidden-l">
-      <form class="search-sidebar" role="search">
-        <input type="text" id="search-sidebar" autocomplete="off" disabled class="form-control typeahead" placeholder="Loading search...">
-      </form>
-    </header>
-    
-    <ol class="breadcrumbs gt-separated dark hidden-l" id="sidebar-nav">
-      <li><a href="../../index.html">mixpanel_flutter</a></li>
-      <li><a href="../../mixpanel_flutter/mixpanel_flutter-library.html">mixpanel_flutter</a></li>
-      <li><a href="../../mixpanel_flutter/Mixpanel-class.html">Mixpanel</a></li>
-      <li class="self-crumb">getSuperProperties method</li>
-    </ol>
-    
+  <form class="search-sidebar" role="search">
+    <input type="text" id="search-sidebar" autocomplete="off" disabled class="form-control typeahead" placeholder="Loading search...">
+  </form>
+</header>
+
+<ol class="breadcrumbs gt-separated dark hidden-l" id="sidebar-nav">
+  <li><a href="../../index.html">mixpanel_flutter</a></li>
+  <li><a href="../../mixpanel_flutter/mixpanel_flutter-library.html">mixpanel_flutter</a></li>
+  <li><a href="../../mixpanel_flutter/Mixpanel-class.html">Mixpanel</a></li>
+  <li class="self-crumb">getSuperProperties method</li>
+</ol>
+
+
     <h5>Mixpanel class</h5>
     <ol>
 
@@ -88,6 +129,7 @@
     <li><a href="../../mixpanel_flutter/Mixpanel/setGroup.html">setGroup</a></li>
     <li><a href="../../mixpanel_flutter/Mixpanel/setLoggingEnabled.html">setLoggingEnabled</a></li>
     <li><a href="../../mixpanel_flutter/Mixpanel/setServerURL.html">setServerURL</a></li>
+    <li><a href="../../mixpanel_flutter/Mixpanel/setUseIpAddressForGeolocation.html">setUseIpAddressForGeolocation</a></li>
     <li><a href="../../mixpanel_flutter/Mixpanel/timeEvent.html">timeEvent</a></li>
     <li class="inherited"><a href="https://api.flutter.dev/flutter/dart-core/Object/toString.html">toString</a></li>
     <li><a href="../../mixpanel_flutter/Mixpanel/track.html">track</a></li>
@@ -106,31 +148,6 @@
 
   </div><!--/.sidebar-offcanvas-->
 
-  <div id="dartdoc-main-content" class="main-content">
-      <div><h1><span class="kind-method">getSuperProperties</span> method </h1></div>
-
-    <section class="multi-line-signature">
-      <span class="returntype"><a href="https://api.flutter.dev/flutter/dart-async/Future-class.html">Future</a><span class="signature">&lt;<wbr><span class="type-parameter"><a href="https://api.flutter.dev/flutter/dart-core/Map-class.html">Map</a></span>&gt;</span></span>
-            <span class="name ">getSuperProperties</span>
-(<wbr>)
-      
-    </section>
-    <section class="desc markdown">
-      <p>Returns a Map of the user's current super properties</p>
-<p>SuperProperties are a collection of properties that will be sent with every event to Mixpanel,
-and persist beyond the lifetime of your application.</p>
-<p>return Super properties for this Mixpanel instance.</p>
-    </section>
-    
-    <section class="summary source-code" id="source">
-      <h2><span>Implementation</span></h2>
-      <pre class="language-dart"><code class="language-dart">Future&lt;Map&gt; getSuperProperties() async {
-  return await _channel.invokeMethod&lt;Map&gt;(&#39;getSuperProperties&#39;);
-}</code></pre>
-    </section>
-
-  </div> <!-- /.main-content -->
-
   <div id="dartdoc-sidebar-right" class="sidebar sidebar-offcanvas-right">
   </div><!--/.sidebar-offcanvas-->
 
@@ -139,17 +156,20 @@ and persist beyond the lifetime of your application.</p>
 <footer>
   <span class="no-break">
     mixpanel_flutter
-      1.0.1
+      1.2.0
   </span>
 
+  
 </footer>
 
-<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
-<script src="../../static-assets/typeahead.bundle.min.js"></script>
-<script src="../../static-assets/highlight.pack.js"></script>
-<script src="../../static-assets/script.js"></script>
+
+
+<script src="../../static-assets/highlight.pack.js?v1"></script>
+<script src="../../static-assets/script.js?v1"></script>
+
 
 
 </body>
 
 </html>
+

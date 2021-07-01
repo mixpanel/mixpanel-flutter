@@ -7,15 +7,19 @@
   <meta name="description" content="API docs for the setServerURL method from the Mixpanel class, for the Dart programming language.">
   <title>setServerURL method - Mixpanel class - mixpanel_flutter library - Dart API</title>
 
+
   
   <link rel="preconnect" href="https://fonts.gstatic.com">
   <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:ital,wght@0,300;0,400;0,500;0,700;1,400&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
-  <link rel="stylesheet" href="../../static-assets/github.css">
-  <link rel="stylesheet" href="../../static-assets/styles.css">
-  <link rel="icon" href="../../static-assets/favicon.png">
+  
+  <link rel="stylesheet" href="../../static-assets/github.css?v1">
+  <link rel="stylesheet" href="../../static-assets/styles.css?v1">
+  <link rel="icon" href="../../static-assets/favicon.png?v1">
 
+  
 </head>
+
 
 <body data-base-href="../../"
       data-using-base-href="false">
@@ -38,20 +42,66 @@
 
 <main>
 
+
+  <div id="dartdoc-main-content" class="main-content">
+      <div>
+<h1><span class="kind-method">setServerURL</span> method 
+    <a href="https://dart.dev/null-safety" class="feature feature-null-safety" title="Supports the null safety language feature.">Null safety</a>
+</h1></div>
+
+    <section class="multi-line-signature">
+      
+
+<span class="returntype">void</span>
+<span class="name ">setServerURL</span>(<wbr><ol class="parameter-list"><li><span class="parameter" id="setServerURL-param-serverURL"><span class="type-annotation"><a href="https://api.flutter.dev/flutter/dart-core/String-class.html">String</a></span> <span class="parameter-name">serverURL</span></span></li>
+</ol>)
+
+      
+
+    </section>
+    
+<section class="desc markdown">
+  <p>Set the base URL used for Mixpanel API requests.
+Useful if you need to proxy Mixpanel requests. Defaults to <a href="https://api.mixpanel.com">https://api.mixpanel.com</a>.
+To route data to Mixpanel's EU servers, set to <a href="https://api-eu.mixpanel.com">https://api-eu.mixpanel.com</a></p>
+<ul>
+<li><code>serverURL</code> the base URL used for Mixpanel API requests</li>
+</ul>
+</section>
+
+
+    
+<section class="summary source-code" id="source">
+  <h2><span>Implementation</span></h2>
+  <pre class="language-dart"><code class="language-dart">void setServerURL(String serverURL) {
+  if (_MixpanelHelper.isValidString(serverURL)) {
+    _channel.invokeMethod&lt;void&gt;(
+        &#39;setServerURL&#39;, &lt;String, dynamic&gt;{&#39;serverURL&#39;: serverURL});
+  } else {
+    developer.log(&#39;`setServerURL` failed: serverURL cannot be blank&#39;,
+        name: &#39;Mixpanel&#39;);
+  }
+}</code></pre>
+</section>
+
+
+  </div> <!-- /.main-content -->
+
   <div id="dartdoc-sidebar-left" class="sidebar sidebar-offcanvas-left">
     <header id="header-search-sidebar" class="hidden-l">
-      <form class="search-sidebar" role="search">
-        <input type="text" id="search-sidebar" autocomplete="off" disabled class="form-control typeahead" placeholder="Loading search...">
-      </form>
-    </header>
-    
-    <ol class="breadcrumbs gt-separated dark hidden-l" id="sidebar-nav">
-      <li><a href="../../index.html">mixpanel_flutter</a></li>
-      <li><a href="../../mixpanel_flutter/mixpanel_flutter-library.html">mixpanel_flutter</a></li>
-      <li><a href="../../mixpanel_flutter/Mixpanel-class.html">Mixpanel</a></li>
-      <li class="self-crumb">setServerURL method</li>
-    </ol>
-    
+  <form class="search-sidebar" role="search">
+    <input type="text" id="search-sidebar" autocomplete="off" disabled class="form-control typeahead" placeholder="Loading search...">
+  </form>
+</header>
+
+<ol class="breadcrumbs gt-separated dark hidden-l" id="sidebar-nav">
+  <li><a href="../../index.html">mixpanel_flutter</a></li>
+  <li><a href="../../mixpanel_flutter/mixpanel_flutter-library.html">mixpanel_flutter</a></li>
+  <li><a href="../../mixpanel_flutter/Mixpanel-class.html">Mixpanel</a></li>
+  <li class="self-crumb">setServerURL method</li>
+</ol>
+
+
     <h5>Mixpanel class</h5>
     <ol>
 
@@ -88,6 +138,7 @@
     <li><a href="../../mixpanel_flutter/Mixpanel/setGroup.html">setGroup</a></li>
     <li><a href="../../mixpanel_flutter/Mixpanel/setLoggingEnabled.html">setLoggingEnabled</a></li>
     <li><a href="../../mixpanel_flutter/Mixpanel/setServerURL.html">setServerURL</a></li>
+    <li><a href="../../mixpanel_flutter/Mixpanel/setUseIpAddressForGeolocation.html">setUseIpAddressForGeolocation</a></li>
     <li><a href="../../mixpanel_flutter/Mixpanel/timeEvent.html">timeEvent</a></li>
     <li class="inherited"><a href="https://api.flutter.dev/flutter/dart-core/Object/toString.html">toString</a></li>
     <li><a href="../../mixpanel_flutter/Mixpanel/track.html">track</a></li>
@@ -106,46 +157,6 @@
 
   </div><!--/.sidebar-offcanvas-->
 
-  <div id="dartdoc-main-content" class="main-content">
-      <div><h1><span class="kind-method">setServerURL</span> method </h1></div>
-
-    <section class="multi-line-signature">
-      <span class="returntype">void</span>
-            <span class="name ">setServerURL</span>
-(<wbr><ol class="parameter-list"><li><span class="parameter" id="setServerURL-param-serverURL"><span class="type-annotation"><a href="https://api.flutter.dev/flutter/dart-core/String-class.html">String</a></span> <span class="parameter-name">serverURL</span></span></li>
-</ol>)
-      
-    </section>
-    <section class="desc markdown">
-      <p>Set the base URL used for Mixpanel API requests.
-Useful if you need to proxy Mixpanel requests. Defaults to <a href="https://api.mixpanel.com">https://api.mixpanel.com</a>.
-To route data to Mixpanel's EU servers, set to <a href="https://api-eu.mixpanel.com">https://api-eu.mixpanel.com</a></p>
-<ul>
-<li>Note: This method will only work for iOS. For android, please refer to:
-<a href="https://developer.mixpanel.com/docs/android">https://developer.mixpanel.com/docs/android</a></li>
-</ul>
-<ul>
-<li><code>serverURL</code> the base URL used for Mixpanel API requests</li>
-</ul>
-    </section>
-    
-    <section class="summary source-code" id="source">
-      <h2><span>Implementation</span></h2>
-      <pre class="language-dart"><code class="language-dart">void setServerURL(String serverURL) {
-  if (Platform.isIOS) {
-    if (_MixpanelHelper.isValidString(serverURL)) {
-      _channel.invokeMethod&lt;void&gt;(
-          &#39;setServerURL&#39;, &lt;String, dynamic&gt;{&#39;serverURL&#39;: serverURL});
-    } else {
-      developer.log(&#39;`setServerURL` failed: serverURL cannot be blank&#39;,
-          name: &#39;Mixpanel&#39;);
-    }
-  }
-}</code></pre>
-    </section>
-
-  </div> <!-- /.main-content -->
-
   <div id="dartdoc-sidebar-right" class="sidebar sidebar-offcanvas-right">
   </div><!--/.sidebar-offcanvas-->
 
@@ -154,17 +165,20 @@ To route data to Mixpanel's EU servers, set to <a href="https://api-eu.mixpanel.
 <footer>
   <span class="no-break">
     mixpanel_flutter
-      1.0.1
+      1.2.0
   </span>
 
+  
 </footer>
 
-<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
-<script src="../../static-assets/typeahead.bundle.min.js"></script>
-<script src="../../static-assets/highlight.pack.js"></script>
-<script src="../../static-assets/script.js"></script>
+
+
+<script src="../../static-assets/highlight.pack.js?v1"></script>
+<script src="../../static-assets/script.js?v1"></script>
+
 
 
 </body>
 
 </html>
+
