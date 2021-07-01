@@ -20,9 +20,6 @@ jobs:
     - run: flutter pub get
     - run: flutter test
     - run: flutter analyze --no-pub --no-current-package lib
-    - run: mv docs doc
-    - run: dart pub publish --dry-run
-    - run: mv doc docs
 
   test-android-integration:
     runs-on: macos-11
