@@ -57,7 +57,7 @@ class Mixpanel {
   ///
   /// * [loggingEnabled] whether to enable logging
   void setLoggingEnabled(bool loggingEnabled) {
-    if (loggingEnabled != null) {
+    if (loggingEnabled != null) { // ignore: unnecessary_null_comparison
       _channel.invokeMethod<void>('setLoggingEnabled',
           <String, dynamic>{'loggingEnabled': loggingEnabled});
     } else {
@@ -73,7 +73,7 @@ class Mixpanel {
   ///
   /// * [useIpAddressForGeolocation] whether to automatically send the client IP Address. Defaults to true.
   void setUseIpAddressForGeolocation(bool useIpAddressForGeolocation) {
-    if (useIpAddressForGeolocation != null) {
+    if (useIpAddressForGeolocation != null) { // ignore: unnecessary_null_comparison
       _channel.invokeMethod<void>('setUseIpAddressForGeolocation',
           <String, dynamic>{'useIpAddressForGeolocation': useIpAddressForGeolocation});
     } else {
