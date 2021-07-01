@@ -3,7 +3,7 @@ PODS:
   - Mixpanel-swift (2.8.3):
     - Mixpanel-swift/Complete (= 2.8.3)
   - Mixpanel-swift/Complete (2.8.3)
-  - mixpanel_flutter (1.0.1):
+  - mixpanel_flutter (1.1.0):
     - Flutter
     - Mixpanel-swift (= 2.8.3)
 
@@ -24,7 +24,7 @@ EXTERNAL SOURCES:
 SPEC CHECKSUMS:
   Flutter: 434fef37c0980e73bb6479ef766c45957d4b510c
   Mixpanel-swift: 947354668bf7dcaff5aaf9c64232fb5bea6ff0c7
-  mixpanel_flutter: 59130decd93dbb51e1a8a258d0d9af432287768e
+  mixpanel_flutter: 2b151def495bd86f2a6cbd83e58acf47a70cbb79
 
 PODFILE CHECKSUM: aafe91acc616949ddb318b77800a7f51bffa2a4c
 

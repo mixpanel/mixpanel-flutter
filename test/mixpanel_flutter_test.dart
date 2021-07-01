@@ -62,6 +62,39 @@ void main() {
       );
     });
 
+    test('check setServerURL', () async {
+      _mixpanel.setServerURL("https://api-eu.mixpanel.com");
+      expect(
+        methodCall,
+        isMethodCall(
+          'setServerURL',
+          arguments: <String, dynamic>{'serverURL': 'https://api-eu.mixpanel.com'},
+        ),
+      );
+    });
+
+    test('check setLoggingEnabled', () async {
+      _mixpanel.setLoggingEnabled(true);
+      expect(
+        methodCall,
+        isMethodCall(
+          'setLoggingEnabled',
+          arguments: <String, dynamic>{'loggingEnabled': true},
+        ),
+      );
+    });
+
+    test('check setUseIpAddressForGeolocation', () async {
+      _mixpanel.setUseIpAddressForGeolocation(true);
+      expect(
+        methodCall,
+        isMethodCall(
+          'setUseIpAddressForGeolocation',
+          arguments: <String, dynamic>{'useIpAddressForGeolocation': true},
+        ),
+      );
+    });
+
     test('check optInTracking', () async {
       _mixpanel.optInTracking();
       expect(

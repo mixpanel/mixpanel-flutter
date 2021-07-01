@@ -39,40 +39,47 @@ class Mixpanel {
   /// Set the base URL used for Mixpanel API requests.
   /// Useful if you need to proxy Mixpanel requests. Defaults to https://api.mixpanel.com.
   /// To route data to Mixpanel's EU servers, set to https://api-eu.mixpanel.com
-  /// - Note: This method will only work for iOS. For android, please refer to:
-  /// https://developer.mixpanel.com/docs/android
   ///
   /// * [serverURL] the base URL used for Mixpanel API requests
   void setServerURL(String serverURL) {
-    if (Platform.isIOS) {
-      if (_MixpanelHelper.isValidString(serverURL)) {
-        _channel.invokeMethod<void>(
-            'setServerURL', <String, dynamic>{'serverURL': serverURL});
-      } else {
-        developer.log('`setServerURL` failed: serverURL cannot be blank',
-            name: 'Mixpanel');
-      }
+    if (_MixpanelHelper.isValidString(serverURL)) {
+      _channel.invokeMethod<void>(
+          'setServerURL', <String, dynamic>{'serverURL': serverURL});
+    } else {
+      developer.log('`setServerURL` failed: serverURL cannot be blank',
+          name: 'Mixpanel');
     }
   }
 
   /// This allows enabling or disabling of all Mixpanel logs at run time.
-  /// - Note: This method will only work for iOS. For android, please refer to:
-  /// https://developer.mixpanel.com/docs/android
   /// All logging is disabled by default. Usually, this is only required if
   /// you are running into issues with the SDK that you want to debug
   ///
   /// * [loggingEnabled] whether to enable logging
   void setLoggingEnabled(bool loggingEnabled) {
-    if (Platform.isIOS) {
-      // ignore: unnecessary_null_comparison
-      if (loggingEnabled != null) {
-        _channel.invokeMethod<void>('setLoggingEnabled',
-            <String, dynamic>{'loggingEnabled': loggingEnabled});
-      } else {
-        developer.log(
-            '`setLoggingEnabled` failed: loggingEnabled cannot be blank',
-            name: 'Mixpanel');
-      }
+    if (loggingEnabled != null) {
+      _channel.invokeMethod<void>('setLoggingEnabled',
+          <String, dynamic>{'loggingEnabled': loggingEnabled});
+    } else {
+      developer.log(
+          '`setLoggingEnabled` failed: loggingEnabled cannot be blank',
+          name: 'Mixpanel');
+    }
+  }
+
+  /// This controls whether to automatically send the client IP Address as part of event tracking.
+  /// With an IP address, geo-location is possible down to neighborhoods within a city,
+  /// although the Mixpanel Dashboard will just show you city level location specificity.
+  ///
+  /// * [useIpAddressForGeolocation] whether to automatically send the client IP Address. Defaults to true.
+  void setUseIpAddressForGeolocation(bool useIpAddressForGeolocation) {
+    if (useIpAddressForGeolocation != null) {
+      _channel.invokeMethod<void>('setUseIpAddressForGeolocation',
+          <String, dynamic>{'useIpAddressForGeolocation': useIpAddressForGeolocation});
+    } else {
+      developer.log(
+          '`setUseIpAddressForGeolocation` failed: useIpAddressForGeolocation cannot be blank',
+          name: 'Mixpanel');
     }
   }
 

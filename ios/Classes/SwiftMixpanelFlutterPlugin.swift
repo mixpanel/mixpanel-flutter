@@ -25,6 +25,9 @@ public class SwiftMixpanelFlutterPlugin: NSObject, FlutterPlugin {
         case "setLoggingEnabled":
             handleSetLoggingEnabled(call, result: result)
             break
+        case "setUseIpAddressForGeolocation":
+            handleSetUseIpAddressForGeolocation(call, result: result)
+            break
         case "hasOptedOutTracking":
             handleHasOptedOutTracking(call, result: result)
             break
@@ -174,6 +177,13 @@ public class SwiftMixpanelFlutterPlugin: NSObject, FlutterPlugin {
         let arguments = call.arguments as? [String: Any] ?? [String: Any]()
         let loggingEnabled = arguments["loggingEnabled"] as! Bool
         instance?.loggingEnabled = loggingEnabled
+        result(nil)
+    }
+
+    private func handleSetUseIpAddressForGeolocation(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+        let arguments = call.arguments as? [String: Any] ?? [String: Any]()
+        let useIpAddressForGeolocation = arguments["useIpAddressForGeolocation"] as! Bool
+        instance?.useIPAddressForGeoLocation = useIpAddressForGeolocation
         result(nil)
     }
     

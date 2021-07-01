@@ -56,6 +56,15 @@ public class MixpanelFlutterPlugin implements FlutterPlugin, MethodCallHandler {
             case "initialize":
                 handleInitialize(call, result);
                 break;
+            case "setServerURL":
+                handleSetServerURL(call, result);
+                break;
+            case "setLoggingEnabled":
+                handleSetLoggingEnabled(call, result);
+                break;
+            case "setUseIpAddressForGeolocation":
+                handleSetUseIpAddressForGeolocation(call, result);
+                break;
             case "hasOptedOutTracking":
                 handleHasOptedOutTracking(call, result);
                 break;
@@ -184,6 +193,24 @@ public class MixpanelFlutterPlugin implements FlutterPlugin, MethodCallHandler {
             mixpanel = MixpanelAPI.getInstance(context, token);
         }
         result.success(Integer.toString(mixpanel.hashCode()));
+    }
+
+    private void handleSetServerURL(MethodCall call, Result result) {
+        String serverURL = call.argument("serverURL");
+        mixpanel.setServerURL(serverURL);
+        result.success(null);
+    }
+
+    private void handleSetLoggingEnabled(MethodCall call, Result result) {
+        Boolean enableLogging = call.argument("loggingEnabled");
+        mixpanel.setEnableLogging(enableLogging);
+        result.success(null);
+    }
+
+    private void handleSetUseIpAddressForGeolocation(MethodCall call, Result result) {
+        Boolean useIpAddressForGeolocation = call.argument("useIpAddressForGeolocation");
+        mixpanel.setUseIpAddressForGeolocation(useIpAddressForGeolocation);
+        result.success(null);
     }
 
     private void handleHasOptedOutTracking(MethodCall call, Result result) {
