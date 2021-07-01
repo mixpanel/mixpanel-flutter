@@ -26,13 +26,12 @@ class Mixpanel {
   ///  optOutTracking()
   ///
   static Future<Mixpanel> init(String token,
-      {bool optOutTrackingDefault = false}) async {
-    var properties = <String, dynamic>{'token': token};
-
-    properties['optOutTrackingDefault'] = optOutTrackingDefault;
-    properties['mixpanelProperties'] = _mixpanelProperties;
-
-    await _channel.invokeMethod<void>('initialize', properties);
+      {bool optOutTrackingDefault = false, Map<String, dynamic>? properties}) async {
+    var allProperties = <String, dynamic>{'token': token};
+    allProperties['optOutTrackingDefault'] = optOutTrackingDefault;
+    allProperties['mixpanelProperties'] = _mixpanelProperties;
+    allProperties['properties'] = properties;
+    await _channel.invokeMethod<void>('initialize', allProperties);
     return Mixpanel(token);
   }
 
