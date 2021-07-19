@@ -1,5 +1,19 @@
 #
 
+## [v1.2.1](https://github.com/mixpanel/mixpanel-flutter/tree/v1.2.1) (2021-07-19)
+
+### Fixes
+
+- Fix the bool value being tracked as Int [\#21](https://github.com/mixpanel/mixpanel-flutter/pull/21)
+
+**Closed issues:**
+
+- Release The New Version v1.2.0 on pub.dev [\#19](https://github.com/mixpanel/mixpanel-flutter/issues/19)
+- Why events tracked on IOS are not show on 'Live View' list? [\#16](https://github.com/mixpanel/mixpanel-flutter/issues/16)
+- Support for disabling IP address collection [\#15](https://github.com/mixpanel/mixpanel-flutter/issues/15)
+
+#
+
 ## [v1.2.0](https://github.com/mixpanel/mixpanel-flutter/tree/v1.2.0) (2021-07-01)
 
 ### Enhancements
@@ -17,4 +31,6 @@
     Report issues or give us any feedback is appreciated!
 * [integration guide](https://developer.mixpanel.com/docs/flutter)
 * [full API reference](https://mixpanel.github.io/mixpanel-flutter)
+
+
 
