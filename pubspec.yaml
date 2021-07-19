@@ -1,6 +1,6 @@
 name: mixpanel_flutter
 description: Official Flutter Tracking SDK for Mixpanel Analytics developed and maintained by Mixpanel, Inc.
-version: 1.2.0
+version: 1.2.1
 homepage: https://mixpanel.com
 
 environment:
