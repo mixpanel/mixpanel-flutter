@@ -26,10 +26,10 @@ apply from: "$flutterRoot/packages/flutter_tools/gradle/flutter.gradle"
 
 android {
     compileSdkVersion 29
-
     lintOptions {
         disable 'InvalidPackage'
     }
+    ndkVersion "22.0.6917172-rc1"
 
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
