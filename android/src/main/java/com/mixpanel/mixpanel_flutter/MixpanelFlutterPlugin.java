@@ -184,15 +184,22 @@ public class MixpanelFlutterPlugin implements FlutterPlugin, MethodCallHandler {
         if (token == null) {
             throw new RuntimeException("Your Mixpanel Token was not set");
         }
-        Map<String, Object> mixPanelproperties = call.<HashMap<String, Object>>argument("mixpanelProperties");
-        mixpanelProperties = new JSONObject(mixPanelproperties == null ? EMPTY_HASHMAP : mixPanelproperties);
-        Map<String, Object> argProperties = call.<HashMap<String, Object>>argument("properties");
-        JSONObject properties = new JSONObject(argProperties == null ? EMPTY_HASHMAP : argProperties);
+        Map<String, Object> mixpanelPropertiesMap = call.<HashMap<String, Object>>argument("mixpanelProperties");
+        mixpanelProperties = new JSONObject(mixpanelPropertiesMap == null ? EMPTY_HASHMAP : mixpanelPropertiesMap);
+        Map<String, Object> superPropertiesMap = call.<HashMap<String, Object>>argument("superProperties");
+        JSONObject superProperties = new JSONObject(superPropertiesMap == null ? EMPTY_HASHMAP : superPropertiesMap);
+        JSONObject superAndMixpanelProperties;
+        try {
+            superAndMixpanelProperties = MixpanelFlutterHelper.getMergedProperties(superProperties, mixpanelProperties);
+        } catch (JSONException e) {
+            result.error("MixpanelFlutterException", e.getLocalizedMessage(), null);
+            return;
+        }
         if (call.hasArgument("optOutTrackingDefault")) {
             Boolean optOutTrackingDefault = call.<Boolean>argument("optOutTrackingDefault");
-            mixpanel = MixpanelAPI.getInstance(context, token, optOutTrackingDefault == null ? false : optOutTrackingDefault, properties);
+            mixpanel = MixpanelAPI.getInstance(context, token, optOutTrackingDefault == null ? false : optOutTrackingDefault, superAndMixpanelProperties);
         } else {
-            mixpanel = MixpanelAPI.getInstance(context, token, false, properties);
+            mixpanel = MixpanelAPI.getInstance(context, token, false, superAndMixpanelProperties);
         }
         result.success(Integer.toString(mixpanel.hashCode()));
     }
