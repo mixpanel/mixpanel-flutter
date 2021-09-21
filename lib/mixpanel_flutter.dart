@@ -7,7 +7,7 @@ import 'dart:io' show Platform;
 class Mixpanel {
   static const MethodChannel _channel = const MethodChannel('mixpanel_flutter');
   static Map<String, String> _mixpanelProperties = {
-    '\$lib_version': '1.2.1',
+    '\$lib_version': '1.3.0',
     'mp_lib': 'flutter',
   };
 
