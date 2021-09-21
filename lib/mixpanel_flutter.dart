@@ -24,13 +24,14 @@ class Mixpanel {
   ///  * [token] your project token.
   ///  * [optOutTrackingDefault] Optional Whether or not Mixpanel can start tracking by default. See
   ///  optOutTracking()
+  ///  * [superProperties] Optional super properties to register
   ///
   static Future<Mixpanel> init(String token,
-      {bool optOutTrackingDefault = false, Map<String, dynamic>? properties}) async {
+      {bool optOutTrackingDefault = false, Map<String, dynamic>? superProperties}) async {
     var allProperties = <String, dynamic>{'token': token};
     allProperties['optOutTrackingDefault'] = optOutTrackingDefault;
     allProperties['mixpanelProperties'] = _mixpanelProperties;
-    allProperties['properties'] = properties;
+    allProperties['superProperties'] = superProperties;
     await _channel.invokeMethod<void>('initialize', allProperties);
     return Mixpanel(token);
   }

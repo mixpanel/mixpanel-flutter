@@ -38,6 +38,7 @@ void main() {
               '\$lib_version': '1.2.1',
               'mp_lib': 'flutter',
             },
+            'superProperties': null,
           },
         ),
       );
@@ -57,6 +58,7 @@ void main() {
               '\$lib_version': '1.2.1',
               'mp_lib': 'flutter',
             },
+            'superProperties': null,
           },
         ),
       );
