@@ -188,11 +188,18 @@ public class MixpanelFlutterPlugin implements FlutterPlugin, MethodCallHandler {
         mixpanelProperties = new JSONObject(mixpanelPropertiesMap == null ? EMPTY_HASHMAP : mixpanelPropertiesMap);
         Map<String, Object> superPropertiesMap = call.<HashMap<String, Object>>argument("superProperties");
         JSONObject superProperties = new JSONObject(superPropertiesMap == null ? EMPTY_HASHMAP : superPropertiesMap);
+        JSONObject superAndMixpanelProperties;
+        try {
+            superAndMixpanelProperties = MixpanelFlutterHelper.getMergedProperties(superProperties, mixpanelProperties);
+        } catch (JSONException e) {
+            result.error("MixpanelFlutterException", e.getLocalizedMessage(), null);
+            return;
+        }
         if (call.hasArgument("optOutTrackingDefault")) {
             Boolean optOutTrackingDefault = call.<Boolean>argument("optOutTrackingDefault");
-            mixpanel = MixpanelAPI.getInstance(context, token, optOutTrackingDefault == null ? false : optOutTrackingDefault, superProperties);
+            mixpanel = MixpanelAPI.getInstance(context, token, optOutTrackingDefault == null ? false : optOutTrackingDefault, superAndMixpanelProperties);
         } else {
-            mixpanel = MixpanelAPI.getInstance(context, token, false, superProperties);
+            mixpanel = MixpanelAPI.getInstance(context, token, false, superAndMixpanelProperties);
         }
         result.success(Integer.toString(mixpanel.hashCode()));
     }
