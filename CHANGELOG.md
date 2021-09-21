@@ -1,5 +1,25 @@
 #
 
+## [v1.3.0](https://github.com/mixpanel/mixpanel-flutter/tree/v1.3.0) (2021-09-21)
+
+### Enhancements
+
+- change the name 'properties' to 'superProperties' in init [\#28](https://github.com/mixpanel/mixpanel-flutter/pull/28)
+- Add superProperties on initialize [\#14](https://github.com/mixpanel/mixpanel-flutter/pull/14)
+
+**Closed issues:**
+
+- Super properties are not sent with the common "First App Open" event on Android [\#27](https://github.com/mixpanel/mixpanel-flutter/issues/27)
+- Can't write track\_message to server [\#26](https://github.com/mixpanel/mixpanel-flutter/issues/26)
+- How to set User Properties via official plugin [\#25](https://github.com/mixpanel/mixpanel-flutter/issues/25)
+- Boolean properties on iOS [\#20](https://github.com/mixpanel/mixpanel-flutter/issues/20)
+
+**Merged pull requests:**
+
+- Remove jCenter [\#24](https://github.com/mixpanel/mixpanel-flutter/pull/24)
+
+#
+
 ## [v1.2.1](https://github.com/mixpanel/mixpanel-flutter/tree/v1.2.1) (2021-07-19)
 
 ### Fixes
@@ -31,6 +51,8 @@
     Report issues or give us any feedback is appreciated!
 * [integration guide](https://developer.mixpanel.com/docs/flutter)
 * [full API reference](https://mixpanel.github.io/mixpanel-flutter)
+
+
 
 
 
