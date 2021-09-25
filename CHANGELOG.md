@@ -1,5 +1,17 @@
 #
 
+## [v1.3.1](https://github.com/mixpanel/mixpanel-flutter/tree/v1.3.1) (2021-09-25)
+
+### Enhancements
+
+- Migrate from JCenter [\#22](https://github.com/mixpanel/mixpanel-flutter/issues/22)
+
+**Merged pull requests:**
+
+- Bump native SDK dependencies [\#29](https://github.com/mixpanel/mixpanel-flutter/pull/29)
+
+#
+
 ## [v1.3.0](https://github.com/mixpanel/mixpanel-flutter/tree/v1.3.0) (2021-09-21)
 
 ### Enhancements
@@ -51,6 +63,8 @@
     Report issues or give us any feedback is appreciated!
 * [integration guide](https://developer.mixpanel.com/docs/flutter)
 * [full API reference](https://mixpanel.github.io/mixpanel-flutter)
+
+
 
 
 
