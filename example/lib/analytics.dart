@@ -1,7 +1,6 @@
 import 'package:mixpanel_flutter/mixpanel_flutter.dart';
 
 class MixpanelManager {
-
   static Mixpanel? _instance;
 
   static Future<Mixpanel> init() async {
@@ -11,5 +10,4 @@ class MixpanelManager {
     }
     return _instance!;
   }
-
 }
