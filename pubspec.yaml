@@ -20,6 +20,9 @@ dev_dependencies:
   test: ^1.16.5
 
 flutter:
+  assets:
+    - assets/mixpanel.js
+
   plugin:
     platforms:
       android:

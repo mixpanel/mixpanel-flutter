@@ -5,7 +5,7 @@ class MixpanelManager {
 
   static Future<Mixpanel> init() async {
     if (_instance == null) {
-      _instance = await Mixpanel.init("Your Mixpanel Token",
+      _instance = await Mixpanel.init("5d9d3df08d1c34a272abf23d892820bf",
           optOutTrackingDefault: false);
     }
     return _instance!;
