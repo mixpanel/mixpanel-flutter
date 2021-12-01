@@ -66,7 +66,7 @@ class _EventScreenState extends State<EventScreen> {
                   "Cool Property": "Property Value",
                   "test": 233,
                   "complex": {
-                    "child": [1, 2]
+                    "child": [{"deep1": "value1"}, {"deep2": [1, 2]}]
                   }
                 });
               },

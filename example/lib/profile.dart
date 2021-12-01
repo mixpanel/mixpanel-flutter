@@ -64,7 +64,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             child: MixpanelButton(
               text: 'Set One Property',
               onPressed: () {
-                _mixpanel.getPeople().set("ab", 3);
+                _mixpanel.getPeople().set("ab", 34);
               },
             ),
           ),
@@ -100,7 +100,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             child: MixpanelButton(
               text: 'Increment Property',
               onPressed: () {
-                _mixpanel.getPeople().increment("a", 1.2);
+                _mixpanel.getPeople().increment("a", 2.1);
               },
             ),
           ),
@@ -112,7 +112,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             child: MixpanelButton(
               text: 'Remove Property Value',
               onPressed: () {
-                _mixpanel.getPeople().remove("e", "Hello1");
+                _mixpanel.getPeople().remove("e", "Hello12");
               },
             ),
           ),
@@ -124,7 +124,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             child: MixpanelButton(
               text: 'Append Properties',
               onPressed: () {
-                _mixpanel.getPeople().append("e", "Hello1");
+                _mixpanel.getPeople().append("e", "Hello12");
               },
             ),
           ),
@@ -136,7 +136,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             child: MixpanelButton(
               text: 'Union Properties',
               onPressed: () {
-                _mixpanel.getPeople().union("c", ["goodbye", "hi"]);
+                _mixpanel.getPeople().union("c", ["goodbye", "hi34"]);
               },
             ),
           ),
