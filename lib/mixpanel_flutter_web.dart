@@ -78,8 +78,7 @@ class MixpanelFlutterPlugin {
         handleReset();
         break;
       case "getDistinctId":
-        handleGetDistinctId();
-        break;
+        return handleGetDistinctId();
       case "set":
         handleSet(call);
         break;
@@ -226,8 +225,8 @@ class MixpanelFlutterPlugin {
     reset();
   }
 
-  void handleGetDistinctId() {
-    get_distinct_id();
+  String handleGetDistinctId() {
+    return get_distinct_id();
   }
 
   void handleSet(MethodCall call) {

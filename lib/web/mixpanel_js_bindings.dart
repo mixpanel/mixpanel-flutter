@@ -56,7 +56,7 @@ external void time_event(String event_name);
 external void reset();
 
 @JS('get_distinct_id')
-external void get_distinct_id();
+external String get_distinct_id();
 
 @JS('people.set')
 external void people_set(Object properties);

@@ -49,8 +49,8 @@ Now in your Dart code, you can use:
 ```
 import 'package:mixpanel_flutter/mixpanel_flutter.dart';
 ```
-For Flutter Web applications:
-Please add below to your `index.html` inside  `<head></head>`
+#### Flutter Web Support
+Please add the following snippet to your `web/index.html` inside  `<head></head>` in your Flutter project.
 ```
 <script src="./assets/packages/mixpanel_flutter/assets/mixpanel.js"></script>
 ```
