@@ -1,5 +1,6 @@
 
 
+
 <div align="center" style="text-align: center">
   <img src="https://github.com/mixpanel/mixpanel-android/blob/assets/mixpanel.png?raw=true" alt="Mixpanel Flutter SDK" height="150"/>
 </div>
@@ -36,7 +37,7 @@ Check out our **[official documentation](https://developer.mixpanel.com/docs/flu
 Add this to your package's pubspec.yaml file:
 ```
    dependencies:
-      mixpanel_flutter: ^1.0.0 # set this to your desired version
+      mixpanel_flutter: ^1.4.0 # set this to your desired version
 ```
 2. Install it \
 You can install packages from the command line:
@@ -47,6 +48,11 @@ You can install packages from the command line:
 Now in your Dart code, you can use:
 ```
 import 'package:mixpanel_flutter/mixpanel_flutter.dart';
+```
+For Flutter Web applications:
+Please add below to your `index.html` inside  `<head></head>`
+```
+<script src="./assets/packages/mixpanel_flutter/assets/mixpanel.js"></script>
 ```
 ## 2. Initialize Mixpanel
 To start tracking with the SDK you must first initialize with your project token. To initialize the SDK, first add `import 'package:mixpanel_flutter/mixpanel_flutter.dart';` and call `Mixpanel.init(token);` with your project token as it's argument. You can find your token in [project settings](https://mixpanel.com/settings/project).
