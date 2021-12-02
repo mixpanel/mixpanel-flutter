@@ -43,11 +43,17 @@ def publish_dry_run():
     subprocess.call('dart pub publish --dry-run', shell=True)
     subprocess.call('mv doc docs', shell=True)
 
+def clean_up():
+    subprocess.call('flutter clean', shell=True)
+    subprocess.call('cd example', shell=True)
+    subprocess.call('flutter clean', shell=True)
+
 def main():
     bump_version()
     generate_docs()
     add_tag()
     publish_dry_run()
+    clean_up()
     print("Congratulations! " + args.new + " is now ready to be released!")
 
 if __name__ == '__main__':
