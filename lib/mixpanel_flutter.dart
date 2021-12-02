@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/services.dart';
 import 'dart:developer' as developer;
 import 'dart:io' show Platform;
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 /// The primary class for integrating Mixpanel with your app.
 class Mixpanel {
@@ -477,7 +478,7 @@ class People {
   ///  * [value] the new value that will appear at the end of the property's list
   void append(String name, dynamic value) {
     if (_MixpanelHelper.isValidString(name)) {
-      if (Platform.isIOS) {
+      if (kIsWeb || Platform.isIOS) {
         Map<String, dynamic> properties = {name: value};
         _channel.invokeMethod<void>('append',
             <String, dynamic>{'token': this._token, 'properties': properties});
@@ -502,7 +503,7 @@ class People {
   /// * [value] an array of values to add to the property value if not already present
   void union(String name, List<dynamic> value) {
     if (_MixpanelHelper.isValidString(name)) {
-      if (Platform.isIOS) {
+      if (kIsWeb || Platform.isIOS) {
         Map<String, dynamic> properties = {name: value};
         _channel.invokeMethod<void>('union',
             <String, dynamic>{'token': this._token, 'properties': properties});
@@ -527,11 +528,17 @@ class People {
   /// * [value] the value that will be removed from the property's list
   void remove(String name, dynamic value) {
     if (_MixpanelHelper.isValidString(name)) {
-      _channel.invokeMethod<void>('remove', <String, dynamic>{
-        'token': this._token,
-        'name': name,
-        'value': value
-      });
+      if (kIsWeb || Platform.isIOS) {
+        Map<String, dynamic> properties = {name: value};
+        _channel.invokeMethod<void>('remove',
+            <String, dynamic>{'token': this._token, 'properties': properties});
+      } else {
+        _channel.invokeMethod<void>('remove', <String, dynamic>{
+          'token': this._token,
+          'name': name,
+          'value': value
+        });
+      }
     } else {
       developer.log('`people remove` failed: name cannot be blank',
           name: 'Mixpanel');

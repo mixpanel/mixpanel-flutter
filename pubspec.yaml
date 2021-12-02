@@ -10,6 +10,9 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_web_plugins:
+    sdk: flutter
+  js: ^0.6.3
 
 dev_dependencies:
   flutter_test:
@@ -17,6 +20,9 @@ dev_dependencies:
   test: ^1.16.5
 
 flutter:
+  assets:
+    - assets/mixpanel.js
+
   plugin:
     platforms:
       android:
@@ -24,3 +30,6 @@ flutter:
         pluginClass: MixpanelFlutterPlugin
       ios:
         pluginClass: MixpanelFlutterPlugin
+      web:
+        pluginClass: MixpanelFlutterPlugin
+        fileName: mixpanel_flutter_web.dart

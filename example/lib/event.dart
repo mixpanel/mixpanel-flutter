@@ -66,7 +66,7 @@ class _EventScreenState extends State<EventScreen> {
                   "Cool Property": "Property Value",
                   "test": 233,
                   "complex": {
-                    "child": [1, 2]
+                    "child": [{"deep1": "value1"}, {"deep2": [1, 2]}]
                   }
                 });
               },
@@ -81,6 +81,38 @@ class _EventScreenState extends State<EventScreen> {
               text: 'Identify',
               onPressed: () {
                 _mixpanel.identify("testDistinctId3");
+              },
+            ),
+          ),
+          SizedBox(
+            height: 20,
+          ),
+          SizedBox(
+            width: MediaQuery.of(context).size.width * 0.65,
+            child: MixpanelButton(
+              text: 'Get Distinct ID',
+              onPressed: () async {
+                String? distinctId = await _mixpanel.getDistinctId();
+                Widget okButton = TextButton(
+                  child: Text("OK"),
+                  onPressed: () { Navigator.of(context).pop(); },
+                );
+
+                AlertDialog alert = AlertDialog(
+                  title: Text("Result"),
+                  content: Text("${distinctId}"),
+                  actions: [
+                    okButton,
+                  ],
+                );
+
+                // show the dialog
+                showDialog(
+                  context: context,
+                  builder: (BuildContext context) {
+                    return alert;
+                  },
+                );
               },
             ),
           ),
