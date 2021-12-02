@@ -1,5 +1,18 @@
 #
 
+## [v1.4.0](https://github.com/mixpanel/mixpanel-flutter/tree/v1.4.0) (2021-12-02)
+
+### Enhancements
+
+- Add web support [\#35](https://github.com/mixpanel/mixpanel-flutter/pull/35)
+
+**Closed issues:**
+
+- App crash on init [\#32](https://github.com/mixpanel/mixpanel-flutter/issues/32)
+- Event tracking order changes when more than one event is passed at the exact same event. [\#23](https://github.com/mixpanel/mixpanel-flutter/issues/23)
+
+#
+
 ## [v1.3.1](https://github.com/mixpanel/mixpanel-flutter/tree/v1.3.1) (2021-09-25)
 
 ### Enhancements
@@ -63,6 +76,8 @@
     Report issues or give us any feedback is appreciated!
 * [integration guide](https://developer.mixpanel.com/docs/flutter)
 * [full API reference](https://mixpanel.github.io/mixpanel-flutter)
+
+
 
 
 
