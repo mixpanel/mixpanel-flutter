@@ -28,7 +28,8 @@ class Mixpanel {
   ///  * [superProperties] Optional super properties to register
   ///
   static Future<Mixpanel> init(String token,
-      {bool optOutTrackingDefault = false, Map<String, dynamic>? superProperties}) async {
+      {bool optOutTrackingDefault = false,
+      Map<String, dynamic>? superProperties}) async {
     var allProperties = <String, dynamic>{'token': token};
     allProperties['optOutTrackingDefault'] = optOutTrackingDefault;
     allProperties['mixpanelProperties'] = _mixpanelProperties;
@@ -58,7 +59,8 @@ class Mixpanel {
   ///
   /// * [loggingEnabled] whether to enable logging
   void setLoggingEnabled(bool loggingEnabled) {
-    if (loggingEnabled != null) { // ignore: unnecessary_null_comparison
+    if (loggingEnabled != null) {
+      // ignore: unnecessary_null_comparison
       _channel.invokeMethod<void>('setLoggingEnabled',
           <String, dynamic>{'loggingEnabled': loggingEnabled});
     } else {
@@ -74,9 +76,12 @@ class Mixpanel {
   ///
   /// * [useIpAddressForGeolocation] whether to automatically send the client IP Address. Defaults to true.
   void setUseIpAddressForGeolocation(bool useIpAddressForGeolocation) {
-    if (useIpAddressForGeolocation != null) { // ignore: unnecessary_null_comparison
-      _channel.invokeMethod<void>('setUseIpAddressForGeolocation',
-          <String, dynamic>{'useIpAddressForGeolocation': useIpAddressForGeolocation});
+    if (useIpAddressForGeolocation != null) {
+      // ignore: unnecessary_null_comparison
+      _channel.invokeMethod<void>(
+          'setUseIpAddressForGeolocation', <String, dynamic>{
+        'useIpAddressForGeolocation': useIpAddressForGeolocation
+      });
     } else {
       developer.log(
           '`setUseIpAddressForGeolocation` failed: useIpAddressForGeolocation cannot be blank',

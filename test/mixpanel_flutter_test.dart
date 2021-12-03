@@ -70,7 +70,9 @@ void main() {
         methodCall,
         isMethodCall(
           'setServerURL',
-          arguments: <String, dynamic>{'serverURL': 'https://api-eu.mixpanel.com'},
+          arguments: <String, dynamic>{
+            'serverURL': 'https://api-eu.mixpanel.com'
+          },
         ),
       );
     });

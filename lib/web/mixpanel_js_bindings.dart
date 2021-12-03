@@ -1,7 +1,6 @@
 @JS('mixpanel')
 library mixpaneljs;
 
-
 import 'package:js/js.dart';
 
 @JS('init')
@@ -26,7 +25,8 @@ external void alias(String alias, String distinctId);
 external void track(String name, Object? properties);
 
 @JS('track_with_groups')
-external void track_with_groups(String event_name, Object properties, Object groups);
+external void track_with_groups(
+    String event_name, Object properties, Object groups);
 
 @JS('set_group')
 external void set_group(String group_key, Object group_ids);

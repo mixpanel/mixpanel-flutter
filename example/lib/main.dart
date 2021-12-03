@@ -5,7 +5,6 @@ import 'profile.dart';
 import 'package:flutter/material.dart';
 import 'package:mixpanel_flutter_example/widget.dart';
 
-
 // This is the main page only, check out the example app in https://github.com/mixpanel/mixpanel-flutter/tree/main/example
 void main() {
   runApp(MaterialApp(
