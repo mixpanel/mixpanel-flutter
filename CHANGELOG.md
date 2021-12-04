@@ -1,5 +1,17 @@
 #
 
+## [v1.4.1](https://github.com/mixpanel/mixpanel-flutter/tree/v1.4.1) (2021-12-04)
+
+### Enhancements
+
+- Flutter web support [\#5](https://github.com/mixpanel/mixpanel-flutter/issues/5)
+
+**Merged pull requests:**
+
+- Some lint fixes [\#40](https://github.com/mixpanel/mixpanel-flutter/pull/40)
+
+#
+
 ## [v1.4.0](https://github.com/mixpanel/mixpanel-flutter/tree/v1.4.0) (2021-12-02)
 
 ### Enhancements
@@ -76,6 +88,8 @@
     Report issues or give us any feedback is appreciated!
 * [integration guide](https://developer.mixpanel.com/docs/flutter)
 * [full API reference](https://mixpanel.github.io/mixpanel-flutter)
+
+
 
 
 
