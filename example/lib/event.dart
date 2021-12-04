@@ -66,7 +66,12 @@ class _EventScreenState extends State<EventScreen> {
                   "Cool Property": "Property Value",
                   "test": 233,
                   "complex": {
-                    "child": [{"deep1": "value1"}, {"deep2": [1, 2]}]
+                    "child": [
+                      {"deep1": "value1"},
+                      {
+                        "deep2": [1, 2]
+                      }
+                    ]
                   }
                 });
               },
@@ -95,7 +100,9 @@ class _EventScreenState extends State<EventScreen> {
                 String? distinctId = await _mixpanel.getDistinctId();
                 Widget okButton = TextButton(
                   child: Text("OK"),
-                  onPressed: () { Navigator.of(context).pop(); },
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                  },
                 );
 
                 AlertDialog alert = AlertDialog(

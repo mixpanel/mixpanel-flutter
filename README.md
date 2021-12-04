@@ -86,7 +86,7 @@ mixpanel.track('Plan Selected', properties: {'Plan': 'Premium'});
 ```
 You're done! You've successfully integrated the Mixpanel Flutter SDK into your app. To stay up to speed on important SDK releases and updates, star or watch our repository on [Github](https://github.com/mixpanel/mixpanel-flutter).
 ## 4. Check for Success
-[Open up Live View in Mixpanel](http://mixpanel.com/report/live)  to view incoming events.
+[Open up Events in Mixpanel](https://mixpanel.com/report/events)  to view incoming events.
 Once data hits our API, it generally takes ~60 seconds for it to be processed, stored, and queryable in your project.
 
 # FAQ

@@ -23,10 +23,11 @@ class _GDPRScreenState extends State<GDPRScreen> {
   }
 
   void showAlertDialog(BuildContext context, bool? result) {
-
     Widget okButton = TextButton(
       child: Text("OK"),
-      onPressed: () { Navigator.of(context).pop(); },
+      onPressed: () {
+        Navigator.of(context).pop();
+      },
     );
 
     AlertDialog alert = AlertDialog(
@@ -45,7 +46,6 @@ class _GDPRScreenState extends State<GDPRScreen> {
       },
     );
   }
-
 
   @override
   Widget build(BuildContext context) {
