@@ -239,7 +239,7 @@ public class SwiftMixpanelFlutterPlugin: NSObject, FlutterPlugin {
     private func handleSetGroup(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
         let arguments = call.arguments as? [String: Any] ?? [String: Any]()
         let groupKey = arguments["groupKey"] as! String
-        guard let mixpanelTypeGroupID = MixpanelTypeHandler.mixpanelPanelTypeValue(arguments["groupID"] as Any) else {
+        guard let mixpanelTypeGroupID = MixpanelTypeHandler.mixpanelTypeValue(arguments["groupID"] as Any) else {
             return
         }
         instance?.setGroup(groupKey: groupKey, groupID: mixpanelTypeGroupID)
@@ -249,7 +249,7 @@ public class SwiftMixpanelFlutterPlugin: NSObject, FlutterPlugin {
     private func handleAddGroup(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
         let arguments = call.arguments as? [String: Any] ?? [String: Any]()
         let groupKey = arguments["groupKey"] as! String
-        guard let mixpanelTypeGroupID = MixpanelTypeHandler.mixpanelPanelTypeValue(arguments["groupID"] as Any) else {
+        guard let mixpanelTypeGroupID = MixpanelTypeHandler.mixpanelTypeValue(arguments["groupID"] as Any) else {
             return
         }
         instance?.addGroup(groupKey: groupKey, groupID: mixpanelTypeGroupID)
@@ -259,7 +259,7 @@ public class SwiftMixpanelFlutterPlugin: NSObject, FlutterPlugin {
     private func handleRemoveGroup(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
         let arguments = call.arguments as? [String: Any] ?? [String: Any]()
         let groupKey = arguments["groupKey"] as! String
-        guard let mixpanelTypeGroupID = MixpanelTypeHandler.mixpanelPanelTypeValue(arguments["groupID"] as Any) else {
+        guard let mixpanelTypeGroupID = MixpanelTypeHandler.mixpanelTypeValue(arguments["groupID"] as Any) else {
             return
         }
         instance?.removeGroup(groupKey: groupKey, groupID: mixpanelTypeGroupID)
@@ -396,7 +396,7 @@ public class SwiftMixpanelFlutterPlugin: NSObject, FlutterPlugin {
         guard let instance = getMixpanelInstance(token) else {
             return nil
         }
-        guard let mixpanelTypeGroupID = MixpanelTypeHandler.mixpanelPanelTypeValue(groupID) else {
+        guard let mixpanelTypeGroupID = MixpanelTypeHandler.mixpanelTypeValue(groupID) else {
             return nil
         }
         return instance.getGroup(groupKey: groupKey, groupID: mixpanelTypeGroupID)
@@ -484,7 +484,7 @@ public class SwiftMixpanelFlutterPlugin: NSObject, FlutterPlugin {
         }
         let name = arguments["name"] as! String
         let value = arguments["value"] as Any
-        guard let mixpanelTypeValue = MixpanelTypeHandler.mixpanelPanelTypeValue(value) else {
+        guard let mixpanelTypeValue = MixpanelTypeHandler.mixpanelTypeValue(value) else {
             return
         }
         let group = mixpanelGroup(token, groupKey: groupKey, groupID: groupID)
@@ -506,7 +506,7 @@ public class SwiftMixpanelFlutterPlugin: NSObject, FlutterPlugin {
         let name = arguments["name"] as! String
         let values = arguments["value"] as! [Any]
         let group = mixpanelGroup(token, groupKey: groupKey, groupID: groupID)
-        group?.union(key: name, values: values.map() { MixpanelTypeHandler.mixpanelPanelTypeValue($0)! })
+        group?.union(key: name, values: values.map() { MixpanelTypeHandler.mixpanelTypeValue($0)! })
         result(nil)
     }
     

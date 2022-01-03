@@ -3,7 +3,7 @@
 
  class MixpanelTypeHandler {
 
-    static func mixpanelPanelTypeValue(_ object: Any) -> MixpanelType? {
+    static func mixpanelTypeValue(_ object: Any) -> MixpanelType? {
         switch object {
         case let value as String:
             return value as MixpanelType
@@ -40,12 +40,15 @@
 
         case let value as NSNull:
             return value
-    
-        case let value as MixpanelType:
-            return value
 
         case let value as [Any]:
-            return value.map { mixpanelPanelTypeValue($0) }
+            return value.map { mixpanelTypeValue($0) }
+
+        case let value as [String: Any]:
+            return value.mapValues { mixpanelTypeValue($0) }
+
+        case let value as MixpanelType:
+            return value
 
         default:
             return nil
@@ -74,7 +77,7 @@
         var allProperties = Dictionary<String, MixpanelType>()
         
         for (key, value) in properties ?? [:] {
-            allProperties[key] = mixpanelPanelTypeValue(value)
+            allProperties[key] = mixpanelTypeValue(value)
         }
         
         return allProperties
