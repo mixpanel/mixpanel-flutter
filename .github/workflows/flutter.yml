@@ -45,6 +45,12 @@ jobs:
     - uses: subosito/flutter-action@v1
       with:
         flutter-version: '2.0.3'
+    - name: Clean
+      working-directory: example
+      run:  flutter clean
+    - name: Prep
+      working-directory: example
+      run:  flutter pub get
     - name: Test iOS integration
       working-directory: example
       run: flutter build ios --debug --no-codesign
