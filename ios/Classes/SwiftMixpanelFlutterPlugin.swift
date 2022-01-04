@@ -7,6 +7,7 @@ public class SwiftMixpanelFlutterPlugin: NSObject, FlutterPlugin {
     private var instance: MixpanelInstance?
     var token: String?
     var mixpanelProperties: [String: String]?
+    let defaultFlushInterval = 60.0
     
     public static func register(with registrar: FlutterPluginRegistrar) {
         let channel = FlutterMethodChannel(name: "mixpanel_flutter", binaryMessenger: registrar.messenger())
@@ -148,8 +149,14 @@ public class SwiftMixpanelFlutterPlugin: NSObject, FlutterPlugin {
         let token = arguments["token"] as? String
         let optOutTrackingDefault = arguments["optOutTrackingDefault"] as? Bool
         mixpanelProperties = arguments["mixpanelProperties"] as? [String: String]
+        let superProperties = arguments["superProperties"] as? [String: String]
         self.token = token
         instance = Mixpanel.initialize(token: token!, instanceName: token!, optOutTrackingByDefault: optOutTrackingDefault ?? false)
+        instance?.flushInterval = defaultFlushInterval
+        if let superProperties = superProperties {
+            instance?.registerSuperProperties(superProperties)
+        }
+
         result(nil)
     }
     
