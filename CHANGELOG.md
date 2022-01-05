@@ -2,17 +2,11 @@
 
 ## [v1.4.2](https://github.com/mixpanel/mixpanel-flutter/tree/v1.4.2) (2022-01-05)
 
-**Closed issues:**
-
-- Mixpanel is breaking Flutter app for ios [\#45](https://github.com/mixpanel/mixpanel-flutter/issues/45)
-- Email is undefined on Users dashboard [\#42](https://github.com/mixpanel/mixpanel-flutter/issues/42)
-- Linux Support [\#38](https://github.com/mixpanel/mixpanel-flutter/issues/38)
-- macOS Support [\#37](https://github.com/mixpanel/mixpanel-flutter/issues/37)
 
 **Merged pull requests:**
 
+- bump Mixpanel native SDK version to iOS 3.0.0, Android 6.0.0 [\#46](https://github.com/mixpanel/mixpanel-flutter/pull/44)
 - register super properties on Mixpanel.init for iOS [\#46](https://github.com/mixpanel/mixpanel-flutter/pull/46)
-- bump native SDk dependencies [\#44](https://github.com/mixpanel/mixpanel-flutter/pull/44)
 - fix nested dictionary not being able to tracked properly in iOS [\#43](https://github.com/mixpanel/mixpanel-flutter/pull/43)
 
 #
