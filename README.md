@@ -37,7 +37,7 @@ Check out our **[official documentation](https://developer.mixpanel.com/docs/flu
 Add this to your package's pubspec.yaml file:
 ```
    dependencies:
-      mixpanel_flutter: ^1.4.0 # set this to your desired version
+      mixpanel_flutter: ^1.x.x # set this to your desired version
 ```
 2. Install it \
 You can install packages from the command line:
