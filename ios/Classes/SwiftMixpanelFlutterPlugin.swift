@@ -151,11 +151,10 @@ public class SwiftMixpanelFlutterPlugin: NSObject, FlutterPlugin {
         mixpanelProperties = arguments["mixpanelProperties"] as? [String: String]
         let superProperties = arguments["superProperties"] as? [String: String]
         self.token = token
-        instance = Mixpanel.initialize(token: token!, instanceName: token!, optOutTrackingByDefault: optOutTrackingDefault ?? false)
+        instance = Mixpanel.initialize(token: token!, instanceName: token!,
+                                       optOutTrackingByDefault: optOutTrackingDefault ?? false,
+                                       superProperties: MixpanelTypeHandler.mixpanelProperties(properties: superProperties, mixpanelProperties: mixpanelProperties))
         instance?.flushInterval = defaultFlushInterval
-        if let superProperties = superProperties {
-            instance?.registerSuperProperties(superProperties)
-        }
 
         result(nil)
     }
