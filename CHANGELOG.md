@@ -1,5 +1,13 @@
 #
 
+## [v1.4.3](https://github.com/mixpanel/mixpanel-flutter/tree/v1.4.3) (2022-01-19)
+
+### Fixes
+
+- Now First App Open will display 'flutter' as property value for 'Mixpanel Library'  in iOS [\#49](https://github.com/mixpanel/mixpanel-flutter/pull/49)
+
+#
+
 ## [v1.4.2](https://github.com/mixpanel/mixpanel-flutter/tree/v1.4.2) (2022-01-05)
 
 
@@ -99,6 +107,8 @@
     Report issues or give us any feedback is appreciated!
 * [integration guide](https://developer.mixpanel.com/docs/flutter)
 * [full API reference](https://mixpanel.github.io/mixpanel-flutter)
+
+
 
 
 
