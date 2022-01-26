@@ -2,6 +2,10 @@
 
 ## [v1.4.4](https://github.com/mixpanel/mixpanel-flutter/tree/v1.4.4) (2022-01-26)
 
+### Fixes
+
+- Bump iOS SDK depedency to v3.1.2 [\#52](https://github.com/mixpanel/mixpanel-flutter/pull/52)
+
 #
 
 ## [v1.4.3](https://github.com/mixpanel/mixpanel-flutter/tree/v1.4.3) (2022-01-19)
