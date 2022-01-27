@@ -9,6 +9,7 @@
 #
 
 ## [v1.4.3](https://github.com/mixpanel/mixpanel-flutter/tree/v1.4.3) (2022-01-19)
+## Caution: Please DO NOT use this build! In this version, we have a bug in iOS that event names with & or % will be rejected by the server. We recommend you update to 1.4.4 or above.
 
 ### Fixes
 
