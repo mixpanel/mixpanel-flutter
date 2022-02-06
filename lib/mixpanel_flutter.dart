@@ -139,8 +139,8 @@ class Mixpanel {
   /// The alias method creates an alias which Mixpanel will use to remap one id to another.
   /// Multiple aliases can point to the same identifier.
   ///
-  ///  `mixpane.alias("New ID", mixpane.distinctId)`
-  ///  `mixpane.alias("Newer ID", mixpane.distinctId)`
+  ///  `mixpanel.alias("New ID", mixpanel.distinctId)`
+  ///  `mixpanel.alias("Newer ID", mixpanel.distinctId)`
   ///
   /// This call does not identify the user after. You must still call both identify() and
   /// People.identify() if you wish the new alias to be used for Events and People.
