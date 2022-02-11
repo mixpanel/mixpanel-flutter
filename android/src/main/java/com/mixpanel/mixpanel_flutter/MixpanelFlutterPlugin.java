@@ -246,7 +246,7 @@ public class MixpanelFlutterPlugin implements FlutterPlugin, MethodCallHandler {
     private void handleAlias(MethodCall call, Result result) {
         String distinctId = call.argument("distinctId");
         String alias = call.argument("alias");
-        mixpanel.alias(distinctId, alias);
+        mixpanel.alias(alias, distinctId);
         result.success(null);
     }
 
