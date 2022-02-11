@@ -1,5 +1,19 @@
 #
 
+## [v1.4.5](https://github.com/mixpanel/mixpanel-flutter/tree/v1.4.5) (2022-02-11)
+
+### Enhancements
+
+- bump iOS SDK version to 3.1.4 [\#61](https://github.com/mixpanel/mixpanel-flutter/pull/61)
+
+### Fixes
+
+- Fix registering non-string super props in init fails [\#62](https://github.com/mixpanel/mixpanel-flutter/pull/62)
+- Fix several misspellings of "Mixpanel" [\#60](https://github.com/mixpanel/mixpanel-flutter/pull/60)
+- Fix backward ordering of 'alias\(\)' parameters on Android. [\#58](https://github.com/mixpanel/mixpanel-flutter/pull/58)
+
+#
+
 ## [v1.4.4](https://github.com/mixpanel/mixpanel-flutter/tree/v1.4.4) (2022-01-26)
 
 ### Fixes
@@ -116,6 +130,8 @@
     Report issues or give us any feedback is appreciated!
 * [integration guide](https://developer.mixpanel.com/docs/flutter)
 * [full API reference](https://mixpanel.github.io/mixpanel-flutter)
+
+
 
 
 
