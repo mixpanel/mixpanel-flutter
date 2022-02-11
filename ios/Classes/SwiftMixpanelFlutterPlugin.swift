@@ -149,7 +149,7 @@ public class SwiftMixpanelFlutterPlugin: NSObject, FlutterPlugin {
         let token = arguments["token"] as? String
         let optOutTrackingDefault = arguments["optOutTrackingDefault"] as? Bool
         mixpanelProperties = arguments["mixpanelProperties"] as? [String: String]
-        let superProperties = arguments["superProperties"] as? [String: String]
+        let superProperties = arguments["superProperties"] as? [String: Any]
         self.token = token
         instance = Mixpanel.initialize(token: token!, instanceName: token!,
                                        optOutTrackingByDefault: optOutTrackingDefault ?? false,
