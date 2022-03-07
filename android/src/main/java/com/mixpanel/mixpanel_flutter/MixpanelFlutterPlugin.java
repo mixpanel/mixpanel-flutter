@@ -4,15 +4,15 @@ import androidx.annotation.NonNull;
 
 import android.content.Context;
 
+import io.flutter.plugin.common.StandardMethodCodec;
+
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
-
 
 import io.flutter.embedding.engine.plugins.FlutterPlugin;
 import io.flutter.plugin.common.MethodCall;
@@ -42,10 +42,10 @@ public class MixpanelFlutterPlugin implements FlutterPlugin, MethodCallHandler {
         this.context = context;
     }
 
-
     @Override
     public void onAttachedToEngine(@NonNull FlutterPluginBinding flutterPluginBinding) {
-        channel = new MethodChannel(flutterPluginBinding.getBinaryMessenger(), "mixpanel_flutter");
+        channel = new MethodChannel(flutterPluginBinding.getBinaryMessenger(), "mixpanel_flutter",
+                new StandardMethodCodec(new MixpanelMessageCodec()));
         context = flutterPluginBinding.getApplicationContext();
         channel.setMethodCallHandler(this);
     }
@@ -184,20 +184,27 @@ public class MixpanelFlutterPlugin implements FlutterPlugin, MethodCallHandler {
         if (token == null) {
             throw new RuntimeException("Your Mixpanel Token was not set");
         }
-        Map<String, Object> mixpanelPropertiesMap = call.<HashMap<String, Object>>argument("mixpanelProperties");
-        mixpanelProperties = new JSONObject(mixpanelPropertiesMap == null ? EMPTY_HASHMAP : mixpanelPropertiesMap);
-        Map<String, Object> superPropertiesMap = call.<HashMap<String, Object>>argument("superProperties");
-        JSONObject superProperties = new JSONObject(superPropertiesMap == null ? EMPTY_HASHMAP : superPropertiesMap);
+        Map<String, Object> mixpanelPropertiesMap =
+                call.<HashMap<String, Object>>argument("mixpanelProperties");
+        mixpanelProperties =
+                new JSONObject(mixpanelPropertiesMap == null ? EMPTY_HASHMAP : mixpanelPropertiesMap);
+        Map<String, Object> superPropertiesMap =
+                call.<HashMap<String, Object>>argument("superProperties");
+        JSONObject superProperties =
+                new JSONObject(superPropertiesMap == null ? EMPTY_HASHMAP : superPropertiesMap);
         JSONObject superAndMixpanelProperties;
         try {
-            superAndMixpanelProperties = MixpanelFlutterHelper.getMergedProperties(superProperties, mixpanelProperties);
+            superAndMixpanelProperties =
+                    MixpanelFlutterHelper.getMergedProperties(superProperties, mixpanelProperties);
         } catch (JSONException e) {
             result.error("MixpanelFlutterException", e.getLocalizedMessage(), null);
             return;
         }
         if (call.hasArgument("optOutTrackingDefault")) {
             Boolean optOutTrackingDefault = call.<Boolean>argument("optOutTrackingDefault");
-            mixpanel = MixpanelAPI.getInstance(context, token, optOutTrackingDefault == null ? false : optOutTrackingDefault, superAndMixpanelProperties);
+            mixpanel = MixpanelAPI.getInstance(context, token,
+                    optOutTrackingDefault == null ? false : optOutTrackingDefault,
+                    superAndMixpanelProperties);
         } else {
             mixpanel = MixpanelAPI.getInstance(context, token, false, superAndMixpanelProperties);
         }
