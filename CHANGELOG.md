@@ -56,10 +56,6 @@
 
 ## [v1.4.1](https://github.com/mixpanel/mixpanel-flutter/tree/v1.4.1) (2021-12-04)
 
-### Enhancements
-
-- Flutter web support [\#5](https://github.com/mixpanel/mixpanel-flutter/issues/5)
-
 **Merged pull requests:**
 
 - Some lint fixes [\#40](https://github.com/mixpanel/mixpanel-flutter/pull/40)
@@ -71,11 +67,9 @@
 ### Enhancements
 
 - Add web support [\#35](https://github.com/mixpanel/mixpanel-flutter/pull/35)
+Please add the following snippet to your web/index.html inside <head></head> in your Flutter project.
 
-**Closed issues:**
-
-- App crash on init [\#32](https://github.com/mixpanel/mixpanel-flutter/issues/32)
-- Event tracking order changes when more than one event is passed at the exact same event. [\#23](https://github.com/mixpanel/mixpanel-flutter/issues/23)
+<script src="./assets/packages/mixpanel_flutter/assets/mixpanel.js"></script>
 
 #
 
@@ -98,13 +92,6 @@
 - change the name 'properties' to 'superProperties' in init [\#28](https://github.com/mixpanel/mixpanel-flutter/pull/28)
 - Add superProperties on initialize [\#14](https://github.com/mixpanel/mixpanel-flutter/pull/14)
 
-**Closed issues:**
-
-- Super properties are not sent with the common "First App Open" event on Android [\#27](https://github.com/mixpanel/mixpanel-flutter/issues/27)
-- Can't write track\_message to server [\#26](https://github.com/mixpanel/mixpanel-flutter/issues/26)
-- How to set User Properties via official plugin [\#25](https://github.com/mixpanel/mixpanel-flutter/issues/25)
-- Boolean properties on iOS [\#20](https://github.com/mixpanel/mixpanel-flutter/issues/20)
-
 **Merged pull requests:**
 
 - Remove jCenter [\#24](https://github.com/mixpanel/mixpanel-flutter/pull/24)
@@ -116,12 +103,6 @@
 ### Fixes
 
 - Fix the bool value being tracked as Int [\#21](https://github.com/mixpanel/mixpanel-flutter/pull/21)
-
-**Closed issues:**
-
-- Release The New Version v1.2.0 on pub.dev [\#19](https://github.com/mixpanel/mixpanel-flutter/issues/19)
-- Why events tracked on IOS are not show on 'Live View' list? [\#16](https://github.com/mixpanel/mixpanel-flutter/issues/16)
-- Support for disabling IP address collection [\#15](https://github.com/mixpanel/mixpanel-flutter/issues/15)
 
 #
 
