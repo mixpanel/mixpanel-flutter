@@ -1,5 +1,13 @@
 #
 
+## [v1.4.6](https://github.com/mixpanel/mixpanel-flutter/tree/v1.4.6) (2022-04-11)
+
+### Fixes
+
+- Registering non-string super props in init fails [\#51](https://github.com/mixpanel/mixpanel-flutter/issues/51)
+
+#
+
 ## [v1.4.5](https://github.com/mixpanel/mixpanel-flutter/tree/v1.4.5) (2022-02-11)
 
 ### Enhancements
@@ -130,6 +138,8 @@
     Report issues or give us any feedback is appreciated!
 * [integration guide](https://developer.mixpanel.com/docs/flutter)
 * [full API reference](https://mixpanel.github.io/mixpanel-flutter)
+
+
 
 
 
