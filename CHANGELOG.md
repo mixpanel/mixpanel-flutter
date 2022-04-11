@@ -2,6 +2,10 @@
 
 ## [v1.4.6](https://github.com/mixpanel/mixpanel-flutter/tree/v1.4.6) (2022-04-11)
 
+### Enhancements
+
+- bump iOS SDK version to 3.1.7 and Android to 6.1.1 [\#69](https://github.com/mixpanel/mixpanel-flutter/pull/69)
+
 ### Fixes
 
 - Registering non-string super props in init fails [\#51](https://github.com/mixpanel/mixpanel-flutter/issues/51)
