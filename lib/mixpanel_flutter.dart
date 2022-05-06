@@ -170,7 +170,7 @@ class Mixpanel {
   ///
   /// * [eventName] The name of the event to send
   /// * [properties] An optional map containing the key value pairs of the properties to include in this event.
-  void track(String eventName, Map<String, dynamic>? properties) {
+  void track(String eventName, {Map<String, dynamic>? properties}) {
     if (_MixpanelHelper.isValidString(eventName)) {
       _channel.invokeMethod<void>('track',
           <String, dynamic>{'eventName': eventName, 'properties': properties});
