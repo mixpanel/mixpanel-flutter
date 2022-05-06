@@ -8,7 +8,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 class Mixpanel {
   static const MethodChannel _channel = const MethodChannel('mixpanel_flutter');
   static Map<String, String> _mixpanelProperties = {
-    '\$lib_version': '1.4.7',
+    '\$lib_version': '1.4.8',
     'mp_lib': 'flutter',
   };
 
