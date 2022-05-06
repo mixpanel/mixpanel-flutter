@@ -397,8 +397,8 @@ class Mixpanel {
   /// ```
   ///
   /// return Future<String> the distinct id associated with Mixpanel event and People Analytics
-  Future<String?> getDistinctId() {
-    return _channel.invokeMethod<String>('getDistinctId');
+  Future<String> getDistinctId() {
+    return _channel.invokeMethod<String>('getDistinctId').then<String>((String? value) => value ?? '');
   }
 
   /// Push all queued Mixpanel events and People Analytics changes to Mixpanel servers.
