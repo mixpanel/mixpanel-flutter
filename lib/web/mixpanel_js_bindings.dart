@@ -9,9 +9,6 @@ external void init(String token, Object? config);
 @JS('set_config')
 external void set_config(Object config);
 
-@JS('get_config')
-external Object get_config();
-
 @JS('has_opted_out_tracking')
 external bool has_opted_out_tracking();
 

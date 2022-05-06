@@ -31,11 +31,6 @@ class MixpanelFlutterPlugin {
       case 'initialize':
         initialize(call);
         break;
-      case 'setConfig':
-        handleSetConfig(call);
-        break;
-      case 'getConfig':
-        return handleGetConfig(call);
       case 'setServerURL':
         handleSetServerURL(call);
         break;
@@ -144,16 +139,6 @@ class MixpanelFlutterPlugin {
     String token = args['token'] as String;
     dynamic config = args['config'];
     init(token, js.jsify(config ?? {}));
-  }
-
-  void handleSetConfig(MethodCall call) {
-    Map<Object?, Object?> args = call.arguments as Map<Object?, Object?>;
-    Map<String, dynamic> config = args['config'] as Map<String, dynamic>;
-    set_config(js.jsify(config));
-  }
-
-  Object handleGetConfig(MethodCall call) {
-    return get_config();
   }
 
   void handleSetServerURL(MethodCall call) {
