@@ -239,7 +239,6 @@ public class MixpanelFlutterPlugin implements FlutterPlugin, MethodCallHandler {
     private void handleIdentify(MethodCall call, Result result) {
         String distinctId = call.argument("distinctId");
         mixpanel.identify(distinctId);
-        mixpanel.getPeople().identify(distinctId);
         result.success(null);
     }
 
