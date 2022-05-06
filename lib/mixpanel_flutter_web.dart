@@ -31,6 +31,14 @@ class MixpanelFlutterPlugin {
       case 'initialize':
         initialize(call);
         break;
+      case 'setConfig':
+        handleSetConfig(call);
+        break;
+      case 'getConfig':
+        return handleGetConfig(call);
+      case 'setServerURL':
+        handleSetServerURL(call);
+        break;
       case "hasOptedOutTracking":
         return handleHasOptedOutTracking();
       case "optInTracking":
@@ -134,7 +142,24 @@ class MixpanelFlutterPlugin {
   void initialize(MethodCall call) {
     Map<Object?, Object?> args = call.arguments as Map<Object?, Object?>;
     String token = args['token'] as String;
-    init(token);
+    dynamic config = args['config'];
+    init(token, js.jsify(config ?? {}));
+  }
+
+  void handleSetConfig(MethodCall call) {
+    Map<Object?, Object?> args = call.arguments as Map<Object?, Object?>;
+    Map<String, dynamic> config = args['config'] as Map<String, dynamic>;
+    set_config(js.jsify(config));
+  }
+
+  Object handleGetConfig(MethodCall call) {
+    return get_config();
+  }
+
+  void handleSetServerURL(MethodCall call) {
+    Map<Object?, Object?> args = call.arguments as Map<Object?, Object?>;
+    String serverURL = args['serverURL'] as String;
+    set_config(js.jsify({'api_host': serverURL}));
   }
 
   void handleTrack(MethodCall call) {
