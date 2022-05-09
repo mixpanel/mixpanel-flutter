@@ -1,5 +1,15 @@
 #
 
+## [v1.5.0](https://github.com/mixpanel/mixpanel-flutter/tree/v1.5.0) (2022-05-09)
+
+### Enhancements
+
+- add config for web init and setServerURL for web [\#75](https://github.com/mixpanel/mixpanel-flutter/pull/75)
+- feat: support `DateTime` and `Uri` [\#66](https://github.com/mixpanel/mixpanel-flutter/pull/66)
+- fix: Make `flush` method asynchronous [\#64](https://github.com/mixpanel/mixpanel-flutter/pull/64)
+
+#
+
 ## [v1.4.8](https://github.com/mixpanel/mixpanel-flutter/tree/v1.4.8) (2022-05-06)
 
 #
@@ -131,6 +141,8 @@ Please add the following snippet to your web/index.html inside <head></head> in 
     Report issues or give us any feedback is appreciated!
 * [integration guide](https://developer.mixpanel.com/docs/flutter)
 * [full API reference](https://mixpanel.github.io/mixpanel-flutter)
+
+
 
 
 
