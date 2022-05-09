@@ -1,9 +1,11 @@
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mixpanel_flutter/codec/mixpanel_message_codec.dart';
 import 'package:mixpanel_flutter/mixpanel_flutter.dart';
 
 void main() {
-  const MethodChannel channel = MethodChannel('mixpanel_flutter');
+  const MethodChannel channel = MethodChannel(
+      'mixpanel_flutter', StandardMethodCodec(MixpanelMessageCodec()));
   MethodCall? methodCall;
   late Mixpanel _mixpanel;
 
@@ -171,6 +173,37 @@ void main() {
           arguments: <String, dynamic>{
             'eventName': 'test event',
             'properties': <String, dynamic>{'a': 'b'},
+          },
+        ),
+      );
+    });
+
+    test('check track with DateTime property', () async {
+      final millis = DateTime.now().millisecondsSinceEpoch;
+      final date = DateTime.fromMillisecondsSinceEpoch(millis);
+      _mixpanel.track("test event", properties: {'date': date});
+      expect(
+        methodCall,
+        isMethodCall(
+          'track',
+          arguments: <String, dynamic>{
+            'eventName': 'test event',
+            'properties': <String, dynamic>{'date': date},
+          },
+        ),
+      );
+    });
+
+    test('check track with Uri property', () async {
+      final url = Uri.parse('https://mixpanel.com');
+      _mixpanel.track("test event", properties: {'url': url});
+      expect(
+        methodCall,
+        isMethodCall(
+          'track',
+          arguments: <String, dynamic>{
+            'eventName': 'test event',
+            'properties': <String, dynamic>{'url': url},
           },
         ),
       );

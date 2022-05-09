@@ -3,10 +3,12 @@ import 'package:flutter/services.dart';
 import 'dart:developer' as developer;
 import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:mixpanel_flutter/codec/mixpanel_message_codec.dart';
 
 /// The primary class for integrating Mixpanel with your app.
 class Mixpanel {
-  static const MethodChannel _channel = const MethodChannel('mixpanel_flutter');
+  static const MethodChannel _channel = const MethodChannel(
+      'mixpanel_flutter', StandardMethodCodec(MixpanelMessageCodec()));
   static Map<String, String> _mixpanelProperties = {
     '\$lib_version': '1.4.8',
     'mp_lib': 'flutter',

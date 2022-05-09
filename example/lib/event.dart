@@ -72,7 +72,9 @@ class _EventScreenState extends State<EventScreen> {
                         "deep2": [1, 2]
                       }
                     ]
-                  }
+                  },
+                  "date": DateTime.now(),
+                  "uri": Uri.parse("https://mixpanel.com")
                 });
               },
             ),

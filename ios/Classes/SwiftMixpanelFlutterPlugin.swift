@@ -10,7 +10,9 @@ public class SwiftMixpanelFlutterPlugin: NSObject, FlutterPlugin {
     let defaultFlushInterval = 60.0
     
     public static func register(with registrar: FlutterPluginRegistrar) {
-        let channel = FlutterMethodChannel(name: "mixpanel_flutter", binaryMessenger: registrar.messenger())
+        let readWriter = MixpanelReaderWriter()
+        let codec = FlutterStandardMethodCodec(readerWriter: readWriter)
+        let channel = FlutterMethodChannel(name: "mixpanel_flutter", binaryMessenger: registrar.messenger(), codec: codec)
         let instance = SwiftMixpanelFlutterPlugin()
         registrar.addMethodCallDelegate(instance, channel: channel)
     }
@@ -517,3 +519,51 @@ public class SwiftMixpanelFlutterPlugin: NSObject, FlutterPlugin {
     }
     
 }
+
+let DATE_TIME: UInt8 = 128
+let URI: UInt8 = 129
+
+public class MixpanelReader : FlutterStandardReader {
+    public override func readValue(ofType type: UInt8) -> Any? {
+        switch type {
+            case DATE_TIME:
+                var value: Int64 = 0
+                readBytes(&value, length: 8)
+                return Date(timeIntervalSince1970: TimeInterval(value / 1000 ))
+            case URI:
+                let urlString = readUTF8()
+                return URL(string: urlString)
+            default:
+                return super.readValue(ofType: type)
+        }
+    }
+}
+
+public class MixpanelWriter : FlutterStandardWriter {
+    override public func writeValue(_ value: Any) {
+        if ( value is Date ) {
+            writeByte(DATE_TIME)
+            let date = value as! Date
+            let time = date.timeIntervalSince1970
+            var ms = time * 1000.0
+            writeBytes(&ms, length: 8)
+        } else if ( value is URL ) {
+            let url = value as! URL
+            let urlString = url.absoluteString
+            writeByte(URI)
+            writeUTF8(urlString)
+        } else {
+            super.writeValue(value)
+        }
+    }
+}
+
+public class MixpanelReaderWriter : FlutterStandardReaderWriter {
+    public override func writer(with data: NSMutableData) -> FlutterStandardWriter {
+        return MixpanelWriter(data: data)
+    }
+    public override func reader(with data: Data) -> FlutterStandardReader {
+        return MixpanelReader(data: data)
+    }
+}
+
