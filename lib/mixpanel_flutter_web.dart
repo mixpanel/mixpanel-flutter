@@ -31,6 +31,9 @@ class MixpanelFlutterPlugin {
       case 'initialize':
         initialize(call);
         break;
+      case 'setServerURL':
+        handleSetServerURL(call);
+        break;
       case "hasOptedOutTracking":
         return handleHasOptedOutTracking();
       case "optInTracking":
@@ -134,13 +137,20 @@ class MixpanelFlutterPlugin {
   void initialize(MethodCall call) {
     Map<Object?, Object?> args = call.arguments as Map<Object?, Object?>;
     String token = args['token'] as String;
-    init(token);
+    dynamic config = args['config'];
+    init(token, js.jsify(config ?? {}));
+  }
+
+  void handleSetServerURL(MethodCall call) {
+    Map<Object?, Object?> args = call.arguments as Map<Object?, Object?>;
+    String serverURL = args['serverURL'] as String;
+    set_config(js.jsify({'api_host': serverURL}));
   }
 
   void handleTrack(MethodCall call) {
     Map<Object?, Object?> args = call.arguments as Map<Object?, Object?>;
     String eventName = args['eventName'] as String;
-    dynamic? properties = args['properties'];
+    dynamic properties = args['properties'];
     Map<String, dynamic> props = {
       ..._mixpanelProperties,
       ...(properties ?? {})
@@ -164,7 +174,7 @@ class MixpanelFlutterPlugin {
   void handleTrackWithGroups(MethodCall call) {
     Map<Object?, Object?> args = call.arguments as Map<Object?, Object?>;
     String eventName = args['eventName'] as String;
-    dynamic? properties = args['properties'];
+    dynamic properties = args['properties'];
     Map<String, dynamic> props = {
       ..._mixpanelProperties,
       ...(properties ?? {})
@@ -176,7 +186,7 @@ class MixpanelFlutterPlugin {
   void handleSetGroup(MethodCall call) {
     Map<Object?, Object?> args = call.arguments as Map<Object?, Object?>;
     String groupKey = args['groupKey'] as String;
-    dynamic? groupID = args["groupID"];
+    dynamic groupID = args["groupID"];
     if (groupID != null) {
       set_group(groupKey,
           (groupID is Map || groupID is List) ? js.jsify(groupID) : groupID);
@@ -186,7 +196,7 @@ class MixpanelFlutterPlugin {
   void handleAddGroup(MethodCall call) {
     Map<Object?, Object?> args = call.arguments as Map<Object?, Object?>;
     String groupKey = args['groupKey'] as String;
-    dynamic? groupID = args["groupID"];
+    dynamic groupID = args["groupID"];
 
     if (groupID != null) {
       add_group(groupKey,
@@ -197,7 +207,7 @@ class MixpanelFlutterPlugin {
   void handleRemoveGroup(MethodCall call) {
     Map<Object?, Object?> args = call.arguments as Map<Object?, Object?>;
     String groupKey = args['groupKey'] as String;
-    dynamic? groupID = args["groupID"];
+    dynamic groupID = args["groupID"];
     if (groupID != null) {
       remove_group(groupKey,
           (groupID is Map || groupID is List) ? js.jsify(groupID) : groupID);
@@ -282,7 +292,7 @@ class MixpanelFlutterPlugin {
 
   void handleTrackCharge(MethodCall call) {
     Map<Object?, Object?> args = call.arguments as Map<Object?, Object?>;
-    dynamic? properties = args['properties'];
+    dynamic properties = args['properties'];
     double amount = args['amount'] as double;
     people_track_charge(amount, js.jsify(properties ?? {}));
   }

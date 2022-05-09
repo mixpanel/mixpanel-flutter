@@ -26,14 +26,16 @@ class Mixpanel {
   ///  * [optOutTrackingDefault] Optional Whether or not Mixpanel can start tracking by default. See
   ///  optOutTracking()
   ///  * [superProperties] Optional super properties to register
+  ///  * [config] Optional A dictionary of config options to override (WEB ONLY)
   ///
   static Future<Mixpanel> init(String token,
       {bool optOutTrackingDefault = false,
-      Map<String, dynamic>? superProperties}) async {
+        Map<String, dynamic>? superProperties, Map<String, dynamic>? config}) async {
     var allProperties = <String, dynamic>{'token': token};
     allProperties['optOutTrackingDefault'] = optOutTrackingDefault;
     allProperties['mixpanelProperties'] = _mixpanelProperties;
     allProperties['superProperties'] = superProperties;
+    allProperties['config'] = config;
     await _channel.invokeMethod<void>('initialize', allProperties);
     return Mixpanel(token);
   }
@@ -395,8 +397,8 @@ class Mixpanel {
   /// ```
   ///
   /// return Future<String> the distinct id associated with Mixpanel event and People Analytics
-  Future<String?> getDistinctId() {
-    return _channel.invokeMethod<String>('getDistinctId');
+  Future<String> getDistinctId() {
+    return _channel.invokeMethod<String>('getDistinctId').then<String>((String? value) => value ?? '');
   }
 
   /// Push all queued Mixpanel events and People Analytics changes to Mixpanel servers.

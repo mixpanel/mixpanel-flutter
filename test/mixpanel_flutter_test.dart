@@ -39,6 +39,7 @@ void main() {
               'mp_lib': 'flutter',
             },
             'superProperties': null,
+            'config': null,
           },
         ),
       );
@@ -59,6 +60,7 @@ void main() {
               'mp_lib': 'flutter',
             },
             'superProperties': null,
+            'config': null,
           },
         ),
       );
