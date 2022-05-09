@@ -406,8 +406,8 @@ class Mixpanel {
   /// are sent to Mixpanel when your application is shut down, you will
   /// need to call flush() to let the Mixpanel library know it should
   /// send all remaining messages to the server.
-  void flush() {
-    _channel.invokeMethod('flush');
+  Future<void> flush() async {
+    await _channel.invokeMethod('flush');
   }
 }
 
