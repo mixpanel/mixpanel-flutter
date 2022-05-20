@@ -1,5 +1,13 @@
 #
 
+## [v1.5.1](https://github.com/mixpanel/mixpanel-flutter/tree/v1.5.1) (2022-05-20)
+
+### Enhancements
+
+- bump versions to remove survey [\#79](https://github.com/mixpanel/mixpanel-flutter/pull/79)
+
+#
+
 ## [v1.5.0](https://github.com/mixpanel/mixpanel-flutter/tree/v1.5.0) (2022-05-09)
 
 ### Enhancements
@@ -141,6 +149,8 @@ Please add the following snippet to your web/index.html inside <head></head> in 
     Report issues or give us any feedback is appreciated!
 * [integration guide](https://developer.mixpanel.com/docs/flutter)
 * [full API reference](https://mixpanel.github.io/mixpanel-flutter)
+
+
 
 
 
