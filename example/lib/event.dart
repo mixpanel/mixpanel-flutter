@@ -1,9 +1,9 @@
-import 'analytics.dart';
 import 'dart:async';
 import 'dart:convert';
+
 import 'package:flutter/material.dart';
-import 'package:mixpanel_flutter_example/widget.dart';
 import 'package:mixpanel_flutter/mixpanel_flutter.dart';
+import 'package:mixpanel_flutter_example/widget.dart';
 
 class EventScreen extends StatefulWidget {
   @override
@@ -11,17 +11,7 @@ class EventScreen extends StatefulWidget {
 }
 
 class _EventScreenState extends State<EventScreen> {
-  late final Mixpanel _mixpanel;
-
-  @override
-  initState() {
-    super.initState();
-    _initMixpanel();
-  }
-
-  Future<void> _initMixpanel() async {
-    _mixpanel = await MixpanelManager.init();
-  }
+  final Mixpanel _mixpanel = Mixpanel.instance;
 
   void _showAlert(BuildContext context, String title, String alertText) {
     showDialog(

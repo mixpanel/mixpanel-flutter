@@ -1,6 +1,5 @@
-import 'analytics.dart';
-import 'package:mixpanel_flutter/mixpanel_flutter.dart';
 import 'package:flutter/material.dart';
+import 'package:mixpanel_flutter/mixpanel_flutter.dart';
 import 'package:mixpanel_flutter_example/widget.dart';
 
 class GroupScreen extends StatefulWidget {
@@ -9,19 +8,11 @@ class GroupScreen extends StatefulWidget {
 }
 
 class _GroupScreenState extends State<GroupScreen> {
-  late final Mixpanel _mixpanel;
-  late final MixpanelGroup _mixpanelGroup;
-
-  @override
-  void initState() {
-    super.initState();
-    _initMixpanel();
-  }
-
-  Future<void> _initMixpanel() async {
-    _mixpanel = await MixpanelManager.init();
-    _mixpanelGroup = _mixpanel.getGroup("company_id", 12346);
-  }
+  final Mixpanel _mixpanel = Mixpanel.instance;
+  late final MixpanelGroup _mixpanelGroup = _mixpanel.getGroup(
+    "company_id",
+    12346,
+  );
 
   @override
   Widget build(BuildContext context) {

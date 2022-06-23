@@ -1,12 +1,21 @@
+import 'package:flutter/material.dart';
+import 'package:mixpanel_flutter/mixpanel_flutter.dart';
+import 'package:mixpanel_flutter_example/widget.dart';
+
 import 'event.dart';
 import 'gdpr.dart';
 import 'group.dart';
 import 'profile.dart';
-import 'package:flutter/material.dart';
-import 'package:mixpanel_flutter_example/widget.dart';
 
 // This is the main page only, check out the example app in https://github.com/mixpanel/mixpanel-flutter/tree/main/example
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  await Mixpanel.init(
+    '<YOUR-MIXPANEL-TOKEN>',
+    optOutTrackingDefault: false,
+  );
+
   runApp(MaterialApp(
     debugShowCheckedModeBanner: false,
     initialRoute: '/',

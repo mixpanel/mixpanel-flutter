@@ -1,8 +1,9 @@
 import 'dart:async';
-import 'package:flutter/services.dart';
 import 'dart:developer' as developer;
 import 'dart:io' show Platform;
+
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/services.dart';
 import 'package:mixpanel_flutter/codec/mixpanel_message_codec.dart';
 
 /// The primary class for integrating Mixpanel with your app.
@@ -17,9 +18,14 @@ class Mixpanel {
   final String _token;
   final People _people;
 
-  Mixpanel(String token)
-      : _token = token,
-        _people = new People(token);
+  Mixpanel._(this._token) : _people = new People(_token);
+
+  static late Mixpanel? _instance;
+
+  static Mixpanel get instance {
+    assert(_instance != null);
+    return _instance!;
+  }
 
   ///
   ///  Initializes an instance of the API with the given project token.
@@ -30,16 +36,19 @@ class Mixpanel {
   ///  * [superProperties] Optional super properties to register
   ///  * [config] Optional A dictionary of config options to override (WEB ONLY)
   ///
-  static Future<Mixpanel> init(String token,
-      {bool optOutTrackingDefault = false,
-        Map<String, dynamic>? superProperties, Map<String, dynamic>? config}) async {
+  static Future<Mixpanel> init(
+    String token, {
+    bool optOutTrackingDefault = false,
+    Map<String, dynamic>? superProperties,
+    Map<String, dynamic>? config,
+  }) async {
     var allProperties = <String, dynamic>{'token': token};
     allProperties['optOutTrackingDefault'] = optOutTrackingDefault;
     allProperties['mixpanelProperties'] = _mixpanelProperties;
     allProperties['superProperties'] = superProperties;
     allProperties['config'] = config;
     await _channel.invokeMethod<void>('initialize', allProperties);
-    return Mixpanel(token);
+    return _instance = Mixpanel._(token);
   }
 
   /// Set the base URL used for Mixpanel API requests.
@@ -400,7 +409,9 @@ class Mixpanel {
   ///
   /// return Future<String> the distinct id associated with Mixpanel event and People Analytics
   Future<String> getDistinctId() {
-    return _channel.invokeMethod<String>('getDistinctId').then<String>((String? value) => value ?? '');
+    return _channel
+        .invokeMethod<String>('getDistinctId')
+        .then<String>((String? value) => value ?? '');
   }
 
   /// Push all queued Mixpanel events and People Analytics changes to Mixpanel servers.

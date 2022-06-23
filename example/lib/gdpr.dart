@@ -1,7 +1,6 @@
-import 'analytics.dart';
 import 'package:flutter/material.dart';
-import 'package:mixpanel_flutter_example/widget.dart';
 import 'package:mixpanel_flutter/mixpanel_flutter.dart';
+import 'package:mixpanel_flutter_example/widget.dart';
 
 class GDPRScreen extends StatefulWidget {
   @override
@@ -9,18 +8,7 @@ class GDPRScreen extends StatefulWidget {
 }
 
 class _GDPRScreenState extends State<GDPRScreen> {
-  late final Mixpanel _mixpanel;
-
-  @override
-  void initState() {
-    // TODO: implement initState
-    super.initState();
-    _initMixpanel();
-  }
-
-  Future<void> _initMixpanel() async {
-    _mixpanel = await MixpanelManager.init();
-  }
+  final Mixpanel _mixpanel = Mixpanel.instance;
 
   void showAlertDialog(BuildContext context, bool? result) {
     Widget okButton = TextButton(
