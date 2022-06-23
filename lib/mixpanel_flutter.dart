@@ -18,6 +18,8 @@ class Mixpanel {
   final String _token;
   final People _people;
 
+  static var _isInitialized = false;
+
   Mixpanel._(this._token) : _people = new People(_token);
 
   static late Mixpanel? _instance;
@@ -42,13 +44,16 @@ class Mixpanel {
     Map<String, dynamic>? superProperties,
     Map<String, dynamic>? config,
   }) async {
+    assert(!_isInitialized, 'Mixpanel plugin was already initialized');
     var allProperties = <String, dynamic>{'token': token};
     allProperties['optOutTrackingDefault'] = optOutTrackingDefault;
     allProperties['mixpanelProperties'] = _mixpanelProperties;
     allProperties['superProperties'] = superProperties;
     allProperties['config'] = config;
     await _channel.invokeMethod<void>('initialize', allProperties);
-    return _instance = Mixpanel._(token);
+    _instance = Mixpanel._(token);
+    _isInitialized = true;
+    return _instance!;
   }
 
   /// Set the base URL used for Mixpanel API requests.
