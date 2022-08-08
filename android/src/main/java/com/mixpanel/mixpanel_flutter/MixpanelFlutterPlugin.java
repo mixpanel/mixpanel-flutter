@@ -200,14 +200,17 @@ public class MixpanelFlutterPlugin implements FlutterPlugin, MethodCallHandler {
             result.error("MixpanelFlutterException", e.getLocalizedMessage(), null);
             return;
         }
-        if (call.hasArgument("optOutTrackingDefault")) {
-            Boolean optOutTrackingDefault = call.<Boolean>argument("optOutTrackingDefault");
-            mixpanel = MixpanelAPI.getInstance(context, token,
-                    optOutTrackingDefault == null ? false : optOutTrackingDefault,
-                    superAndMixpanelProperties);
-        } else {
-            mixpanel = MixpanelAPI.getInstance(context, token, false, superAndMixpanelProperties);
-        }
+
+        Boolean optOutTrackingDefault = call.<Boolean>argument("optOutTrackingDefault");
+        Boolean trackAutomaticEvents = call.<Boolean>argument("trackAutomaticEvents");
+
+        mixpanel = MixpanelAPI.getInstance(context, token,
+                optOutTrackingDefault == null ? false : optOutTrackingDefault,
+                superAndMixpanelProperties, null, trackAutomaticEvents == null ? false : true);
+
+
+
+
         result.success(Integer.toString(mixpanel.hashCode()));
     }
 

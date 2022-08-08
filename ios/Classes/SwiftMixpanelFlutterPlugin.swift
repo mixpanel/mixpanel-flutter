@@ -153,7 +153,9 @@ public class SwiftMixpanelFlutterPlugin: NSObject, FlutterPlugin {
         mixpanelProperties = arguments["mixpanelProperties"] as? [String: String]
         let superProperties = arguments["superProperties"] as? [String: Any]
         self.token = token
+        let trackAutomaticEvents = arguments["trackAutomaticEvents"] as? Bool
         instance = Mixpanel.initialize(token: token!, instanceName: token!,
+                                       trackAutomaticEvents: trackAutomaticEvents ?? true,
                                        optOutTrackingByDefault: optOutTrackingDefault ?? false,
                                        superProperties: MixpanelTypeHandler.mixpanelProperties(properties: superProperties, mixpanelProperties: mixpanelProperties))
         instance?.flushInterval = defaultFlushInterval
