@@ -27,14 +27,14 @@ class Mixpanel {
   ///  * [token] your project token.
   ///  * [optOutTrackingDefault] Optional Whether or not Mixpanel can start tracking by default. See
   ///  optOutTracking()
-  ///  * [trackAutomaticEvents] Optional Whether or not to collect common mobile events
+  ///  * [trackAutomaticEvents] Required Whether or not to collect common mobile events
   ///  include app sessions, first app opens, app updated, etc.
   ///  * [superProperties] Optional super properties to register
   ///  * [config] Optional A dictionary of config options to override (WEB ONLY)
   ///
   static Future<Mixpanel> init(String token,
       {bool optOutTrackingDefault = false,
-        bool trackAutomaticEvents = true,
+        required bool trackAutomaticEvents,
         Map<String, dynamic>? superProperties, Map<String, dynamic>? config}) async {
     var allProperties = <String, dynamic>{'token': token};
     allProperties['optOutTrackingDefault'] = optOutTrackingDefault;

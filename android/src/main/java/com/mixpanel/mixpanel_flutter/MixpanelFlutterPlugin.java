@@ -206,10 +206,7 @@ public class MixpanelFlutterPlugin implements FlutterPlugin, MethodCallHandler {
 
         mixpanel = MixpanelAPI.getInstance(context, token,
                 optOutTrackingDefault == null ? false : optOutTrackingDefault,
-                superAndMixpanelProperties, null, trackAutomaticEvents == null ? false : true);
-
-
-
+                superAndMixpanelProperties, null, trackAutomaticEvents);
 
         result.success(Integer.toString(mixpanel.hashCode()));
     }
