@@ -2,6 +2,25 @@
 
 ## [v2.0.0](https://github.com/mixpanel/mixpanel-flutter/tree/v2.0.0) (2022-09-09)
 
+### BREAKING CHANGE: 
+This major release removes all remaining calls to Mixpanel's `/decide` API endpoint. The main effect of this is that the SDK no longer fetches the remote status of your [project's "Automatically collect common mobile events" setting](https://help.mixpanel.com/hc/en-us/articles/115004596186#enable-or-disable-common-mobile-events). From this version forward, automatic event tracking can only be controlled by the, now required, parameter `trackAutomaticEvents`. Upon upgrading, existing implementations will need to add this parameter to their Mixpanel initializer calls. 
+
+```
+import 'package:mixpanel_flutter/mixpanel_flutter.dart';
+
+class MixpanelManager {
+  static Mixpanel? _instance;
+
+  static Future<Mixpanel> init() async {
+    if (_instance == null) {
+      _instance = await Mixpanel.init("YOUR_PROJECT_TOKEN", trackAutomaticEvents: true);
+    }
+    return _instance!;
+  }
+}
+
+```
+
 ### Enhancements
 
 - add param 'trackAutomaticEvents' to 'init' [\#86](https://github.com/mixpanel/mixpanel-flutter/pull/86)
