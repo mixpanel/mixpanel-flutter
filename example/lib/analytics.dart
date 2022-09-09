@@ -6,7 +6,7 @@ class MixpanelManager {
   static Future<Mixpanel> init() async {
     if (_instance == null) {
       _instance = await Mixpanel.init("YOUR_PROJECT_TOKEN",
-          optOutTrackingDefault: false);
+          optOutTrackingDefault: false, trackAutomaticEvents: true);
     }
     return _instance!;
   }

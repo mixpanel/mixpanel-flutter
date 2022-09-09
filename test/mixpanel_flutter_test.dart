@@ -18,7 +18,7 @@ void main() {
       });
 
       _mixpanel =
-          await Mixpanel.init("test token", optOutTrackingDefault: false);
+          await Mixpanel.init("test token", optOutTrackingDefault: false, trackAutomaticEvents: true);
     });
 
     tearDown(() {
@@ -28,7 +28,7 @@ void main() {
 
     test('check initialize call', () async {
       _mixpanel =
-          await Mixpanel.init("test token", optOutTrackingDefault: false);
+          await Mixpanel.init("test token", optOutTrackingDefault: false, trackAutomaticEvents: true);
       expect(
         methodCall,
         isMethodCall(
@@ -36,6 +36,7 @@ void main() {
           arguments: <String, dynamic>{
             'token': "test token",
             'optOutTrackingDefault': false,
+            'trackAutomaticEvents': true,
             'mixpanelProperties': {
               '\$lib_version': '1.6.0',
               'mp_lib': 'flutter',
@@ -49,7 +50,7 @@ void main() {
 
     test('check initialize call with optOutTracking true', () async {
       _mixpanel =
-          await Mixpanel.init("test token", optOutTrackingDefault: true);
+          await Mixpanel.init("test token", optOutTrackingDefault: true, trackAutomaticEvents: true);
       expect(
         methodCall,
         isMethodCall(
@@ -57,6 +58,7 @@ void main() {
           arguments: <String, dynamic>{
             'token': "test token",
             'optOutTrackingDefault': true,
+            'trackAutomaticEvents': true,
             'mixpanelProperties': {
               '\$lib_version': '1.6.0',
               'mp_lib': 'flutter',
@@ -67,6 +69,29 @@ void main() {
         ),
       );
     });
+
+    test('check initialize call with trackAutomaticEvents false', () async {
+      _mixpanel =
+      await Mixpanel.init("test token", optOutTrackingDefault: true, trackAutomaticEvents: false);
+      expect(
+        methodCall,
+        isMethodCall(
+          'initialize',
+          arguments: <String, dynamic>{
+            'token': "test token",
+            'optOutTrackingDefault': true,
+            'trackAutomaticEvents': false,
+            'mixpanelProperties': {
+              '\$lib_version': '1.6.0',
+              'mp_lib': 'flutter',
+            },
+            'superProperties': null,
+            'config': null,
+          },
+        ),
+      );
+    });
+
 
     test('check setServerURL', () async {
       _mixpanel.setServerURL("https://api-eu.mixpanel.com");
