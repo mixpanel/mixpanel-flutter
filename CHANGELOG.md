@@ -1,5 +1,13 @@
 #
 
+## [v2.0.0](https://github.com/mixpanel/mixpanel-flutter/tree/v2.0.0) (2022-09-09)
+
+### Enhancements
+
+- add param 'trackAutomaticEvents' to 'init' [\#86](https://github.com/mixpanel/mixpanel-flutter/pull/86)
+
+#
+
 ## [v1.6.0](https://github.com/mixpanel/mixpanel-flutter/tree/v1.6.0) (2022-06-24)
 
 ### Enhancements
@@ -157,6 +165,8 @@ Please add the following snippet to your web/index.html inside <head></head> in 
     Report issues or give us any feedback is appreciated!
 * [integration guide](https://developer.mixpanel.com/docs/flutter)
 * [full API reference](https://mixpanel.github.io/mixpanel-flutter)
+
+
 
 
 
