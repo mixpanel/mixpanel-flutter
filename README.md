@@ -69,7 +69,7 @@ class _YourClassState extends State<YourClass> {
   }
 
   Future<void> initMixpanel() async {
-    mixpanel = await Mixpanel.init("Your Mixpanel Token", optOutTrackingDefault: false);
+    mixpanel = await Mixpanel.init("Your Mixpanel Token", optOutTrackingDefault: false, trackAutomaticEvents: true);
   }
 ...
 ```
