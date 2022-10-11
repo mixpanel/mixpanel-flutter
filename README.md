@@ -55,7 +55,7 @@ Please add the following snippet to your `web/index.html` inside  `<head></head>
 <script src="./assets/packages/mixpanel_flutter/assets/mixpanel.js"></script>
 ```
 ## 2. Initialize Mixpanel
-To start tracking with the SDK you must first initialize with your project token. To initialize the SDK, first add `import 'package:mixpanel_flutter/mixpanel_flutter.dart';` and call `Mixpanel.init(token);` with your project token as it's argument. You can find your token in [project settings](https://mixpanel.com/settings/project).
+To start tracking with the SDK you must first initialize with your project token. To initialize the SDK, first add `import 'package:mixpanel_flutter/mixpanel_flutter.dart';` and call `Mixpanel.init(token, trackAutomaticEvents);` with your project token and automatic events setting as it's arguments. You can find your token in [project settings](https://mixpanel.com/settings/project).
 ```dart
 import 'package:mixpanel_flutter/mixpanel_flutter.dart';
 ...
