@@ -53,4 +53,4 @@ jobs:
       run:  flutter pub get
     - name: Test iOS integration
       working-directory: example
-      run: flutter build ios --debug --no-codesign
+      run: flutter build ios --debug --simulator --no-codesign
