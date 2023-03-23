@@ -1,5 +1,13 @@
 #
 
+## [v2.1.1](https://github.com/mixpanel/mixpanel-flutter/tree/v2.1.1) (2023-03-23)
+
+### Enhancements
+
+- bump iOS version to 4.1.0 [\#102](https://github.com/mixpanel/mixpanel-flutter/pull/102)
+
+#
+
 ## [v2.1.0](https://github.com/mixpanel/mixpanel-flutter/tree/v2.1.0) (2023-03-06)
 
 ### NOTE:
@@ -195,6 +203,8 @@ Please add the following snippet to your web/index.html inside <head></head> in 
     Report issues or give us any feedback is appreciated!
 * [integration guide](https://developer.mixpanel.com/docs/flutter)
 * [full API reference](https://mixpanel.github.io/mixpanel-flutter)
+
+
 
 
 
