@@ -2,7 +2,7 @@
 
 
 <div align="center" style="text-align: center">
-  <img src="https://github.com/mixpanel/mixpanel-android/blob/assets/mixpanel.png?raw=true" alt="Mixpanel Flutter SDK" height="150"/>
+  <img src="https://user-images.githubusercontent.com/71290498/231855731-2d3774c3-dc41-4595-abfb-9c49f5f84103.png" alt="Mixpanel Flutter SDK" height="150"/>
 </div>
 
 
