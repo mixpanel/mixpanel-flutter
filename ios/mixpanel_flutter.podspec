@@ -12,7 +12,7 @@ Pod::Spec.new do |s|
   s.source           = { :path => '.' }
   s.source_files = 'Classes/**/*'
   s.dependency 'Flutter'
-  s.dependency 'Mixpanel-swift', '4.1.0'
+  s.dependency 'Mixpanel-swift', '4.1.4'
   s.platform = :ios, '11.0'
 
   # Flutter.framework does not contain a i386 slice.
