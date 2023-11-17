@@ -1,5 +1,24 @@
 #
 
+## [v2.2.0](https://github.com/mixpanel/mixpanel-flutter/tree/v2.2.0) (2023-11-17)
+
+### Enhancements
+
+- add api: setFlushBatchSize [\#102](https://github.com/mixpanel/mixpanel-flutter/pull/122)
+```
+  /// Set the number of events sent in a single network request to the Mixpanel server.
+  /// By configuring this value, you can optimize network usage and manage the frequency of communication between the client
+  /// and the server. The maximum size is 50; any value over 50 will default to 50.
+  /// * [flushBatchSize] an int representing the number of events sent in a single network request.
+  void setFlushBatchSize(int flushBatchSize) {
+    _channel.invokeMethod<void>('setFlushBatchSize',
+        <String, dynamic>{'flushBatchSize': flushBatchSize});
+  }
+```
+- bump iOS to `4.2.0`
+
+#
+
 ## [v2.1.1](https://github.com/mixpanel/mixpanel-flutter/tree/v2.1.1) (2023-03-23)
 
 ### Enhancements
