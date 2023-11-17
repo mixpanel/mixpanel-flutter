@@ -527,7 +527,7 @@ public class SwiftMixpanelFlutterPlugin: NSObject, FlutterPlugin {
 
     private func handleSetFlushBatchSize(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
         let arguments = call.arguments as? [String: Any] ?? [String: Any]()
-        let batchSize = arguments["batchSize"] as! Int
+        let batchSize = arguments["flushBatchSize"] as! Int
         instance?.flushBatchSize = batchSize
         result(nil)
     }
