@@ -3,7 +3,7 @@ PODS:
   - Mixpanel-swift (4.2.0):
     - Mixpanel-swift/Complete (= 4.2.0)
   - Mixpanel-swift/Complete (4.2.0)
-  - mixpanel_flutter (2.2.1):
+  - mixpanel_flutter (2.1.1):
     - Flutter
     - Mixpanel-swift (= 4.2.0)
 
