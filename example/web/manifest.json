@@ -1,11 +1,11 @@
 {
-    "name": "mixpanel_flutter_example",
-    "short_name": "mixpanel_flutter_example",
+    "name": "mixpanel_example",
+    "short_name": "mixpanel_example",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "Demonstrates how to use the mixpanel_flutter plugin.",
+    "description": "A new Flutter project.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

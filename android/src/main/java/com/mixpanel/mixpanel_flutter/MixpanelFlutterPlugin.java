@@ -74,6 +74,8 @@ public class MixpanelFlutterPlugin implements FlutterPlugin, MethodCallHandler {
             case "optOutTracking":
                 handleOptOutTracking(call, result);
                 break;
+            case "setFlushBatchSize":
+                handleSetFlushBatchSize(call, result);
             case "identify":
                 handleIdentify(call, result);
                 break;
@@ -240,6 +242,12 @@ public class MixpanelFlutterPlugin implements FlutterPlugin, MethodCallHandler {
 
     private void handleOptOutTracking(MethodCall call, Result result) {
         mixpanel.optOutTracking();
+        result.success(null);
+    }
+
+    private void handleSetFlushBatchSize(MethodCall call, Result result) {
+        int flushBatchSize = call.argument("flushBatchSize");
+        mixpanel.setFlushBatchSize(flushBatchSize);
         result.success(null);
     }
 

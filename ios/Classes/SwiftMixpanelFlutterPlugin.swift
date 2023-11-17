@@ -140,6 +140,9 @@ public class SwiftMixpanelFlutterPlugin: NSObject, FlutterPlugin {
         case "groupUnionProperty":
             handleGroupUnionProperty(call, result: result)
             break
+        case "setFlushBatchSize":
+            handleSetFlushBatchSize(call, result: result)
+            break
         default:
             result(FlutterMethodNotImplemented)
         }
@@ -519,6 +522,13 @@ public class SwiftMixpanelFlutterPlugin: NSObject, FlutterPlugin {
         let values = arguments["value"] as! [Any]
         let group = mixpanelGroup(token, groupKey: groupKey, groupID: groupID)
         group?.union(key: name, values: values.map() { MixpanelTypeHandler.mixpanelTypeValue($0)! })
+        result(nil)
+    }
+
+    private func handleSetFlushBatchSize(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+        let arguments = call.arguments as? [String: Any] ?? [String: Any]()
+        let batchSize = arguments["flushBatchSize"] as! Int
+        instance?.flushBatchSize = batchSize
         result(nil)
     }
     
