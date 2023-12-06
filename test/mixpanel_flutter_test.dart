@@ -38,7 +38,7 @@ void main() {
             'optOutTrackingDefault': false,
             'trackAutomaticEvents': true,
             'mixpanelProperties': {
-              '\$lib_version': '2.1.1',
+              '\$lib_version': '2.2.0',
               'mp_lib': 'flutter',
             },
             'superProperties': null,
@@ -60,7 +60,7 @@ void main() {
             'optOutTrackingDefault': true,
             'trackAutomaticEvents': true,
             'mixpanelProperties': {
-              '\$lib_version': '2.1.1',
+              '\$lib_version': '2.2.0',
               'mp_lib': 'flutter',
             },
             'superProperties': null,
@@ -82,7 +82,7 @@ void main() {
             'optOutTrackingDefault': true,
             'trackAutomaticEvents': false,
             'mixpanelProperties': {
-              '\$lib_version': '2.1.1',
+              '\$lib_version': '2.2.0',
               'mp_lib': 'flutter',
             },
             'superProperties': null,
@@ -139,7 +139,18 @@ void main() {
       );
     });
 
-    test('check optOutTracking', () async {
+    test('check setFlushBatchSize', () async {
+      _mixpanel.setFlushBatchSize(30);
+      expect(
+        methodCall,
+        isMethodCall(
+          'setFlushBatchSize',
+          arguments: <String, dynamic>{'flushBatchSize': 30},
+        ),
+      );
+    });
+
+    test('check setFlush', () async {
       _mixpanel.optOutTracking();
       expect(
         methodCall,

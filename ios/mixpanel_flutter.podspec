@@ -4,7 +4,7 @@
 #
 Pod::Spec.new do |s|
   s.name             = 'mixpanel_flutter'
-  s.version          = '2.1.1'
+  s.version          = '2.2.0'
   s.summary          = 'Official Flutter Tracking Library for Mixpanel Analytics'
   s.homepage         = 'https://www.mixpanel.com'
   s.license          = { :file => '../LICENSE' }
@@ -12,7 +12,7 @@ Pod::Spec.new do |s|
   s.source           = { :path => '.' }
   s.source_files = 'Classes/**/*'
   s.dependency 'Flutter'
-  s.dependency 'Mixpanel-swift', '4.1.0'
+  s.dependency 'Mixpanel-swift', '4.2.0'
   s.platform = :ios, '11.0'
 
   # Flutter.framework does not contain a i386 slice.
