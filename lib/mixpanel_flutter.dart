@@ -1,8 +1,9 @@
 import 'dart:async';
-import 'package:flutter/services.dart';
 import 'dart:developer' as developer;
 import 'dart:io' show Platform;
+
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/services.dart';
 import 'package:mixpanel_flutter/codec/mixpanel_message_codec.dart';
 
 /// The primary class for integrating Mixpanel with your app.
@@ -145,9 +146,9 @@ class Mixpanel {
   /// Mixpanel using the same disinct_id will be considered associated with the
   /// same visitor/customer for retention and funnel reporting, so be sure that the given
   /// value is globally unique for each individual user you intend to track.
-  void identify(String distinctId) {
+  Future<void> identify(String distinctId) async {
     if (_MixpanelHelper.isValidString(distinctId)) {
-      _channel.invokeMethod<void>(
+      await _channel.invokeMethod<void>(
           'identify', <String, dynamic>{'distinctId': distinctId});
     } else {
       developer.log('`identify` failed: distinctId cannot be blank',
@@ -189,9 +190,12 @@ class Mixpanel {
   ///
   /// * [eventName] The name of the event to send
   /// * [properties] An optional map containing the key value pairs of the properties to include in this event.
-  void track(String eventName, {Map<String, dynamic>? properties}) {
+  Future<void> track(
+    String eventName, {
+    Map<String, dynamic>? properties,
+  }) async {
     if (_MixpanelHelper.isValidString(eventName)) {
-      _channel.invokeMethod<void>('track',
+      await _channel.invokeMethod<void>('track',
           <String, dynamic>{'eventName': eventName, 'properties': properties});
     } else {
       developer.log('`track` failed: eventName cannot be blank',
@@ -217,10 +221,13 @@ class Mixpanel {
   ///  * [eventName] The name of the event to send
   ///  * [properties] A Map containing the key value pairs of the properties to include in this event.
   ///  * [groups] A Map containing the group key value pairs for this event.
-  void trackWithGroups(String eventName, Map<String, dynamic> properties,
-      Map<String, dynamic> groups) {
+  Future<void> trackWithGroups(
+    String eventName,
+    Map<String, dynamic> properties,
+    Map<String, dynamic> groups,
+  ) async {
     if (_MixpanelHelper.isValidString(eventName)) {
-      _channel.invokeMethod<void>('trackWithGroups', <String, dynamic>{
+      await _channel.invokeMethod<void>('trackWithGroups', <String, dynamic>{
         'eventName': eventName,
         'properties': properties,
         'groups': groups
@@ -314,8 +321,8 @@ class Mixpanel {
   /// to remove a superProperty, call unregisterSuperProperty() or clearSuperProperties()
   ///
   /// * [properties] A Map containing super properties to register
-  void registerSuperProperties(Map<String, dynamic> properties) {
-    _channel.invokeMethod<void>(
+  Future<void> registerSuperProperties(Map<String, dynamic> properties) async {
+    await _channel.invokeMethod<void>(
         'registerSuperProperties', <String, dynamic>{'properties': properties});
   }
 
@@ -325,8 +332,10 @@ class Mixpanel {
   /// Calling registerSuperPropertiesOnce will never overwrite existing properties.
   ///
   /// * [properties] A Map containing the super properties to register.
-  void registerSuperPropertiesOnce(Map<String, dynamic> properties) {
-    _channel.invokeMethod<void>('registerSuperPropertiesOnce',
+  Future<void> registerSuperPropertiesOnce(
+    Map<String, dynamic> properties,
+  ) async {
+    await _channel.invokeMethod<void>('registerSuperPropertiesOnce',
         <String, dynamic>{'properties': properties});
   }
 
@@ -337,9 +346,9 @@ class Mixpanel {
   /// To clear all superProperties, use clearSuperProperties()
   ///
   /// * [propertyName] name of the property to unregister
-  void unregisterSuperProperty(String propertyName) {
+  Future<void> unregisterSuperProperty(String propertyName) async {
     if (_MixpanelHelper.isValidString(propertyName)) {
-      _channel.invokeMethod<void>('unregisterSuperProperty',
+      await _channel.invokeMethod<void>('unregisterSuperProperty',
           <String, dynamic>{'propertyName': propertyName});
     } else {
       developer.log(
@@ -364,8 +373,8 @@ class Mixpanel {
   /// superProperties registered before the clearSuperProperties method was called.
   ///
   /// To remove a single superProperty, use unregisterSuperProperty()
-  void clearSuperProperties() {
-    _channel.invokeMethod<void>('clearSuperProperties');
+  Future<void> clearSuperProperties() async {
+    await _channel.invokeMethod<void>('clearSuperProperties');
   }
 
   /// Begin timing of an event. Calling timeEvent("Thing") will not send an event, but
@@ -399,8 +408,8 @@ class Mixpanel {
 
   /// Clear super properties and generates a new random distinctId for this instance.
   /// Useful for clearing data when a user logs out.
-  void reset() {
-    _channel.invokeMethod<void>('reset');
+  Future<void> reset() async {
+    await _channel.invokeMethod<void>('reset');
   }
 
   /// Returns the current distinct id of the user.
