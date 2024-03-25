@@ -38,7 +38,7 @@ void main() {
             'optOutTrackingDefault': false,
             'trackAutomaticEvents': true,
             'mixpanelProperties': {
-              '\$lib_version': '2.2.0',
+              '\$lib_version': '2.3.0',
               'mp_lib': 'flutter',
             },
             'superProperties': null,
@@ -60,7 +60,7 @@ void main() {
             'optOutTrackingDefault': true,
             'trackAutomaticEvents': true,
             'mixpanelProperties': {
-              '\$lib_version': '2.2.0',
+              '\$lib_version': '2.3.0',
               'mp_lib': 'flutter',
             },
             'superProperties': null,
@@ -82,7 +82,7 @@ void main() {
             'optOutTrackingDefault': true,
             'trackAutomaticEvents': false,
             'mixpanelProperties': {
-              '\$lib_version': '2.2.0',
+              '\$lib_version': '2.3.0',
               'mp_lib': 'flutter',
             },
             'superProperties': null,
