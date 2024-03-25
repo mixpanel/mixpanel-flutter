@@ -1,5 +1,15 @@
 #
 
+## [v2.3.0](https://github.com/mixpanel/mixpanel-flutter/tree/v2.3.0) (2024-03-25)
+
+### Enhancements
+
+- Update AGP to 8 and update all dependencies [\#139](https://github.com/mixpanel/mixpanel-flutter/pull/139)
+- upgrade js to 0.7.1 [\#138](https://github.com/mixpanel/mixpanel-flutter/pull/138)
+- Add Future return in some methods [\#136](https://github.com/mixpanel/mixpanel-flutter/pull/136)
+
+#
+
 ## [v2.2.0](https://github.com/mixpanel/mixpanel-flutter/tree/v2.2.0) (2023-11-17)
 
 ### Enhancements
@@ -222,6 +232,8 @@ Please add the following snippet to your web/index.html inside <head></head> in 
     Report issues or give us any feedback is appreciated!
 * [integration guide](https://developer.mixpanel.com/docs/flutter)
 * [full API reference](https://mixpanel.github.io/mixpanel-flutter)
+
+
 
 
 
