@@ -49,6 +49,8 @@ class _GDPRScreenState extends State<GDPRScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final width = MediaQuery.of(context).size.width;
+    final defaultWidth = width * 0.65;
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Color(0xff4f44e0),
@@ -61,7 +63,7 @@ class _GDPRScreenState extends State<GDPRScreen> {
             height: 40,
           ),
           SizedBox(
-            width: MediaQuery.of(context).size.width * 0.65,
+            width: defaultWidth,
             child: MixpanelButton(
               text: 'Opt In',
               onPressed: () {
@@ -69,11 +71,9 @@ class _GDPRScreenState extends State<GDPRScreen> {
               },
             ),
           ),
+          const SizedBox(height: 20),
           SizedBox(
-            height: 20,
-          ),
-          SizedBox(
-            width: MediaQuery.of(context).size.width * 0.65,
+            width: defaultWidth,
             child: MixpanelButton(
               text: 'Opt Out',
               onPressed: () {
@@ -81,11 +81,9 @@ class _GDPRScreenState extends State<GDPRScreen> {
               },
             ),
           ),
+          const SizedBox(height: 20),
           SizedBox(
-            height: 20,
-          ),
-          SizedBox(
-            width: MediaQuery.of(context).size.width * 0.65,
+            width: defaultWidth,
             child: MixpanelButton(
               text: 'Has opted out',
               onPressed: () async {

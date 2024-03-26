@@ -34,19 +34,19 @@ class _EventScreenState extends State<EventScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final width = MediaQuery.of(context).size.width;
+    final defaultWidth = width * 0.65;
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Color(0xff4f44e0),
-        title: Text("Event"),
+        title: const Text("Event"),
       ),
       body: Center(
           child: ListView(
         children: [
+          const SizedBox(height: 40),
           SizedBox(
-            height: 40,
-          ),
-          SizedBox(
-            width: MediaQuery.of(context).size.width * 0.65,
+            width: defaultWidth,
             child: MixpanelButton(
               text: 'Track w/o Properties',
               onPressed: () {
@@ -54,11 +54,9 @@ class _EventScreenState extends State<EventScreen> {
               },
             ),
           ),
+          const SizedBox(height: 20),
           SizedBox(
-            height: 20,
-          ),
-          SizedBox(
-            width: MediaQuery.of(context).size.width * 0.65,
+            width: defaultWidth,
             child: MixpanelButton(
               text: 'Track with Properties',
               onPressed: () {
@@ -79,11 +77,9 @@ class _EventScreenState extends State<EventScreen> {
               },
             ),
           ),
+          const SizedBox(height: 20),
           SizedBox(
-            height: 20,
-          ),
-          SizedBox(
-            width: MediaQuery.of(context).size.width * 0.65,
+            width: defaultWidth,
             child: MixpanelButton(
               text: 'Identify',
               onPressed: () {
@@ -91,24 +87,21 @@ class _EventScreenState extends State<EventScreen> {
               },
             ),
           ),
+          const SizedBox(height: 20),
           SizedBox(
-            height: 20,
-          ),
-          SizedBox(
-            width: MediaQuery.of(context).size.width * 0.65,
+            width: defaultWidth,
             child: MixpanelButton(
               text: 'Get Distinct ID',
               onPressed: () async {
                 String? distinctId = await _mixpanel.getDistinctId();
                 Widget okButton = TextButton(
-                  child: Text("OK"),
+                  child: const Text("OK"),
                   onPressed: () {
                     Navigator.of(context).pop();
                   },
                 );
-
                 AlertDialog alert = AlertDialog(
-                  title: Text("Result"),
+                  title: const Text("Result"),
                   content: Text("${distinctId}"),
                   actions: [
                     okButton,
@@ -125,11 +118,9 @@ class _EventScreenState extends State<EventScreen> {
               },
             ),
           ),
+          const SizedBox(height: 20),
           SizedBox(
-            height: 20,
-          ),
-          SizedBox(
-            width: MediaQuery.of(context).size.width * 0.65,
+            width: defaultWidth,
             child: MixpanelButton(
               text: 'Time Event 2 secs',
               onPressed: () {
@@ -141,11 +132,9 @@ class _EventScreenState extends State<EventScreen> {
               },
             ),
           ),
+          const SizedBox(height: 20),
           SizedBox(
-            height: 20,
-          ),
-          SizedBox(
-            width: MediaQuery.of(context).size.width * 0.65,
+            width: defaultWidth,
             child: MixpanelButton(
                 text: 'Get Current SuperProperties',
                 onPressed: () async {
@@ -154,11 +143,9 @@ class _EventScreenState extends State<EventScreen> {
                   _showAlert(context, "Super Properties", jsonString);
                 }),
           ),
+          const SizedBox(height: 20),
           SizedBox(
-            height: 20,
-          ),
-          SizedBox(
-            width: MediaQuery.of(context).size.width * 0.65,
+            width: defaultWidth,
             child: MixpanelButton(
               text: 'Clear SuperProperties',
               onPressed: () {
@@ -166,11 +153,9 @@ class _EventScreenState extends State<EventScreen> {
               },
             ),
           ),
+          const SizedBox(height: 20),
           SizedBox(
-            height: 20,
-          ),
-          SizedBox(
-            width: MediaQuery.of(context).size.width * 0.65,
+            width: defaultWidth,
             child: MixpanelButton(
               text: 'Register SuperProperties',
               onPressed: () {
@@ -181,11 +166,9 @@ class _EventScreenState extends State<EventScreen> {
               },
             ),
           ),
+          const SizedBox(height: 20),
           SizedBox(
-            height: 20,
-          ),
-          SizedBox(
-            width: MediaQuery.of(context).size.width * 0.65,
+            width: defaultWidth,
             child: MixpanelButton(
               text: 'Register SuperProperties Once',
               onPressed: () {
@@ -194,11 +177,9 @@ class _EventScreenState extends State<EventScreen> {
               },
             ),
           ),
+          const SizedBox(height: 20),
           SizedBox(
-            height: 20,
-          ),
-          SizedBox(
-            width: MediaQuery.of(context).size.width * 0.65,
+            width: defaultWidth,
             child: MixpanelButton(
               text: 'Unregister SuperProperty',
               onPressed: () {
@@ -206,11 +187,9 @@ class _EventScreenState extends State<EventScreen> {
               },
             ),
           ),
+          const SizedBox(height: 20),
           SizedBox(
-            height: 20,
-          ),
-          SizedBox(
-            width: MediaQuery.of(context).size.width * 0.65,
+            width: defaultWidth,
             child: MixpanelButton(
               text: 'Flush',
               onPressed: () {

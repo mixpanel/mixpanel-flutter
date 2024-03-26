@@ -24,6 +24,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final width = MediaQuery.of(context).size.width;
+    final defaultWidth = width * 0.65;
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Color(0xff4f44e0),
@@ -32,11 +34,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
       body: Center(
           child: ListView(
         children: [
+          const SizedBox(height: 40),
           SizedBox(
-            height: 40,
-          ),
-          SizedBox(
-            width: MediaQuery.of(context).size.width * 0.65,
+            width: defaultWidth,
             child: MixpanelButton(
               text: 'Create Alias',
               onPressed: () {
@@ -44,11 +44,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
               },
             ),
           ),
+          const SizedBox(height: 20),
           SizedBox(
-            height: 20,
-          ),
-          SizedBox(
-            width: MediaQuery.of(context).size.width * 0.65,
+            width: defaultWidth,
             child: MixpanelButton(
               text: 'Reset',
               onPressed: () {
@@ -56,11 +54,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
               },
             ),
           ),
+          const SizedBox(height: 20),
           SizedBox(
-            height: 20,
-          ),
-          SizedBox(
-            width: MediaQuery.of(context).size.width * 0.65,
+            width: defaultWidth,
             child: MixpanelButton(
               text: 'Set One Property',
               onPressed: () {
@@ -68,11 +64,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
               },
             ),
           ),
+          const SizedBox(height: 20),
           SizedBox(
-            height: 20,
-          ),
-          SizedBox(
-            width: MediaQuery.of(context).size.width * 0.65,
+            width: defaultWidth,
             child: MixpanelButton(
               text: 'Set Properties Once',
               onPressed: () {
@@ -80,11 +74,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
               },
             ),
           ),
+          const SizedBox(height: 20),
           SizedBox(
-            height: 20,
-          ),
-          SizedBox(
-            width: MediaQuery.of(context).size.width * 0.65,
+            width: defaultWidth,
             child: MixpanelButton(
               text: 'Unset Properties',
               onPressed: () {
@@ -92,11 +84,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
               },
             ),
           ),
+          const SizedBox(height: 20),
           SizedBox(
-            height: 20,
-          ),
-          SizedBox(
-            width: MediaQuery.of(context).size.width * 0.65,
+            width: defaultWidth,
             child: MixpanelButton(
               text: 'Increment Property',
               onPressed: () {
@@ -104,11 +94,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
               },
             ),
           ),
+          const SizedBox(height: 20),
           SizedBox(
-            height: 20,
-          ),
-          SizedBox(
-            width: MediaQuery.of(context).size.width * 0.65,
+            width: defaultWidth,
             child: MixpanelButton(
               text: 'Remove Property Value',
               onPressed: () {
@@ -116,11 +104,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
               },
             ),
           ),
+          const SizedBox(height: 20),
           SizedBox(
-            height: 20,
-          ),
-          SizedBox(
-            width: MediaQuery.of(context).size.width * 0.65,
+            width: defaultWidth,
             child: MixpanelButton(
               text: 'Append Properties',
               onPressed: () {
@@ -128,11 +114,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
               },
             ),
           ),
+          const SizedBox(height: 20),
           SizedBox(
-            height: 20,
-          ),
-          SizedBox(
-            width: MediaQuery.of(context).size.width * 0.65,
+            width: defaultWidth,
             child: MixpanelButton(
               text: 'Union Properties',
               onPressed: () {
@@ -140,11 +124,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
               },
             ),
           ),
+          const SizedBox(height: 20),
           SizedBox(
-            height: 20,
-          ),
-          SizedBox(
-            width: MediaQuery.of(context).size.width * 0.65,
+            width: defaultWidth,
             child: MixpanelButton(
               text: 'Track Charge w/o Properties',
               onPressed: () {
@@ -152,11 +134,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
               },
             ),
           ),
+          const SizedBox(height: 20),
           SizedBox(
-            height: 20,
-          ),
-          SizedBox(
-            width: MediaQuery.of(context).size.width * 0.65,
+            width: defaultWidth,
             child: MixpanelButton(
               text: 'Track Charge w Properties',
               onPressed: () {
@@ -166,11 +146,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
               },
             ),
           ),
+          const SizedBox(height: 20),
           SizedBox(
-            height: 20,
-          ),
-          SizedBox(
-            width: MediaQuery.of(context).size.width * 0.65,
+            width: defaultWidth,
             child: MixpanelButton(
               text: 'Clear Charges',
               onPressed: () {
@@ -178,11 +156,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
               },
             ),
           ),
+          const SizedBox(height: 20),
           SizedBox(
-            height: 20,
-          ),
-          SizedBox(
-            width: MediaQuery.of(context).size.width * 0.65,
+            width: defaultWidth,
             child: MixpanelButton(
               text: 'Delete User',
               onPressed: () {
@@ -190,11 +166,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
               },
             ),
           ),
+          const SizedBox(height: 20),
           SizedBox(
-            height: 20,
-          ),
-          SizedBox(
-            width: MediaQuery.of(context).size.width * 0.65,
+            width: defaultWidth,
             child: MixpanelButton(
               text: 'Flush',
               onPressed: () {
@@ -202,9 +176,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               },
             ),
           ),
-          SizedBox(
-            height: 40,
-          ),
+          const SizedBox(height: 40),
         ],
       )),
     );
