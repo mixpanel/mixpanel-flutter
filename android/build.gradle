@@ -24,7 +24,7 @@ apply plugin: 'com.android.library'
 
 android {
     if (project.android.hasProperty("namespace")) {
-        namespace("com.mixpanel.mixpanel_flutter") 
+        namespace("com.mixpanel.mixpanel_flutter")
     }
     compileSdkVersion 30
     buildToolsVersion '30.0.3'
@@ -38,5 +38,5 @@ android {
 }
 
 dependencies {
-    implementation "com.mixpanel.android:mixpanel-android:7.3.2"
+    implementation "com.mixpanel.android:mixpanel-android:7.5.0"
 }
