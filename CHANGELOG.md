@@ -1,5 +1,13 @@
 #
 
+## [v2.3.1](https://github.com/mixpanel/mixpanel-flutter/tree/v2.3.1) (2024-04-09)
+
+### Enhancements
+
+- bump iOS to 4.2.5 and Android to 7.5.0 [\#141](https://github.com/mixpanel/mixpanel-flutter/pull/141)
+
+#
+
 ## [v2.3.0](https://github.com/mixpanel/mixpanel-flutter/tree/v2.3.0) (2024-03-25)
 
 ### Enhancements
@@ -232,6 +240,8 @@ Please add the following snippet to your web/index.html inside <head></head> in 
     Report issues or give us any feedback is appreciated!
 * [integration guide](https://developer.mixpanel.com/docs/flutter)
 * [full API reference](https://mixpanel.github.io/mixpanel-flutter)
+
+
 
 
 
