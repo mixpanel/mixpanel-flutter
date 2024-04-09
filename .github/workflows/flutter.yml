@@ -50,7 +50,9 @@ jobs:
         run: flutter clean
       - name: Prep
         working-directory: example
-        run: flutter pub get && pod repo update
+        run: |
+          flutter pub get
+          pod repo update
       - name: Test iOS integration
         working-directory: example
         run: flutter build ios --debug --simulator --no-codesign
