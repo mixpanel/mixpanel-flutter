@@ -26,11 +26,11 @@ android {
     if (project.android.hasProperty("namespace")) {
         namespace("com.mixpanel.mixpanel_flutter")
     }
-    compileSdkVersion 30
-    buildToolsVersion '30.0.3'
+
+    compileSdk 34
 
     defaultConfig {
-        minSdkVersion 16
+        minSdk 16
     }
     lintOptions {
         disable 'InvalidPackage'
