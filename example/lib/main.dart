@@ -1,23 +1,38 @@
+import 'package:flutter/material.dart';
+import 'package:mixpanel_flutter_example/widget.dart';
+
 import 'event.dart';
 import 'gdpr.dart';
 import 'group.dart';
 import 'profile.dart';
-import 'package:flutter/material.dart';
-import 'package:mixpanel_flutter_example/widget.dart';
 
 // This is the main page only, check out the example app in https://github.com/mixpanel/mixpanel-flutter/tree/main/example
 void main() {
-  runApp(MaterialApp(
-    debugShowCheckedModeBanner: false,
-    initialRoute: '/',
-    routes: {
-      '/': (context) => FirstScreen(),
-      '/event': (context) => EventScreen(),
-      '/profile': (context) => ProfileScreen(),
-      '/gdpr': (context) => GDPRScreen(),
-      '/group': (context) => GroupScreen(),
-    },
-  ));
+  runApp(MyApp());
+}
+
+class MyApp extends StatefulWidget {
+  const MyApp();
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      initialRoute: '/',
+      routes: {
+        '/': (context) => FirstScreen(),
+        '/event': (context) => EventScreen(),
+        '/profile': (context) => ProfileScreen(),
+        '/gdpr': (context) => GDPRScreen(),
+        '/group': (context) => GroupScreen(),
+      },
+    );
+  }
 }
 
 class FirstScreen extends StatelessWidget {
