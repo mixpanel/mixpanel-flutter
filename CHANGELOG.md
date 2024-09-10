@@ -1,5 +1,16 @@
 #
 
+## [v2.3.2](https://github.com/mixpanel/mixpanel-flutter/tree/v2.3.2) (2024-09-10)
+
+### Enhancements
+
+- upgrade iOS SDK to 4.3.0 [\#162](https://github.com/mixpanel/mixpanel-flutter/pull/162)
+- Upgrade minSDK to 23 [\#161](https://github.com/mixpanel/mixpanel-flutter/pull/161)
+- Fix: Resolve compilation issues in SDK and main.dart [\#160](https://github.com/mixpanel/mixpanel-flutter/pull/160)
+- Lower js constraint to allow 0.6.x [\#142](https://github.com/mixpanel/mixpanel-flutter/pull/142)
+
+#
+
 ## [v2.3.1](https://github.com/mixpanel/mixpanel-flutter/tree/v2.3.1) (2024-04-09)
 
 ### Enhancements
@@ -240,6 +251,8 @@ Please add the following snippet to your web/index.html inside <head></head> in 
     Report issues or give us any feedback is appreciated!
 * [integration guide](https://developer.mixpanel.com/docs/flutter)
 * [full API reference](https://mixpanel.github.io/mixpanel-flutter)
+
+
 
 
 
