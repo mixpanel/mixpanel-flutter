@@ -5,11 +5,11 @@ buildscript {
     repositories {
         google()
         mavenCentral()
-
     }
 
     dependencies {
-        classpath 'com.android.tools.build:gradle:8.1.4'
+        // Use a compatible version of Gradle Plugin
+        classpath 'com.android.tools.build:gradle:8.1.0' // Updated to 8.1.0
     }
 }
 
@@ -23,20 +23,29 @@ rootProject.allprojects {
 apply plugin: 'com.android.library'
 
 android {
-    if (project.android.hasProperty("namespace")) {
-        namespace("com.mixpanel.mixpanel_flutter")
+    // Safely handle 'namespace' property for new Android Gradle plugin versions
+    if (project.hasProperty("android") && project.android.hasProperty("namespace")) {
+        namespace = "com.mixpanel.mixpanel_flutter"
     }
-    compileSdkVersion 30
-    buildToolsVersion '30.0.3'
+
+    compileSdkVersion 34
+    buildToolsVersion '34.0.0'
 
     defaultConfig {
-        minSdkVersion 16
+        minSdkVersion 21
     }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
     lintOptions {
         disable 'InvalidPackage'
     }
 }
 
 dependencies {
+    // Use the Mixpanel Android SDK
     implementation "com.mixpanel.android:mixpanel-android:7.5.0"
 }
