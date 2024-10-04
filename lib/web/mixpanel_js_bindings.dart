@@ -46,7 +46,8 @@ external void alias(String alias, String distinctId);
 external void track(String name, JSAny? properties);
 
 @JS('mixpanel.track_with_groups')
-external void track_with_groups(String event_name, JSAny? properties, JSAny? groups);
+external void track_with_groups(
+    String event_name, JSAny? properties, JSAny? groups);
 
 @JS('mixpanel.set_group')
 external void set_group(String group_key, JSAny? group_ids);

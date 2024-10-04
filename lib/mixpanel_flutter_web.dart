@@ -348,8 +348,7 @@ class MixpanelFlutterPlugin {
     dynamic value = args['value'];
     get_group(groupKey,
             (groupID is Map || groupID is List) ? groupID.jsify() : groupID)
-        .remove(
-            name, (value is Map || value is List) ? value.jsify() : value);
+        .remove(name, (value is Map || value is List) ? value.jsify() : value);
   }
 
   void handleGroupUnion(MethodCall call) {
