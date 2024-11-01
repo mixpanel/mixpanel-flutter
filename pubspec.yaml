@@ -15,7 +15,6 @@ dependencies:
     sdk: flutter
   flutter_web_plugins:
     sdk: flutter
-  js_interop: ^0.0.1
 
 dev_dependencies:
   flutter_test:
