@@ -1,5 +1,10 @@
 #
 
+## v2.4.0
+- Remove Flutter V1 embedding reference
+
+#
+
 ## [v2.3.3](https://github.com/mixpanel/mixpanel-flutter/tree/v2.3.3) (2024-09-25)
 
 ### Fixes
