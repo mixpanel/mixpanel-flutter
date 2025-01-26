@@ -1,5 +1,9 @@
 #
 
+## [v2.4.0](https://github.com/mixpanel/mixpanel-flutter/tree/v2.4.0) (2025-01-25)
+
+- Added WASM support 
+
 ## [v2.3.3](https://github.com/mixpanel/mixpanel-flutter/tree/v2.3.3) (2024-09-25)
 
 ### Fixes
