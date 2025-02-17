@@ -23,8 +23,8 @@ public class MixpanelFlutterHelper {
     }
 
     static public Map<String, Object> toMap(JSONObject object) throws JSONException {
-        Map<String, Object> map = new HashMap();
-        Iterator keys = object.keys();
+        Map<String, Object> map = new HashMap<>();
+        Iterator<String> keys = object.keys();
         while (keys.hasNext()) {
             String key = (String) keys.next();
             map.put(key, fromJson(object.get(key)));
@@ -32,8 +32,8 @@ public class MixpanelFlutterHelper {
         return map;
     }
 
-    static public List toList(JSONArray array) throws JSONException {
-        List list = new ArrayList();
+    static public List<Object> toList(JSONArray array) throws JSONException {
+        List<Object> list = new ArrayList();
         for (int i = 0; i < array.length(); i++) {
             list.add(fromJson(array.get(i)));
         }
