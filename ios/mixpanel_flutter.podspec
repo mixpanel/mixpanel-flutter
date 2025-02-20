@@ -4,7 +4,7 @@
 #
 Pod::Spec.new do |s|
   s.name             = 'mixpanel_flutter'
-  s.version          = '2.3.3'
+  s.version          = '2.3.4'
   s.summary          = 'Official Flutter Tracking Library for Mixpanel Analytics'
   s.homepage         = 'https://www.mixpanel.com'
   s.license          = { :file => '../LICENSE' }
