@@ -1,110 +1,110 @@
+import 'dart:js_interop';
+
 @JS('mixpanel')
-library mixpaneljs;
+@staticInterop
+class Mixpanel {}
 
-import 'package:js/js.dart';
+@JS('MixpanelGroup')
+@staticInterop
+class MixpanelGroup {}
 
-@JS('init')
-external void init(String token, Object? config);
-
-@JS('set_config')
-external void set_config(Object config);
-
-@JS('has_opted_out_tracking')
-external bool has_opted_out_tracking();
-
-@JS('opt_in_tracking')
-external void opt_in_tracking();
-
-@JS('opt_out_tracking')
-external void opt_out_tracking();
-
-@JS('identify')
-external void identify(String distinctId);
-
-@JS('alias')
-external void alias(String alias, String distinctId);
-
-@JS('track')
-external void track(String name, Object? properties);
-
-@JS('track_with_groups')
-external void track_with_groups(
-    String event_name, Object properties, Object groups);
-
-@JS('set_group')
-external void set_group(String group_key, Object group_ids);
-
-@JS('add_group')
-external void add_group(String group_key, Object group_id);
-
-@JS('remove_group')
-external void remove_group(String group_key, Object group_id);
-
-@JS('get_group')
-external MixpanelGroup get_group(String group_key, Object group_id);
-
-@JS('register')
-external void register(Object properties);
-
-@JS('register_once')
-external void register_once(Object properties);
-
-@JS('unregister')
-external void unregister(String property);
-
-@JS('time_event')
-external void time_event(String event_name);
-
-@JS('reset')
-external void reset();
-
-@JS('get_distinct_id')
-external String get_distinct_id();
-
-@JS('people.set')
-external void people_set(Object properties);
-
-@JS('people.set_once')
-external void people_set_once(Object properties);
-
-@JS('people.increment')
-external void people_increment(Object properties);
-
-@JS('people.append')
-external void people_append(Object properties);
-
-@JS('people.union')
-external void people_union(Object properties);
-
-@JS('people.remove')
-external void people_remove(Object properties);
-
-@JS('people.unset')
-external void people_unset(Object properties);
-
-@JS('people.track_charge')
-external void people_track_charge(double amount, Object? properties);
-
-@JS('people.clear_charge')
-external void people_clear_charge();
-
-@JS('people.delete_users')
-external void people_delete_users();
-
-@JS()
-class MixpanelGroup {
-  @JS('group.set')
-  external void set(Object properties);
+extension MixpanelGroupMethods on MixpanelGroup {
+  external void set(JSAny? properties);
 
   @JS('group.set_once')
-  external void set_once(String prop, Object to);
+  external void set_once(String prop, JSAny? to);
 
-  @JS('group.unset')
   external void unset(String prop);
 
-  @JS('group.remove')
-  external void remove(String name, Object value);
+  external void remove(String name, JSAny? value);
 
-  @JS('group.union')
-  external void union(String name, List<dynamic> values);
+  external void union(String name, JSArray values);
 }
+
+@JS('mixpanel.init')
+external void init(String token, JSAny? config);
+
+@JS('mixpanel.set_config')
+external void set_config(JSAny? config);
+
+@JS('mixpanel.has_opted_out_tracking')
+external bool has_opted_out_tracking();
+
+@JS('mixpanel.opt_in_tracking')
+external void opt_in_tracking();
+
+@JS('mixpanel.opt_out_tracking')
+external void opt_out_tracking();
+
+@JS('mixpanel.identify')
+external void identify(String distinctId);
+
+@JS('mixpanel.alias')
+external void alias(String alias, String distinctId);
+
+@JS('mixpanel.track')
+external void track(String name, JSAny? properties);
+
+@JS('mixpanel.track_with_groups')
+external void track_with_groups(
+    String event_name, JSAny? properties, JSAny? groups);
+
+@JS('mixpanel.set_group')
+external void set_group(String group_key, JSAny? group_ids);
+
+@JS('mixpanel.add_group')
+external void add_group(String group_key, JSAny? group_id);
+
+@JS('mixpanel.remove_group')
+external void remove_group(String group_key, JSAny? group_id);
+
+@JS('mixpanel.get_group')
+external MixpanelGroup get_group(String group_key, JSAny? group_id);
+
+@JS('mixpanel.register')
+external void register(JSAny? properties);
+
+@JS('mixpanel.register_once')
+external void register_once(JSAny? properties);
+
+@JS('mixpanel.unregister')
+external void unregister(String property);
+
+@JS('mixpanel.time_event')
+external void time_event(String event_name);
+
+@JS('mixpanel.reset')
+external void reset();
+
+@JS('mixpanel.get_distinct_id')
+external String get_distinct_id();
+
+@JS('mixpanel.people.set')
+external void people_set(JSAny? properties);
+
+@JS('mixpanel.people.set_once')
+external void people_set_once(JSAny? properties);
+
+@JS('mixpanel.people.increment')
+external void people_increment(JSAny? properties);
+
+@JS('mixpanel.people.append')
+external void people_append(JSAny? properties);
+
+@JS('mixpanel.people.union')
+external void people_union(JSAny? properties);
+
+@JS('mixpanel.people.remove')
+external void people_remove(JSAny? properties);
+
+@JS('mixpanel.people.unset')
+external void people_unset(JSAny? properties);
+
+@JS('mixpanel.people.track_charge')
+external void people_track_charge(double amount, JSAny? properties);
+
+@JS('mixpanel.people.clear_charge')
+external void people_clear_charge();
+
+@JS('mixpanel.people.delete_users')
+external void people_delete_users();

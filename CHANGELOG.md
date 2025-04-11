@@ -1,5 +1,13 @@
 #
 
+## [v2.3.4](https://github.com/mixpanel/mixpanel-flutter/tree/v2.3.4) (2025-02-20)
+
+### Fixes
+
+- Remove unused PluginRegistry dependency [\#182](https://github.com/mixpanel/mixpanel-flutter/pull/182)
+
+#
+
 ## [v2.3.3](https://github.com/mixpanel/mixpanel-flutter/tree/v2.3.3) (2024-09-25)
 
 ### Fixes
@@ -260,6 +268,8 @@ Please add the following snippet to your web/index.html inside <head></head> in 
     Report issues or give us any feedback is appreciated!
 * [integration guide](https://developer.mixpanel.com/docs/flutter)
 * [full API reference](https://mixpanel.github.io/mixpanel-flutter)
+
+
 
 
 
