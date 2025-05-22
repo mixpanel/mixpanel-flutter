@@ -31,6 +31,7 @@ public class MixpanelFlutterPlugin implements FlutterPlugin, MethodCallHandler {
     private MixpanelAPI mixpanel;
     private Context context;
     private JSONObject mixpanelProperties;
+    private FlutterPluginBinding flutterPluginBinding;
 
     private static final Map<String, Object> EMPTY_HASHMAP = new HashMap<>();
 
@@ -43,10 +44,9 @@ public class MixpanelFlutterPlugin implements FlutterPlugin, MethodCallHandler {
 
     @Override
     public void onAttachedToEngine(@NonNull FlutterPluginBinding flutterPluginBinding) {
-        channel = new MethodChannel(flutterPluginBinding.getBinaryMessenger(), "mixpanel_flutter",
-                new StandardMethodCodec(new MixpanelMessageCodec()));
-        context = flutterPluginBinding.getApplicationContext();
-        channel.setMethodCallHandler(this);
+        // Store references for lazy initialization to avoid ANR during plugin registration
+        this.flutterPluginBinding = flutterPluginBinding;
+        this.context = flutterPluginBinding.getApplicationContext();
     }
 
     @Override
@@ -181,6 +181,13 @@ public class MixpanelFlutterPlugin implements FlutterPlugin, MethodCallHandler {
     }
 
     private void handleInitialize(MethodCall call, Result result) {
+        // Lazy initialization of MethodChannel to avoid ANR
+        if (channel == null && flutterPluginBinding != null) {
+            channel = new MethodChannel(flutterPluginBinding.getBinaryMessenger(), "mixpanel_flutter",
+                    new StandardMethodCodec(new MixpanelMessageCodec()));
+            channel.setMethodCallHandler(this);
+        }
+        
         final String token = call.argument("token");
         if (token == null) {
             throw new RuntimeException("Your Mixpanel Token was not set");
@@ -519,6 +526,10 @@ public class MixpanelFlutterPlugin implements FlutterPlugin, MethodCallHandler {
 
     @Override
     public void onDetachedFromEngine(@NonNull FlutterPluginBinding binding) {
-        channel.setMethodCallHandler(null);
+        if (channel != null) {
+            channel.setMethodCallHandler(null);
+            channel = null;
+        }
+        flutterPluginBinding = null;
     }
 }
