@@ -18,6 +18,7 @@ import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import io.flutter.embedding.engine.plugins.FlutterPlugin;
 import io.flutter.plugin.common.MethodCall;
@@ -36,9 +37,11 @@ public class MixpanelFlutterPlugin implements FlutterPlugin, MethodCallHandler {
     private MixpanelAPI mixpanel;
     private Context context;
     private JSONObject mixpanelProperties;
+    private static final AtomicInteger threadCounter = new AtomicInteger(0);
     private final ExecutorService executorService = Executors.newSingleThreadExecutor(runnable -> {
         Thread thread = new Thread(runnable);
-        thread.setName("MixpanelExecutor-" + thread.getId());
+        thread.setName("MixpanelExecutor-" + threadCounter.incrementAndGet());
+        thread.setDaemon(true);
         return thread;
     });
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
