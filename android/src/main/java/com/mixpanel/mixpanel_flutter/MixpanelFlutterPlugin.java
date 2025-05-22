@@ -17,6 +17,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import io.flutter.embedding.engine.plugins.FlutterPlugin;
 import io.flutter.plugin.common.MethodCall;
@@ -35,7 +36,11 @@ public class MixpanelFlutterPlugin implements FlutterPlugin, MethodCallHandler {
     private MixpanelAPI mixpanel;
     private Context context;
     private JSONObject mixpanelProperties;
-    private final ExecutorService executorService = Executors.newSingleThreadExecutor();
+    private final ExecutorService executorService = Executors.newSingleThreadExecutor(runnable -> {
+        Thread thread = new Thread(runnable);
+        thread.setName("MixpanelExecutor-" + thread.getId());
+        return thread;
+    });
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
     private static final Map<String, Object> EMPTY_HASHMAP = new HashMap<>();
@@ -540,5 +545,13 @@ public class MixpanelFlutterPlugin implements FlutterPlugin, MethodCallHandler {
     public void onDetachedFromEngine(@NonNull FlutterPluginBinding binding) {
         channel.setMethodCallHandler(null);
         executorService.shutdown();
+        try {
+            if (!executorService.awaitTermination(60, TimeUnit.SECONDS)) {
+                executorService.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            executorService.shutdownNow();
+            Thread.currentThread().interrupt();
+        }
     }
 }
