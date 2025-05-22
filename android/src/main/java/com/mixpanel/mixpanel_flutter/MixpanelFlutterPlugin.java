@@ -531,5 +531,6 @@ public class MixpanelFlutterPlugin implements FlutterPlugin, MethodCallHandler {
             channel = null;
         }
         flutterPluginBinding = null;
+        context = null;
     }
 }
