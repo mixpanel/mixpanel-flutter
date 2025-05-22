@@ -3,6 +3,8 @@ package com.mixpanel.mixpanel_flutter;
 import androidx.annotation.NonNull;
 
 import android.content.Context;
+import android.os.Handler;
+import android.os.Looper;
 
 import io.flutter.plugin.common.StandardMethodCodec;
 
@@ -13,6 +15,8 @@ import org.json.JSONObject;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import io.flutter.embedding.engine.plugins.FlutterPlugin;
 import io.flutter.plugin.common.MethodCall;
@@ -31,6 +35,8 @@ public class MixpanelFlutterPlugin implements FlutterPlugin, MethodCallHandler {
     private MixpanelAPI mixpanel;
     private Context context;
     private JSONObject mixpanelProperties;
+    private final ExecutorService executorService = Executors.newSingleThreadExecutor();
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
     private static final Map<String, Object> EMPTY_HASHMAP = new HashMap<>();
 
@@ -205,11 +211,24 @@ public class MixpanelFlutterPlugin implements FlutterPlugin, MethodCallHandler {
         Boolean optOutTrackingDefault = call.<Boolean>argument("optOutTrackingDefault");
         Boolean trackAutomaticEvents = call.<Boolean>argument("trackAutomaticEvents");
 
-        mixpanel = MixpanelAPI.getInstance(context, token,
-                optOutTrackingDefault == null ? false : optOutTrackingDefault,
-                superAndMixpanelProperties, null, trackAutomaticEvents);
-
-        result.success(Integer.toString(mixpanel.hashCode()));
+        // Move Mixpanel initialization to background thread to avoid ANR
+        final JSONObject finalSuperAndMixpanelProperties = superAndMixpanelProperties;
+        executorService.execute(() -> {
+            try {
+                mixpanel = MixpanelAPI.getInstance(context, token,
+                        optOutTrackingDefault == null ? false : optOutTrackingDefault,
+                        finalSuperAndMixpanelProperties, null, trackAutomaticEvents);
+                
+                // Return result on main thread
+                mainHandler.post(() -> {
+                    result.success(Integer.toString(mixpanel.hashCode()));
+                });
+            } catch (Exception e) {
+                mainHandler.post(() -> {
+                    result.error("MixpanelFlutterException", "Failed to initialize Mixpanel: " + e.getMessage(), null);
+                });
+            }
+        });
     }
 
     private void handleSetServerURL(MethodCall call, Result result) {
@@ -520,5 +539,6 @@ public class MixpanelFlutterPlugin implements FlutterPlugin, MethodCallHandler {
     @Override
     public void onDetachedFromEngine(@NonNull FlutterPluginBinding binding) {
         channel.setMethodCallHandler(null);
+        executorService.shutdown();
     }
 }
