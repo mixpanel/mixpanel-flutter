@@ -147,6 +147,7 @@ No worries, here are some links that you will find useful:
 
 - **[Sample app](https://github.com/mixpanel/mixpanel-flutter/tree/main/example)**
 - **[Full API Reference](https://developer.mixpanel.com/docs/flutter)**
-  [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/mixpanel/mixpanel-flutter)
+
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/mixpanel/mixpanel-flutter)
 
 Have any questions? Reach out to Mixpanel [Support](https://help.mixpanel.com/hc/en-us/requests/new) to speak to someone smart, quickly.
