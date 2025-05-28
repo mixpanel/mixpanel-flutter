@@ -5,6 +5,24 @@ import 'package:flutter/services.dart';
 import 'package:flutter_web_plugins/flutter_web_plugins.dart';
 import 'package:mixpanel_flutter/web/mixpanel_js_bindings.dart';
 
+JSAny? safeJsify(dynamic value) {
+    if (value is Map) {
+      return value.jsify();
+    } else if (value is List) {
+      return value.jsify();
+    } else if (value is DateTime) {
+      return value.jsify();
+    } else if (value is bool) {
+      return value.toJS;
+    } else if (value is num) {
+      return value.toJS;
+    } else if (value is String) {
+      return value.toJS;
+    } else {
+      return value;
+    }
+  }
+
 /// A web implementation of the MixpanelFlutter plugin.
 class MixpanelFlutterPlugin {
   static Map<String, String> _mixpanelProperties = {
@@ -138,13 +156,13 @@ class MixpanelFlutterPlugin {
     Map<Object?, Object?> args = call.arguments as Map<Object?, Object?>;
     String token = args['token'] as String;
     dynamic config = args['config'];
-    init(token, config?.jsify() ?? {});
+    init(token, safeJsify(config) ?? <String, dynamic>{}.jsify());
   }
 
   void handleSetServerURL(MethodCall call) {
     Map<Object?, Object?> args = call.arguments as Map<Object?, Object?>;
     String serverURL = args['serverURL'] as String;
-    set_config({'api_host': serverURL}.jsify());
+    set_config(safeJsify({'api_host': serverURL}));
   }
 
   void handleTrack(MethodCall call) {
@@ -155,7 +173,7 @@ class MixpanelFlutterPlugin {
       ..._mixpanelProperties,
       ...(properties ?? {})
     };
-    track(eventName, props.jsify());
+    track(eventName, safeJsify(props));
   }
 
   void handleAlias(MethodCall call) {
@@ -180,7 +198,7 @@ class MixpanelFlutterPlugin {
       ...(properties ?? {})
     };
     dynamic groups = args["groups"];
-    track_with_groups(eventName, props.jsify(), groups.jsify());
+    track_with_groups(eventName, safeJsify(props), safeJsify(groups));
   }
 
   void handleSetGroup(MethodCall call) {
@@ -188,8 +206,7 @@ class MixpanelFlutterPlugin {
     String groupKey = args['groupKey'] as String;
     dynamic groupID = args["groupID"];
     if (groupID != null) {
-      set_group(groupKey,
-          (groupID is Map || groupID is List) ? groupID.jsify() : groupID);
+      set_group(groupKey, safeJsify(groupID));
     }
   }
 
@@ -199,8 +216,7 @@ class MixpanelFlutterPlugin {
     dynamic groupID = args["groupID"];
 
     if (groupID != null) {
-      add_group(groupKey,
-          (groupID is Map || groupID is List) ? groupID.jsify() : groupID);
+      add_group(groupKey, safeJsify(groupID));
     }
   }
 
@@ -209,21 +225,20 @@ class MixpanelFlutterPlugin {
     String groupKey = args['groupKey'] as String;
     dynamic groupID = args["groupID"];
     if (groupID != null) {
-      remove_group(groupKey,
-          (groupID is Map || groupID is List) ? groupID.jsify() : groupID);
+      remove_group(groupKey, safeJsify(groupID));
     }
   }
 
   void handleRegisterSuperProperties(MethodCall call) {
     Map<Object?, Object?> args = call.arguments as Map<Object?, Object?>;
     dynamic properties = args['properties'];
-    register(properties.jsify());
+    register(safeJsify(properties));
   }
 
   void handleRegisterSuperPropertiesOnce(MethodCall call) {
     Map<Object?, Object?> args = call.arguments as Map<Object?, Object?>;
     dynamic properties = args['properties'];
-    register_once(properties.jsify());
+    register_once(safeJsify(properties));
   }
 
   void handleUnregisterSuperProperty(MethodCall call) {
@@ -250,51 +265,51 @@ class MixpanelFlutterPlugin {
     Map<Object?, Object?> args = call.arguments as Map<Object?, Object?>;
     dynamic properties = args['properties'];
     Map<String, dynamic> props = {..._mixpanelProperties, ...properties};
-    people_set(props.jsify());
+    people_set(safeJsify(props));
   }
 
   void handleSetOnce(MethodCall call) {
     Map<Object?, Object?> args = call.arguments as Map<Object?, Object?>;
     dynamic properties = args['properties'];
     Map<String, dynamic> props = {..._mixpanelProperties, ...properties};
-    people_set_once(props.jsify());
+    people_set_once(safeJsify(props));
   }
 
   void handlePeopleIncrement(MethodCall call) {
     Map<Object?, Object?> args = call.arguments as Map<Object?, Object?>;
     dynamic properties = args['properties'];
-    people_increment(properties.jsify());
+    people_increment(safeJsify(properties));
   }
 
   void handlePeopleAppend(MethodCall call) {
     Map<Object?, Object?> args = call.arguments as Map<Object?, Object?>;
     dynamic properties = args['properties'];
-    people_append(properties.jsify());
+    people_append(safeJsify(properties));
   }
 
   void handlePeopleUnion(MethodCall call) {
     Map<Object?, Object?> args = call.arguments as Map<Object?, Object?>;
     dynamic properties = args['properties'];
-    people_union(properties.jsify());
+    people_union(safeJsify(properties));
   }
 
   void handlePeopleRemove(MethodCall call) {
     Map<Object?, Object?> args = call.arguments as Map<Object?, Object?>;
     dynamic properties = args['properties'];
-    people_remove(properties.jsify());
+    people_remove(safeJsify(properties));
   }
 
   void handlePeopleUnset(MethodCall call) {
     Map<Object?, Object?> args = call.arguments as Map<Object?, Object?>;
     dynamic properties = args['properties'];
-    people_unset(properties.jsify());
+    people_unset(safeJsify(properties));
   }
 
   void handleTrackCharge(MethodCall call) {
     Map<Object?, Object?> args = call.arguments as Map<Object?, Object?>;
     dynamic properties = args['properties'];
     double amount = args['amount'] as double;
-    people_track_charge(amount, properties?.jsify() ?? {});
+    people_track_charge(amount, safeJsify(properties) ?? <String, dynamic>{}.jsify());
   }
 
   void handleClearCharge() {
@@ -311,9 +326,8 @@ class MixpanelFlutterPlugin {
     dynamic groupID = args['groupID'];
 
     dynamic properties = args['properties'];
-    get_group(groupKey,
-            (groupID is Map || groupID is List) ? groupID.jsify() : groupID)
-        .set(properties.jsify());
+    get_group(groupKey, safeJsify(groupID))
+        .set(safeJsify(properties));
   }
 
   void handleGroupSetPropertyOnce(MethodCall call) {
@@ -323,8 +337,7 @@ class MixpanelFlutterPlugin {
 
     dynamic properties = args['properties'];
 
-    get_group(groupKey,
-            (groupID is Map || groupID is List) ? groupID.jsify() : groupID)
+    get_group(groupKey, safeJsify(groupID))
         .set_once(properties.keys.first, properties[properties.keys.first]);
   }
 
@@ -334,8 +347,7 @@ class MixpanelFlutterPlugin {
     dynamic groupID = args['groupID'];
 
     String propertyName = args['propertyName'] as String;
-    get_group(groupKey,
-            (groupID is Map || groupID is List) ? groupID.jsify() : groupID)
+    get_group(groupKey, safeJsify(groupID))
         .unset(propertyName);
   }
 
@@ -346,9 +358,8 @@ class MixpanelFlutterPlugin {
 
     String name = args['name'] as String;
     dynamic value = args['value'];
-    get_group(groupKey,
-            (groupID is Map || groupID is List) ? groupID.jsify() : groupID)
-        .remove(name, (value is Map || value is List) ? value.jsify() : value);
+    get_group(groupKey, safeJsify(groupID))
+        .remove(name, safeJsify(value));
   }
 
   void handleGroupUnion(MethodCall call) {
@@ -357,10 +368,9 @@ class MixpanelFlutterPlugin {
     dynamic groupID = args['groupID'];
 
     String name = args['name'] as String;
-    dynamic value = args['value'] as dynamic;
-    get_group(groupKey,
-            (groupID is Map || groupID is List) ? groupID.jsify() : groupID)
-        .union(name, value.jsify());
+    JSAny? value = safeJsify(args['value'] as dynamic);
+    get_group(groupKey, safeJsify(groupID))
+        .union(name, value is JSArray ? value : <JSAny>[].toJS);
   }
 
   bool handleHasOptedOutTracking() {
