@@ -180,13 +180,17 @@ public class MixpanelFlutterPlugin implements FlutterPlugin, MethodCallHandler {
         }
     }
 
-    private void handleInitialize(MethodCall call, Result result) {
-        // Lazy initialization of MethodChannel to avoid ANR
+    private void initializeMethodChannel() {
         if (channel == null && flutterPluginBinding != null) {
             channel = new MethodChannel(flutterPluginBinding.getBinaryMessenger(), "mixpanel_flutter",
                     new StandardMethodCodec(new MixpanelMessageCodec()));
             channel.setMethodCallHandler(this);
         }
+    }
+
+    private void handleInitialize(MethodCall call, Result result) {
+        // Lazy initialization of MethodChannel to avoid ANR
+        initializeMethodChannel();
         
         final String token = call.argument("token");
         if (token == null) {
