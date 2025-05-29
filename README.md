@@ -100,7 +100,7 @@ mixpanel.track('Sent Message');
 mixpanel.track('Plan Selected', properties: {'Plan': 'Premium'});
 ```
 
-You're done! You've successfully integrated the Mixpanel Flutter SDK into your app. To stay up to speed on important SDK releases and updates, star or watch our repository on [Github](https://github.com/mixpanel/mixpanel-flutter).
+You're done! You've successfully integrated the Mixpanel Flutter SDK into your app. To stay up to speed on important SDK releases and updates, star or watch our repository on [GitHub](https://github.com/mixpanel/mixpanel-flutter).
 
 ## 4. Check for Success
 
