@@ -33,7 +33,7 @@ public class MixpanelFlutterHelper {
     }
 
     static public List<Object> toList(JSONArray array) throws JSONException {
-        List<Object> list = new ArrayList();
+        List<Object> list = new ArrayList<>();
         for (int i = 0; i < array.length(); i++) {
             list.add(fromJson(array.get(i)));
         }
