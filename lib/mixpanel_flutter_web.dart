@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:js_interop';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_web_plugins/flutter_web_plugins.dart';
 import 'package:mixpanel_flutter/web/mixpanel_js_bindings.dart';
@@ -58,8 +59,8 @@ JSAny? safeJsify(dynamic value) {
     } else if (value is String) {
       return value.toJS;
     } else {
-      print('[Mixpanel] Warning: Unsupported type for JS conversion: ${value.runtimeType}. '
-            'Value will be ignored. Supported types are: Map, List, DateTime, bool, num, String, JSAny, and null.');
+      debugPrint('[Mixpanel] Warning: Unsupported type for JS conversion: ${value.runtimeType}. '
+                 'Value will be ignored. Supported types are: Map, List, DateTime, bool, num, String, JSAny, and null.');
       return null;
     }
   }
