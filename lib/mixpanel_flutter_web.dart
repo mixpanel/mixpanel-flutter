@@ -18,7 +18,7 @@ import 'package:mixpanel_flutter/web/mixpanel_js_bindings.dart';
 /// - `bool` - Converted using `.toJS` to a JavaScript boolean
 /// - `num` (int/double) - Converted using `.toJS` to a JavaScript number
 /// - `String` - Converted using `.toJS` to a JavaScript string
-/// - Any other type - Returned as-is without conversion
+/// - Any other type - Logs a warning and returns null to prevent JS interop issues
 ///
 /// **Return value:**
 /// Returns a `JSAny?` which represents the JavaScript-compatible value.
@@ -58,7 +58,9 @@ JSAny? safeJsify(dynamic value) {
     } else if (value is String) {
       return value.toJS;
     } else {
-      return value;
+      print('[Mixpanel] Warning: Unsupported type for JS conversion: ${value.runtimeType}. '
+            'Value will be ignored. Supported types are: Map, List, DateTime, bool, num, String, JSAny, and null.');
+      return null;
     }
   }
 
@@ -409,7 +411,7 @@ class MixpanelFlutterPlugin {
     String name = args['name'] as String;
     JSAny? value = safeJsify(args['value'] as dynamic);
     get_group(groupKey, safeJsify(groupID))
-        .union(name, value is JSArray ? value : safeJsify(<dynamic>[]) as JSArray);
+        .union(name, value is JSArray ? value : <JSAny>[].toJS);
   }
 
   bool handleHasOptedOutTracking() {
