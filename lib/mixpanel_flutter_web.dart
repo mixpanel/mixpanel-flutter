@@ -195,7 +195,7 @@ class MixpanelFlutterPlugin {
     Map<Object?, Object?> args = call.arguments as Map<Object?, Object?>;
     String token = args['token'] as String;
     dynamic config = args['config'];
-    init(token, safeJsify(config) ?? <String, dynamic>{}.jsify());
+    init(token, safeJsify(config ?? <String, dynamic>{}));
   }
 
   void handleSetServerURL(MethodCall call) {
@@ -348,7 +348,7 @@ class MixpanelFlutterPlugin {
     Map<Object?, Object?> args = call.arguments as Map<Object?, Object?>;
     dynamic properties = args['properties'];
     double amount = args['amount'] as double;
-    people_track_charge(amount, safeJsify(properties) ?? <String, dynamic>{}.jsify());
+    people_track_charge(amount, safeJsify(properties ?? <String, dynamic>{}));
   }
 
   void handleClearCharge() {
@@ -409,7 +409,7 @@ class MixpanelFlutterPlugin {
     String name = args['name'] as String;
     JSAny? value = safeJsify(args['value'] as dynamic);
     get_group(groupKey, safeJsify(groupID))
-        .union(name, value is JSArray ? value : <JSAny>[].toJS);
+        .union(name, value is JSArray ? value : safeJsify(<dynamic>[]) as JSArray);
   }
 
   bool handleHasOptedOutTracking() {
