@@ -1,5 +1,18 @@
 #
 
+## [v2.4.2](https://github.com/mixpanel/mixpanel-flutter/tree/v2.4.2) (2025-05-30)
+
+### Enhancements
+
+- Bump native libraries to Swift 5.1.0 and Android 8.2.0 [\#194](https://github.com/mixpanel/mixpanel-flutter/pull/194)
+
+### Fixes
+
+- fix: .jsify\(\) error polluting console logs [\#193](https://github.com/mixpanel/mixpanel-flutter/pull/193)
+- Defer MixpanelFlutterPlugin registration and initialization to prevent ANRs [\#191](https://github.com/mixpanel/mixpanel-flutter/pull/191)
+
+#
+
 ## [v2.4.1](https://github.com/mixpanel/mixpanel-flutter/tree/v2.4.1) (2025-04-24)
 
 ### Fixes
@@ -286,6 +299,8 @@ Please add the following snippet to your web/index.html inside <head></head> in 
     Report issues or give us any feedback is appreciated!
 * [integration guide](https://developer.mixpanel.com/docs/flutter)
 * [full API reference](https://mixpanel.github.io/mixpanel-flutter)
+
+
 
 
 
