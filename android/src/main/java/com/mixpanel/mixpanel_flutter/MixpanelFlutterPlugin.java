@@ -47,6 +47,8 @@ public class MixpanelFlutterPlugin implements FlutterPlugin, MethodCallHandler {
         // Store references for lazy initialization to avoid ANR during plugin registration
         this.flutterPluginBinding = flutterPluginBinding;
         this.context = flutterPluginBinding.getApplicationContext();
+
+        initializeMethodChannel();
     }
 
     @Override
@@ -189,9 +191,6 @@ public class MixpanelFlutterPlugin implements FlutterPlugin, MethodCallHandler {
     }
 
     private void handleInitialize(MethodCall call, Result result) {
-        // Lazy initialization of MethodChannel to avoid ANR
-        initializeMethodChannel();
-        
         final String token = call.argument("token");
         if (token == null) {
             throw new RuntimeException("Your Mixpanel Token was not set");
