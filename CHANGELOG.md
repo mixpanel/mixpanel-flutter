@@ -1,5 +1,13 @@
 #
 
+## [v2.4.3](https://github.com/mixpanel/mixpanel-flutter/tree/v2.4.3) (2025-05-30)
+
+### Fixes
+
+- Move Mixpanel Android Method Channel Initialization back to onAttachedToEngine [\#196](https://github.com/mixpanel/mixpanel-flutter/pull/196)
+
+#
+
 ## [v2.4.2](https://github.com/mixpanel/mixpanel-flutter/tree/v2.4.2) (2025-05-30)
 
 ### Enhancements
@@ -299,6 +307,8 @@ Please add the following snippet to your web/index.html inside <head></head> in 
     Report issues or give us any feedback is appreciated!
 * [integration guide](https://developer.mixpanel.com/docs/flutter)
 * [full API reference](https://mixpanel.github.io/mixpanel-flutter)
+
+
 
 
 
