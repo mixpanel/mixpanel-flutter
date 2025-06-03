@@ -44,8 +44,8 @@ class Mixpanel {
     allProperties['optOutTrackingDefault'] = optOutTrackingDefault;
     allProperties['trackAutomaticEvents'] = trackAutomaticEvents;
     allProperties['mixpanelProperties'] = _mixpanelProperties;
-    allProperties['superProperties'] = _MixpanelHelper.convertPropertiesForWeb(superProperties);
-    allProperties['config'] = _MixpanelHelper.convertPropertiesForWeb(config);
+    allProperties['superProperties'] = _MixpanelHelper.ensureSerializableProperties(superProperties);
+    allProperties['config'] = _MixpanelHelper.ensureSerializableProperties(config);
     await _channel.invokeMethod<void>('initialize', allProperties);
     return Mixpanel(token);
   }
@@ -198,7 +198,7 @@ class Mixpanel {
   }) async {
     if (_MixpanelHelper.isValidString(eventName)) {
       await _channel.invokeMethod<void>('track',
-          <String, dynamic>{'eventName': eventName, 'properties': _MixpanelHelper.convertPropertiesForWeb(properties)});
+          <String, dynamic>{'eventName': eventName, 'properties': _MixpanelHelper.ensureSerializableProperties(properties)});
     } else {
       developer.log('`track` failed: eventName cannot be blank',
           name: 'Mixpanel');
@@ -231,8 +231,8 @@ class Mixpanel {
     if (_MixpanelHelper.isValidString(eventName)) {
       await _channel.invokeMethod<void>('trackWithGroups', <String, dynamic>{
         'eventName': eventName,
-        'properties': _MixpanelHelper.convertPropertiesForWeb(properties),
-        'groups': _MixpanelHelper.convertPropertiesForWeb(groups)
+        'properties': _MixpanelHelper.ensureSerializableProperties(properties),
+        'groups': _MixpanelHelper.ensureSerializableProperties(groups)
       });
     } else {
       developer.log('`trackWithGroups` failed: eventName cannot be blank',
@@ -247,7 +247,7 @@ class Mixpanel {
   void setGroup(String groupKey, dynamic groupID) {
     if (_MixpanelHelper.isValidString(groupKey)) {
       _channel.invokeMethod<void>('setGroup',
-          <String, dynamic>{'groupKey': groupKey, 'groupID': _MixpanelHelper.convertValueForWeb(groupID)});
+          <String, dynamic>{'groupKey': groupKey, 'groupID': _MixpanelHelper.ensureSerializableValue(groupID)});
     } else {
       developer.log('`setGroup` failed: groupKey cannot be blank',
           name: 'Mixpanel');
@@ -262,7 +262,7 @@ class Mixpanel {
   /// return an instance of MixpanelGroup that you can use to update
   ///     records in Mixpanel Group Analytics
   MixpanelGroup getGroup(String groupKey, dynamic groupID) {
-    return new MixpanelGroup(this._token, groupKey, _MixpanelHelper.convertValueForWeb(groupID));
+    return new MixpanelGroup(this._token, groupKey, _MixpanelHelper.ensureSerializableValue(groupID));
   }
 
   /// Add a group to this user's membership for a particular group key
@@ -272,7 +272,7 @@ class Mixpanel {
   void addGroup(String groupKey, dynamic groupID) {
     if (_MixpanelHelper.isValidString(groupKey)) {
       _channel.invokeMethod<void>('addGroup',
-          <String, dynamic>{'groupKey': groupKey, 'groupID': _MixpanelHelper.convertValueForWeb(groupID)});
+          <String, dynamic>{'groupKey': groupKey, 'groupID': _MixpanelHelper.ensureSerializableValue(groupID)});
     } else {
       developer.log('`addGroup` failed: groupKey cannot be blank',
           name: 'Mixpanel');
@@ -286,7 +286,7 @@ class Mixpanel {
   void removeGroup(String groupKey, dynamic groupID) {
     if (_MixpanelHelper.isValidString(groupKey)) {
       _channel.invokeMethod<void>('removeGroup',
-          <String, dynamic>{'groupKey': groupKey, 'groupID': _MixpanelHelper.convertValueForWeb(groupID)});
+          <String, dynamic>{'groupKey': groupKey, 'groupID': _MixpanelHelper.ensureSerializableValue(groupID)});
     } else {
       developer.log('`removeGroup` failed: groupKey cannot be blank',
           name: 'Mixpanel');
@@ -303,7 +303,7 @@ class Mixpanel {
   void deleteGroup(String groupKey, dynamic groupID) {
     if (_MixpanelHelper.isValidString(groupKey)) {
       _channel.invokeMethod<void>('deleteGroup',
-          <String, dynamic>{'groupKey': groupKey, 'groupID': _MixpanelHelper.convertValueForWeb(groupID)});
+          <String, dynamic>{'groupKey': groupKey, 'groupID': _MixpanelHelper.ensureSerializableValue(groupID)});
     } else {
       developer.log('`deleteGroup` failed: groupKey cannot be blank',
           name: 'Mixpanel');
@@ -325,7 +325,7 @@ class Mixpanel {
   /// * [properties] A Map containing super properties to register
   Future<void> registerSuperProperties(Map<String, dynamic> properties) async {
     await _channel.invokeMethod<void>(
-        'registerSuperProperties', <String, dynamic>{'properties': _MixpanelHelper.convertPropertiesForWeb(properties)});
+        'registerSuperProperties', <String, dynamic>{'properties': _MixpanelHelper.ensureSerializableProperties(properties)});
   }
 
   /// Register super properties for events, only if no other super property with the
@@ -338,7 +338,7 @@ class Mixpanel {
     Map<String, dynamic> properties,
   ) async {
     await _channel.invokeMethod<void>('registerSuperPropertiesOnce',
-        <String, dynamic>{'properties': _MixpanelHelper.convertPropertiesForWeb(properties)});
+        <String, dynamic>{'properties': _MixpanelHelper.ensureSerializableProperties(properties)});
   }
 
   /// Remove a single superProperty, so that it will not be sent with future calls to track().
@@ -472,7 +472,7 @@ class People {
     if (_MixpanelHelper.isValidString(prop)) {
       Map<String, dynamic> properties = {prop: to};
       _channel.invokeMethod<void>('set',
-          <String, dynamic>{'token': this._token, 'properties': _MixpanelHelper.convertPropertiesForWeb(properties)});
+          <String, dynamic>{'token': this._token, 'properties': _MixpanelHelper.ensureSerializableProperties(properties)});
     } else {
       developer.log('`people set` failed: prop cannot be blank',
           name: 'Mixpanel');
@@ -487,7 +487,7 @@ class People {
     if (_MixpanelHelper.isValidString(prop)) {
       Map<String, dynamic> properties = {prop: to};
       _channel.invokeMethod<void>('setOnce',
-          <String, dynamic>{'token': this._token, 'properties': _MixpanelHelper.convertPropertiesForWeb(properties)});
+          <String, dynamic>{'token': this._token, 'properties': _MixpanelHelper.ensureSerializableProperties(properties)});
     } else {
       developer.log('`people setOnce` failed: prop cannot be blank',
           name: 'Mixpanel');
@@ -504,7 +504,7 @@ class People {
     Map<String, dynamic> properties = {prop: by};
     if (_MixpanelHelper.isValidString(prop)) {
       _channel.invokeMethod<void>('increment',
-          <String, dynamic>{'token': this._token, 'properties': _MixpanelHelper.convertPropertiesForWeb(properties)});
+          <String, dynamic>{'token': this._token, 'properties': _MixpanelHelper.ensureSerializableProperties(properties)});
     } else {
       developer.log('`people increment` failed: prop cannot be blank',
           name: 'Mixpanel');
@@ -521,12 +521,12 @@ class People {
       if (kIsWeb || Platform.isIOS) {
         Map<String, dynamic> properties = {name: value};
         _channel.invokeMethod<void>('append',
-            <String, dynamic>{'token': this._token, 'properties': _MixpanelHelper.convertPropertiesForWeb(properties)});
+            <String, dynamic>{'token': this._token, 'properties': _MixpanelHelper.ensureSerializableProperties(properties)});
       } else {
         _channel.invokeMethod<void>('append', <String, dynamic>{
           'token': this._token,
           'name': name,
-          'value': _MixpanelHelper.convertValueForWeb(value)
+          'value': _MixpanelHelper.ensureSerializableValue(value)
         });
       }
     } else {
@@ -546,12 +546,12 @@ class People {
       if (kIsWeb || Platform.isIOS) {
         Map<String, dynamic> properties = {name: value};
         _channel.invokeMethod<void>('union',
-            <String, dynamic>{'token': this._token, 'properties': _MixpanelHelper.convertPropertiesForWeb(properties)});
+            <String, dynamic>{'token': this._token, 'properties': _MixpanelHelper.ensureSerializableProperties(properties)});
       } else {
         _channel.invokeMethod<void>('union', <String, dynamic>{
           'token': this._token,
           'name': name,
-          'value': _MixpanelHelper.convertValueForWeb(value)
+          'value': _MixpanelHelper.ensureSerializableValue(value)
         });
       }
     } else {
@@ -571,12 +571,12 @@ class People {
       if (kIsWeb || Platform.isIOS) {
         Map<String, dynamic> properties = {name: value};
         _channel.invokeMethod<void>('remove',
-            <String, dynamic>{'token': this._token, 'properties': _MixpanelHelper.convertPropertiesForWeb(properties)});
+            <String, dynamic>{'token': this._token, 'properties': _MixpanelHelper.ensureSerializableProperties(properties)});
       } else {
         _channel.invokeMethod<void>('remove', <String, dynamic>{
           'token': this._token,
           'name': name,
-          'value': _MixpanelHelper.convertValueForWeb(value)
+          'value': _MixpanelHelper.ensureSerializableValue(value)
         });
       }
     } else {
@@ -608,7 +608,7 @@ class People {
       _channel.invokeMethod<void>('trackCharge', <String, dynamic>{
         'token': this._token,
         'amount': amount,
-        'properties': _MixpanelHelper.convertPropertiesForWeb(properties)
+        'properties': _MixpanelHelper.ensureSerializableProperties(properties)
       });
     } else {
       developer.log('`people trackCharge` failed: amount cannot be blank',
@@ -664,7 +664,7 @@ class MixpanelGroup {
         'token': this._token,
         'groupKey': this._groupKey,
         'groupID': this._groupID,
-        'properties': _MixpanelHelper.convertPropertiesForWeb(properties)
+        'properties': _MixpanelHelper.ensureSerializableProperties(properties)
       });
     } else {
       developer.log('`group set` failed: prop cannot be blank',
@@ -684,7 +684,7 @@ class MixpanelGroup {
         'token': this._token,
         'groupKey': this._groupKey,
         'groupID': this._groupID,
-        'properties': _MixpanelHelper.convertPropertiesForWeb(properties)
+        'properties': _MixpanelHelper.ensureSerializableProperties(properties)
       });
     } else {
       developer.log('`group setOnce` failed: prop cannot be blank',
@@ -722,7 +722,7 @@ class MixpanelGroup {
         'groupKey': this._groupKey,
         'groupID': this._groupID,
         'name': name,
-        'value': _MixpanelHelper.convertValueForWeb(value)
+        'value': _MixpanelHelper.ensureSerializableValue(value)
       });
     } else {
       developer.log('`group remove` failed: name cannot be blank',
@@ -753,7 +753,7 @@ class MixpanelGroup {
       'groupKey': this._groupKey,
       'groupID': this._groupID,
       'name': name,
-      'value': _MixpanelHelper.convertValueForWeb(value)
+      'value': _MixpanelHelper.ensureSerializableValue(value)
     });
   }
 }
@@ -765,7 +765,7 @@ class _MixpanelHelper {
   }
 
   /// Converts complex types to basic types for web platform
-  static dynamic convertValueForWeb(dynamic value) {
+  static dynamic ensureSerializableValue(dynamic value) {
     if (!kIsWeb) {
       return value;
     }
@@ -776,19 +776,19 @@ class _MixpanelHelper {
     } else if (value is Uri) {
       return value.toString();
     } else if (value is Map) {
-      return value.map((k, v) => MapEntry(k, convertValueForWeb(v)));
+      return value.map((k, v) => MapEntry(k, ensureSerializableValue(v)));
     } else if (value is List) {
-      return value.map((v) => convertValueForWeb(v)).toList();
+      return value.map((v) => ensureSerializableValue(v)).toList();
     } else {
       return value;
     }
   }
 
   /// Converts properties map for web platform
-  static Map<String, dynamic>? convertPropertiesForWeb(Map<String, dynamic>? properties) {
+  static Map<String, dynamic>? ensureSerializableProperties(Map<String, dynamic>? properties) {
     if (!kIsWeb || properties == null) {
       return properties;
     }
-    return properties.map((k, v) => MapEntry(k, convertValueForWeb(v)));
+    return properties.map((k, v) => MapEntry(k, ensureSerializableValue(v)));
   }
 }
