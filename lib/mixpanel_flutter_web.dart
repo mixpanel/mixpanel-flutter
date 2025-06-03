@@ -42,28 +42,27 @@ import 'package:mixpanel_flutter/web/mixpanel_js_bindings.dart';
 /// var jsNull = safeJsify(null); // Returns null
 /// ```
 JSAny? safeJsify(dynamic value) {
-    if (value == null) {
-      return null;
-    } else if (value is JSAny) {
-      return value;
-    } else if (value is Map) {
-      return value.jsify();
-    } else if (value is List) {
-      return value.jsify();
-    } else if (value is DateTime) {
-      return value.jsify();
-    } else if (value is bool) {
-      return value.toJS;
-    } else if (value is num) {
-      return value.toJS;
-    } else if (value is String) {
-      return value.toJS;
-    } else {
-      debugPrint('[Mixpanel] Warning: Unsupported type for JS conversion: ${value.runtimeType}. '
-                 'Value will be ignored. Supported types are: Map, List, DateTime, bool, num, String, JSAny, and null.');
-      return null;
-    }
+  if (value == null) {
+    return null;
+  } else if (value is Map) {
+    return value.jsify();
+  } else if (value is List) {
+    return value.jsify();
+  } else if (value is DateTime) {
+    return value.jsify();
+  } else if (value is bool) {
+    return value.toJS;
+  } else if (value is num) {
+    return value.toJS;
+  } else if (value is String) {
+    return value.toJS;
+  } else {
+    debugPrint(
+        '[Mixpanel] Warning: Unsupported type for JS conversion: ${value.runtimeType}. '
+        'Value will be ignored. Supported types are: Map, List, DateTime, bool, num, String, JSAny, and null.');
+    return null;
   }
+}
 
 /// A web implementation of the MixpanelFlutter plugin.
 class MixpanelFlutterPlugin {
@@ -275,7 +274,8 @@ class MixpanelFlutterPlugin {
   void handleRegisterSuperProperties(MethodCall call) {
     Map<Object?, Object?> args = call.arguments as Map<Object?, Object?>;
     dynamic properties = args['properties'];
-    register(safeJsify(properties));
+    // register(safeJsify(properties));
+    register(properties);
   }
 
   void handleRegisterSuperPropertiesOnce(MethodCall call) {
@@ -369,8 +369,7 @@ class MixpanelFlutterPlugin {
     dynamic groupID = args['groupID'];
 
     dynamic properties = args['properties'];
-    get_group(groupKey, safeJsify(groupID))
-        .set(safeJsify(properties));
+    get_group(groupKey, safeJsify(groupID)).set(safeJsify(properties));
   }
 
   void handleGroupSetPropertyOnce(MethodCall call) {
@@ -390,8 +389,7 @@ class MixpanelFlutterPlugin {
     dynamic groupID = args['groupID'];
 
     String propertyName = args['propertyName'] as String;
-    get_group(groupKey, safeJsify(groupID))
-        .unset(propertyName);
+    get_group(groupKey, safeJsify(groupID)).unset(propertyName);
   }
 
   void handleGroupRemove(MethodCall call) {
@@ -401,8 +399,7 @@ class MixpanelFlutterPlugin {
 
     String name = args['name'] as String;
     dynamic value = args['value'];
-    get_group(groupKey, safeJsify(groupID))
-        .remove(name, safeJsify(value));
+    get_group(groupKey, safeJsify(groupID)).remove(name, safeJsify(value));
   }
 
   void handleGroupUnion(MethodCall call) {
