@@ -73,6 +73,7 @@ class MixpanelFlutterPlugin {
   };
 
   static void registerWith(Registrar registrar) {
+    // Web platform doesn't need the custom codec since safeJsify handles type conversions
     final MethodChannel channel = MethodChannel(
       'mixpanel_flutter',
       const StandardMethodCodec(),
