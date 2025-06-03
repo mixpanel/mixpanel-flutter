@@ -274,8 +274,7 @@ class MixpanelFlutterPlugin {
   void handleRegisterSuperProperties(MethodCall call) {
     Map<Object?, Object?> args = call.arguments as Map<Object?, Object?>;
     dynamic properties = args['properties'];
-    // register(safeJsify(properties));
-    register(properties);
+    register(safeJsify(properties));
   }
 
   void handleRegisterSuperPropertiesOnce(MethodCall call) {
