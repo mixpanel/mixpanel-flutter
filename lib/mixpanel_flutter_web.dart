@@ -94,6 +94,9 @@ class MixpanelFlutterPlugin {
       case 'setServerURL':
         handleSetServerURL(call);
         break;
+      case 'setLoggingEnabled':
+        handleSetLoggingEnabled(call);
+        break;
       case "hasOptedOutTracking":
         return handleHasOptedOutTracking();
       case "optInTracking":
@@ -205,6 +208,12 @@ class MixpanelFlutterPlugin {
     Map<Object?, Object?> args = call.arguments as Map<Object?, Object?>;
     String serverURL = args['serverURL'] as String;
     set_config(safeJsify({'api_host': serverURL}));
+  }
+
+  void handleSetLoggingEnabled(MethodCall call) {
+    Map<Object?, Object?> args = call.arguments as Map<Object?, Object?>;
+    bool loggingEnabled = args['loggingEnabled'] as bool;
+    set_config(safeJsify({'debug': loggingEnabled}));
   }
 
   void handleTrack(MethodCall call) {

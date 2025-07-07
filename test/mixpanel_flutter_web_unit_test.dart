@@ -209,6 +209,14 @@ void main() {
       expect(args['groups'], isA<Map>());
     });
 
+    test('setLoggingEnabled method structure', () {
+      final args = {
+        'loggingEnabled': true,
+      };
+      
+      expect(args['loggingEnabled'], isA<bool>());
+    });
+
     test('people methods structure', () {
       final incrementArgs = {
         'properties': {'loginCount': 1},
