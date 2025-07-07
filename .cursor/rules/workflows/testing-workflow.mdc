@@ -1,0 +1,378 @@
+---
+description: Comprehensive testing workflow for validating Mixpanel Flutter SDK changes across all platforms
+globs: []
+alwaysApply: false
+---
+
+# Testing Workflow
+
+This workflow ensures thorough testing of the Mixpanel Flutter SDK across all platforms and scenarios.
+
+## Testing Layers
+
+The SDK uses a multi-layer testing approach:
+
+1. **Unit Tests** - Dart API and platform channel mocking
+2. **Integration Tests** - Example app on each platform
+3. **Manual Tests** - Platform-specific behavior verification
+
+## Step 1: Run Unit Tests
+
+Start with the Dart unit tests to verify API behavior:
+
+```bash
+# From project root
+flutter test
+
+# For verbose output
+flutter test -v
+
+# To run specific test file
+flutter test test/mixpanel_flutter_test.dart
+```
+
+✅ **Expected Output:**
+```
+00:02 +45: All tests passed!
+```
+
+❌ **If Tests Fail:**
+```bash
+# Check for common issues:
+# 1. Ensure you're using latest Flutter
+flutter upgrade
+
+# 2. Clean and get dependencies
+flutter clean
+flutter pub get
+
+# 3. Run with more details
+flutter test --reporter expanded
+```
+
+## Step 2: Static Analysis
+
+Ensure code quality with Flutter's analyzer:
+
+```bash
+flutter analyze
+
+# For strict analysis
+flutter analyze --fatal-infos
+```
+
+✅ **Fix Any Issues:**
+```dart
+// Common fixes:
+// 1. Add const constructors
+const MyWidget({Key? key}) : super(key: key);
+
+// 2. Remove unused imports
+// Delete any grayed out imports
+
+// 3. Add required type annotations
+final Map<String, dynamic> properties = {};
+```
+
+## Step 3: Test Example App - iOS
+
+### Prepare iOS Environment
+
+```bash
+cd example
+
+# Install iOS dependencies
+cd ios
+pod install
+cd ..
+
+# List available simulators
+flutter devices
+```
+
+### Run on iOS Simulator
+
+```bash
+# Run on default iOS simulator
+flutter run
+
+# Or specify a device
+flutter run -d "iPhone 15"
+```
+
+### iOS Testing Checklist
+
+Test each feature page in the example app:
+
+- [ ] **Tracking Page**
+  - [ ] Basic event tracks successfully
+  - [ ] Event with properties includes all property types
+  - [ ] Timed events measure duration correctly
+  - [ ] Invalid inputs handled gracefully
+
+- [ ] **User Profile Page**
+  - [ ] Set properties updates user profile
+  - [ ] Set once doesn't overwrite existing values
+  - [ ] Increment adds to numeric properties
+  - [ ] Union adds unique values to lists
+
+- [ ] **Groups Page**
+  - [ ] Group identification works
+  - [ ] Group properties can be set
+  - [ ] Multiple groups tracked correctly
+
+- [ ] **GDPR Page**
+  - [ ] Opt out stops tracking
+  - [ ] Opt in resumes tracking
+  - [ ] Has opted out status correct
+
+- [ ] **Advanced Features**
+  - [ ] Super properties persist across events
+  - [ ] Alias creates user identity link
+  - [ ] Reset clears user data
+  - [ ] Flush sends queued events
+
+## Step 4: Test Example App - Android
+
+### Prepare Android Environment
+
+```bash
+# Ensure Android SDK is set up
+flutter doctor
+
+# Start Android emulator or connect device
+flutter devices
+```
+
+### Run on Android
+
+```bash
+# Run on default Android device
+flutter run
+
+# Or specify device
+flutter run -d "Pixel_7_API_34"
+```
+
+### Android Testing Checklist
+
+Run through the same feature tests as iOS, plus:
+
+- [ ] **Android Specific**
+  - [ ] App doesn't ANR on startup
+  - [ ] Rotation preserves state
+  - [ ] Background/foreground transitions work
+  - [ ] Memory pressure handled gracefully
+
+### Verify Logs
+
+```bash
+# View Android logs while testing
+adb logcat | grep -i mixpanel
+
+# Check for proper initialization
+# Should see: "Mixpanel initialized with token: ..."
+```
+
+## Step 5: Test Example App - Web
+
+### Prepare Web Environment
+
+First, ensure the example app's `web/index.html` includes Mixpanel JS:
+
+```html
+<!-- In example/web/index.html -->
+<script src="https://cdn.mixpanel.com/mixpanel-2-latest.min.js"></script>
+```
+
+### Run on Web
+
+```bash
+# Run on Chrome
+flutter run -d chrome
+
+# Run on specific port
+flutter run -d chrome --web-port=8080
+```
+
+### Web Testing Checklist
+
+Test all features, paying special attention to:
+
+- [ ] **Web Specific**
+  - [ ] Mixpanel JS library loads correctly
+  - [ ] Events appear in browser console
+  - [ ] DateTime properties serialize correctly
+  - [ ] Large property maps handled
+  - [ ] Browser refresh maintains state
+
+### Debug Web Issues
+
+```javascript
+// Open browser console and check:
+mixpanel._isInitialized
+// Should return: true
+
+// View last tracked event
+mixpanel._lastest_event
+```
+
+## Step 6: Cross-Platform Validation
+
+After testing each platform individually, verify consistency:
+
+### Event Property Validation
+
+Track the same event on all platforms and verify in Mixpanel:
+
+```dart
+// Test event to track on each platform
+await mixpanel.track('Cross Platform Test', properties: {
+  'platform': Platform.operatingSystem,
+  'timestamp': DateTime.now(),
+  'test_id': 'sdk_validation_001',
+  'numeric': 42,
+  'boolean': true,
+  'list': ['a', 'b', 'c'],
+});
+```
+
+Then check in Mixpanel dashboard:
+1. Go to Events → Latest
+2. Filter by event name: "Cross Platform Test"
+3. Verify all platforms show identical properties
+4. Check that $lib_version matches across platforms
+
+## Step 7: Performance Testing
+
+### Memory Testing
+
+Run the example app and monitor memory:
+
+```bash
+# iOS - Use Xcode Instruments
+open example/ios/Runner.xcworkspace
+# Product → Profile → Leaks
+
+# Android - Use Android Studio Profiler
+# Run → Profile 'app'
+```
+
+### Stress Testing
+
+Create a stress test in the example app:
+
+```dart
+// Add to example app for stress testing
+void _stressTest() async {
+  for (int i = 0; i < 1000; i++) {
+    await _mixpanel.track('Stress Test Event $i', properties: {
+      'iteration': i,
+      'timestamp': DateTime.now().toIso8601String(),
+      'data': List.generate(10, (j) => 'item_$j'),
+    });
+    
+    if (i % 100 == 0) {
+      await _mixpanel.flush();
+      print('Flushed at iteration $i');
+    }
+  }
+}
+```
+
+## Step 8: Error Scenario Testing
+
+Test error handling across platforms:
+
+```dart
+// Test various error scenarios
+void _testErrorScenarios() async {
+  // Empty strings
+  await mixpanel.track('');
+  await mixpanel.identify('');
+  await mixpanel.alias('', 'valid');
+  
+  // Null values (cast to dynamic to bypass type checking)
+  await mixpanel.track(null as dynamic);
+  await mixpanel.getPeople().set(null as dynamic);
+  
+  // Invalid types
+  await mixpanel.track('Event', properties: {
+    'invalid': Object(), // Non-serializable
+  });
+  
+  // Very large strings
+  final largeString = 'x' * 1000000;
+  await mixpanel.track('Large Event', properties: {
+    'huge': largeString,
+  });
+}
+```
+
+## Step 9: CI Integration Verification
+
+If changes affect CI, verify GitHub Actions:
+
+```yaml
+# Check .github/workflows/flutter.yml
+- name: Run tests
+  run: flutter test
+  
+- name: Analyze
+  run: flutter analyze
+```
+
+## Common Testing Issues
+
+### Platform Channel Not Mocked
+
+✅ **Fix:**
+```dart
+// Ensure proper setup in tests
+setUp(() async {
+  TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+      .setMockMethodCallHandler(channel, (MethodCall call) async {
+    methodCall = call;
+    return null;
+  });
+});
+```
+
+### Async Test Timing
+
+✅ **Fix:**
+```dart
+// Use async/await properly in tests
+test('async operation', () async {
+  await mixpanel.track('Event');
+  // Wait for any async operations
+  await Future.delayed(Duration(milliseconds: 100));
+  expect(methodCall, isNotNull);
+});
+```
+
+### Web Test Failures
+
+✅ **Fix:**
+```bash
+# Ensure Chrome is available
+flutter doctor
+
+# Run with web-specific renderer
+flutter test --platform chrome
+flutter run -d chrome --web-renderer html
+```
+
+## Final Validation
+
+Before marking testing complete:
+
+- [ ] All unit tests pass
+- [ ] No analyzer warnings
+- [ ] iOS example app works correctly
+- [ ] Android example app works correctly  
+- [ ] Web example app works correctly
+- [ ] Cross-platform event consistency verified
+- [ ] No memory leaks detected
+- [ ] Error scenarios handled gracefully
+- [ ] CI/CD pipeline passes

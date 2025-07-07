@@ -1,0 +1,339 @@
+---
+description: Complete workflow for implementing a new feature in the Mixpanel Flutter SDK
+globs: []
+alwaysApply: false
+---
+
+# New Feature Implementation Workflow
+
+Follow this step-by-step guide to implement a new feature while maintaining all SDK conventions and ensuring cross-platform compatibility.
+
+## Overview
+
+The implementation order is critical: Dart API → Web → Android → iOS → Example → Tests → Docs
+
+## Step 1: Design the Dart API
+
+First, define the public API in `lib/mixpanel_flutter.dart`:
+
+✅ **Correct Implementation:**
+```dart
+/// Tracks when a user views a specific screen or page.
+///
+/// This is useful for analyzing user navigation patterns and screen engagement.
+/// The screen name will be tracked as a "Screen View" event with additional
+/// properties.
+///
+/// * [screenName] The name of the screen being viewed
+/// * [properties] Additional properties to include with the screen view event
+Future<void> trackScreenView(String screenName, {Map<String, dynamic>? properties}) async {
+  if (_MixpanelHelper.isValidString(screenName)) {
+    final Map<String, dynamic> screenProperties = {
+      'Screen Name': screenName,
+      ...?properties,
+    };
+    
+    await _channel.invokeMethod<void>('track', <String, dynamic>{
+      'eventName': 'Screen View',
+      'properties': screenProperties,
+    });
+  } else {
+    developer.log('`trackScreenView` failed: screenName cannot be blank', name: 'Mixpanel');
+  }
+}
+```
+
+## Step 2: Add to Platform Interface
+
+If creating a new platform method (not reusing existing ones), update the method channel:
+
+```dart
+// For new platform methods only
+await _channel.invokeMethod<void>('newMethodName', <String, dynamic>{
+  'param1': value1,
+  'param2': value2 ?? {},
+});
+```
+
+## Step 3: Implement Web Support
+
+Add the web implementation in `lib/mixpanel_flutter_web.dart`:
+
+✅ **Correct Web Implementation:**
+```dart
+@override
+Future<void> trackScreenView(String screenName, Map<String, dynamic>? properties) async {
+  if (!_MixpanelHelper.isValidString(screenName)) {
+    developer.log('`trackScreenView` failed: screenName cannot be blank', name: 'Mixpanel');
+    return;
+  }
+  
+  // Merge properties with library metadata
+  final Map<String, dynamic> eventProperties = {
+    'Screen Name': screenName,
+    '\$lib_version': '2.4.4',
+    'mp_lib': 'flutter',
+    ...?properties,
+  };
+  
+  var jsProperties = safeJsify(eventProperties);
+  mixpanelJs.track('Screen View', jsProperties);
+}
+```
+
+## Step 4: Implement Android Support
+
+Add to `android/src/main/java/com/mixpanel/mixpanel_flutter/MixpanelFlutterPlugin.java`:
+
+✅ **Correct Android Implementation:**
+```java
+case "trackScreenView":
+    String screenName = call.argument("screenName");
+    Map<String, Object> properties = call.argument("properties");
+    
+    if (screenName == null || screenName.trim().isEmpty()) {
+        result.success(null);
+        return;
+    }
+    
+    try {
+        JSONObject screenProperties = new JSONObject();
+        screenProperties.put("Screen Name", screenName);
+        
+        // Add additional properties if provided
+        if (properties != null) {
+            JSONObject userProps = MixpanelFlutterHelper.toJSONObject(properties);
+            Iterator<String> keys = userProps.keys();
+            while (keys.hasNext()) {
+                String key = keys.next();
+                screenProperties.put(key, userProps.get(key));
+            }
+        }
+        
+        // Merge with library properties
+        JSONObject mergedProps = MixpanelFlutterHelper.getMergedProperties(
+            screenProperties, mixpanelProperties);
+        
+        mixpanel.track("Screen View", mergedProps);
+        result.success(null);
+    } catch (JSONException e) {
+        result.error("MixpanelFlutterException", e.getLocalizedMessage(), null);
+    }
+    break;
+```
+
+## Step 5: Implement iOS Support
+
+Add to `ios/Classes/SwiftMixpanelFlutterPlugin.swift`:
+
+✅ **Correct iOS Implementation:**
+```swift
+case "trackScreenView":
+    guard let arguments = call.arguments as? [String: Any],
+          let screenName = arguments["screenName"] as? String,
+          !screenName.trimmingCharacters(in: .whitespaces).isEmpty else {
+        result(nil)
+        return
+    }
+    
+    var eventProperties = Properties()
+    eventProperties["Screen Name"] = screenName
+    
+    // Add additional properties if provided
+    if let properties = arguments["properties"] as? [String: Any] {
+        let mpProperties = convertToMixpanelTypes(properties)
+        for (key, value) in mpProperties {
+            eventProperties[key] = value
+        }
+    }
+    
+    // Add library properties
+    eventProperties["$lib_version"] = "2.4.4"
+    eventProperties["mp_lib"] = "flutter"
+    
+    Mixpanel.mainInstance().track(event: "Screen View", properties: eventProperties)
+    result(nil)
+```
+
+## Step 6: Create Example Page
+
+Add example usage in `example/lib/screen_tracking_page.dart`:
+
+✅ **Correct Example:**
+```dart
+class ScreenTrackingPage extends StatelessWidget {
+  final Mixpanel _mixpanel;
+  
+  const ScreenTrackingPage(this._mixpanel, {Key? key}) : super(key: key);
+  
+  @override
+  Widget build(BuildContext context) {
+    // Track screen view when page is displayed
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _mixpanel.trackScreenView('Screen Tracking Demo');
+    });
+    
+    return Scaffold(
+      appBar: AppBar(title: const Text('Screen Tracking')),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Text(
+            'Screen Tracking Examples',
+            style: Theme.of(context).textTheme.headlineSmall,
+          ),
+          const SizedBox(height: 16),
+          ElevatedButton(
+            onPressed: () => _trackHomeScreen(),
+            child: const Text('Track Home Screen View'),
+          ),
+          ElevatedButton(
+            onPressed: () => _trackProductScreen(),
+            child: const Text('Track Product Screen with Properties'),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  void _trackHomeScreen() {
+    _mixpanel.trackScreenView('Home Screen');
+    _showSnackBar('Tracked: Home Screen View');
+  }
+  
+  void _trackProductScreen() {
+    _mixpanel.trackScreenView('Product Details', properties: {
+      'Product ID': 'SKU-12345',
+      'Category': 'Electronics',
+      'Source': 'Search Results',
+    });
+    _showSnackBar('Tracked: Product Screen with properties');
+  }
+}
+```
+
+## Step 7: Write Tests
+
+Add comprehensive tests in `test/mixpanel_flutter_test.dart`:
+
+✅ **Correct Test Implementation:**
+```dart
+group('trackScreenView', () {
+  test('trackScreenView sends correct arguments', () async {
+    await mixpanel.trackScreenView('Home Screen');
+    
+    expect(
+      methodCall,
+      isMethodCall(
+        'track',
+        arguments: <String, dynamic>{
+          'eventName': 'Screen View',
+          'properties': <String, dynamic>{
+            'Screen Name': 'Home Screen',
+          },
+        },
+      ),
+    );
+  });
+  
+  test('trackScreenView with properties', () async {
+    await mixpanel.trackScreenView('Product Screen', properties: {
+      'Product ID': '12345',
+      'Category': 'Electronics',
+    });
+    
+    expect(
+      methodCall,
+      isMethodCall(
+        'track',
+        arguments: <String, dynamic>{
+          'eventName': 'Screen View',
+          'properties': <String, dynamic>{
+            'Screen Name': 'Product Screen',
+            'Product ID': '12345',
+            'Category': 'Electronics',
+          },
+        },
+      ),
+    );
+  });
+  
+  test('trackScreenView validates empty screen name', () async {
+    await mixpanel.trackScreenView('');
+    expect(methodCall, null); // No call should be made
+  });
+  
+  test('trackScreenView handles null properties', () async {
+    await mixpanel.trackScreenView('Test Screen', properties: null);
+    
+    expect(
+      methodCall,
+      isMethodCall(
+        'track',
+        arguments: <String, dynamic>{
+          'eventName': 'Screen View',
+          'properties': <String, dynamic>{
+            'Screen Name': 'Test Screen',
+          },
+        },
+      ),
+    );
+  });
+});
+```
+
+## Step 8: Update Documentation
+
+Add the new method to the README and API documentation:
+
+```markdown
+### Screen Tracking
+
+Track screen views to understand user navigation:
+
+```dart
+// Basic screen tracking
+await mixpanel.trackScreenView('Home Screen');
+
+// With additional properties
+await mixpanel.trackScreenView('Product Details', properties: {
+  'Product ID': 'SKU-12345',
+  'Category': 'Electronics',
+});
+```
+```
+
+## Validation Checklist
+
+Before completing the feature:
+
+- [ ] ✅ Dart API includes input validation
+- [ ] ✅ All platforms handle the feature identically
+- [ ] ✅ Library metadata is included in all events
+- [ ] ✅ Invalid inputs are handled gracefully
+- [ ] ✅ Example app demonstrates the feature
+- [ ] ✅ Tests cover happy path and edge cases
+- [ ] ✅ Documentation is updated
+- [ ] ✅ Version number is updated if needed
+
+## Common Pitfalls to Avoid
+
+❌ **Don't forget library metadata:**
+```dart
+// Wrong - missing $lib_version and mp_lib
+await _channel.invokeMethod('track', {'eventName': 'Screen View'});
+```
+
+❌ **Don't skip validation:**
+```dart
+// Wrong - will crash on empty string
+Future<void> trackScreenView(String screenName) async {
+  await _channel.invokeMethod('track', {'eventName': screenName});
+}
+```
+
+❌ **Don't use different method names across platforms:**
+```java
+// Android: "trackScreenView"
+// iOS: "track_screen_view" // Wrong - must match exactly
+```

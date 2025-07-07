@@ -1,0 +1,248 @@
+---
+description: iOS-specific implementation patterns for the Mixpanel Flutter plugin
+globs: ["**/ios/**/*.swift", "**/ios/**/*.m", "**/ios/**/*.h"]
+alwaysApply: false
+---
+
+# iOS Implementation Rules
+
+These rules ensure proper implementation of iOS-specific code in the Mixpanel Flutter plugin.
+
+## Swift Method Handling Pattern
+
+All Flutter method calls must use guard statements and proper type casting.
+
+✅ **Correct:**
+```swift
+public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+    guard let arguments = call.arguments as? [String: Any] else {
+        result(FlutterError(code: "INVALID_ARGUMENTS", 
+                          message: "Arguments must be a dictionary", 
+                          details: nil))
+        return
+    }
+    
+    switch call.method {
+    case "track":
+        guard let eventName = arguments["eventName"] as? String else {
+            result(nil)
+            return
+        }
+        
+        if let properties = arguments["properties"] as? [String: Any] {
+            let mpProperties = convertToMixpanelTypes(properties)
+            Mixpanel.mainInstance().track(event: eventName, properties: mpProperties)
+        } else {
+            Mixpanel.mainInstance().track(event: eventName)
+        }
+        result(nil)
+        
+    default:
+        result(FlutterMethodNotImplemented)
+    }
+}
+```
+
+❌ **Incorrect:**
+```swift
+// Don't use force unwrapping or skip validation
+public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+    let args = call.arguments as! [String: Any] // Force unwrap - will crash
+    let eventName = args["eventName"] as! String // Unsafe
+    
+    Mixpanel.mainInstance().track(event: eventName)
+    // Missing result call
+}
+```
+
+## Type Conversion Pattern
+
+Convert Flutter types to MixpanelType for proper serialization.
+
+✅ **Correct:**
+```swift
+private func convertToMixpanelTypes(_ properties: [String: Any]) -> Properties {
+    var mpProperties = Properties()
+    
+    for (key, value) in properties {
+        if let mpValue = convertToMixpanelType(value) {
+            mpProperties[key] = mpValue
+        }
+    }
+    
+    return mpProperties
+}
+
+private func convertToMixpanelType(_ value: Any) -> MixpanelType? {
+    switch value {
+    case let string as String:
+        return string
+    case let number as NSNumber:
+        return number
+    case let array as [Any]:
+        return array.compactMap { convertToMixpanelType($0) }
+    case let dict as [String: Any]:
+        return dict.compactMapValues { convertToMixpanelType($0) }
+    case let date as Date:
+        return date
+    case let url as URL:
+        return url
+    default:
+        return nil
+    }
+}
+```
+
+❌ **Incorrect:**
+```swift
+// Don't pass unconverted types to Mixpanel
+let properties = arguments["properties"] as? [String: Any]
+Mixpanel.mainInstance().track(event: eventName, properties: properties)
+// Wrong - properties might contain non-MixpanelType values
+```
+
+## Type Handler Registration
+
+Register custom type handler for DateTime and Uri in the message codec.
+
+✅ **Correct:**
+```swift
+class MixpanelTypeHandler: FlutterStandardReaderWriter {
+    override func writeValue(_ value: Any) {
+        if let date = value as? Date {
+            super.writeByte(128)
+            super.writeValue(Int64(date.timeIntervalSince1970 * 1000))
+        } else if let url = value as? URL {
+            super.writeByte(129)
+            super.writeValue(url.absoluteString)
+        } else {
+            super.writeValue(value)
+        }
+    }
+    
+    override func readValueOfType(_ type: UInt8) -> Any? {
+        switch type {
+        case 128:
+            if let milliseconds = super.readValue() as? Int64 {
+                return Date(timeIntervalSince1970: TimeInterval(milliseconds) / 1000)
+            }
+        case 129:
+            if let urlString = super.readValue() as? String {
+                return URL(string: urlString)
+            }
+        default:
+            return super.readValueOfType(type)
+        }
+        return nil
+    }
+}
+```
+
+❌ **Incorrect:**
+```swift
+// Don't skip custom type handling
+// DateTime and URL objects will fail without proper handling
+override func writeValue(_ value: Any) {
+    super.writeValue(value) // Missing custom type handling
+}
+```
+
+## Initialization Pattern
+
+Initialize Mixpanel with proper configuration handling.
+
+✅ **Correct:**
+```swift
+case "initialize":
+    guard let token = arguments["token"] as? String else {
+        result(nil)
+        return
+    }
+    
+    Mixpanel.initialize(token: token)
+    let instance = Mixpanel.mainInstance()
+    
+    // Handle optional configurations
+    if let optOutTrackingDefault = arguments["optOutTrackingDefault"] as? Bool,
+       optOutTrackingDefault {
+        instance.optOutTracking()
+    }
+    
+    if let trackAutomaticEvents = arguments["trackAutomaticEvents"] as? Bool,
+       trackAutomaticEvents {
+        instance.trackAutomaticEvents = true
+    }
+    
+    if let superProperties = arguments["superProperties"] as? [String: Any] {
+        let mpProperties = convertToMixpanelTypes(superProperties)
+        instance.registerSuperProperties(mpProperties)
+    }
+    
+    result(nil)
+```
+
+❌ **Incorrect:**
+```swift
+// Don't ignore configuration parameters
+case "initialize":
+    let token = arguments["token"] as! String
+    Mixpanel.initialize(token: token)
+    result(nil)
+    // Missing configuration handling
+```
+
+## Group Instance Handling
+
+Properly manage group instances with correct typing.
+
+✅ **Correct:**
+```swift
+case "getGroup":
+    guard let groupKey = arguments["groupKey"] as? String,
+          let groupID = arguments["groupID"] else {
+        result(nil)
+        return
+    }
+    
+    let mpGroupID = convertToMixpanelType(groupID) ?? groupID
+    let group = Mixpanel.mainInstance().getGroup(groupKey: groupKey, 
+                                                 groupID: mpGroupID)
+    
+    // Store reference if needed
+    result(nil)
+```
+
+❌ **Incorrect:**
+```swift
+// Don't assume groupID type
+case "getGroup":
+    let groupKey = arguments["groupKey"] as! String
+    let groupID = arguments["groupID"] as! String // Wrong - groupID can be any type
+    let group = Mixpanel.mainInstance().getGroup(groupKey: groupKey, groupID: groupID)
+```
+
+## Result Handling
+
+Always call the Flutter result callback, even for void methods.
+
+✅ **Correct:**
+```swift
+case "flush":
+    Mixpanel.mainInstance().flush()
+    result(nil) // Always call result
+
+case "reset":
+    Mixpanel.mainInstance().reset()
+    result(nil) // Even for void methods
+```
+
+❌ **Incorrect:**
+```swift
+case "flush":
+    Mixpanel.mainInstance().flush()
+    // Missing result call - will hang Flutter side
+
+case "reset":
+    Mixpanel.mainInstance().reset()
+    // Must call result(nil)
+```

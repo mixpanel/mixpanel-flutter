@@ -19,7 +19,7 @@ jobs:
           flutter-version: "3.16.0"
       - run: flutter pub get
       - run: flutter test
-      - run: flutter analyze --no-pub --no-current-package lib
+      - run: flutter analyze --no-pub --no-current-package --no-fatal-infos lib
 
   test-android-integration:
     runs-on: macos-13

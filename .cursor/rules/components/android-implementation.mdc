@@ -1,0 +1,208 @@
+---
+description: Android-specific implementation patterns for the Mixpanel Flutter plugin
+globs: ["**/android/**/*.java", "**/android/**/*.kt"]
+alwaysApply: false
+---
+
+# Android Implementation Rules
+
+These rules ensure proper implementation of Android-specific code in the Mixpanel Flutter plugin.
+
+## Plugin Method Handling Pattern
+
+All method calls must follow the standard result pattern with proper error handling.
+
+✅ **Correct:**
+```java
+@Override
+public void onMethodCall(@NonNull MethodCall call, @NonNull Result result) {
+    try {
+        switch (call.method) {
+            case "track":
+                String eventName = call.argument("eventName");
+                Map<String, Object> properties = call.argument("properties");
+                
+                JSONObject jsonObject = MixpanelFlutterHelper.toJSONObject(properties);
+                mixpanel.track(eventName, jsonObject);
+                result.success(null);
+                break;
+                
+            default:
+                result.notImplemented();
+                break;
+        }
+    } catch (JSONException e) {
+        result.error("MixpanelFlutterException", e.getLocalizedMessage(), null);
+    }
+}
+```
+
+❌ **Incorrect:**
+```java
+// Missing error handling and improper result usage
+public void onMethodCall(MethodCall call, Result result) {
+    if (call.method.equals("track")) {
+        Map<String, Object> props = call.argument("properties");
+        mixpanel.track(call.argument("eventName"), props); // Wrong - needs JSONObject
+        // Missing result.success() call
+    }
+}
+```
+
+## Type Conversion Requirements
+
+Always convert Map properties to JSONObject before passing to Mixpanel Android SDK.
+
+✅ **Correct:**
+```java
+// Using helper class for conversion
+Map<String, Object> properties = call.argument("properties");
+JSONObject jsonObject = MixpanelFlutterHelper.toJSONObject(properties);
+mixpanel.track(eventName, jsonObject);
+
+// Helper implementation
+public static JSONObject toJSONObject(Map<String, Object> map) throws JSONException {
+    JSONObject jsonObject = new JSONObject();
+    for (Map.Entry<String, Object> entry : map.entrySet()) {
+        jsonObject.put(entry.getKey(), entry.getValue());
+    }
+    return jsonObject;
+}
+```
+
+❌ **Incorrect:**
+```java
+// Don't pass Map directly to Mixpanel SDK
+Map<String, Object> properties = call.argument("properties");
+mixpanel.track(eventName, properties); // Wrong - needs JSONObject conversion
+```
+
+## Lazy Initialization Pattern
+
+Initialize Mixpanel instance lazily to prevent ANR (Application Not Responding).
+
+✅ **Correct:**
+```java
+private Mixpanel getMixpanelInstance(String token) {
+    if (mixpanel == null) {
+        mixpanel = Mixpanel.getInstance(context, token);
+    }
+    return mixpanel;
+}
+
+case "initialize":
+    String token = call.argument("token");
+    mixpanel = getMixpanelInstance(token);
+    // Configure after initialization
+    if (optOutTrackingDefault) {
+        mixpanel.optOutTracking();
+    }
+    result.success(null);
+    break;
+```
+
+❌ **Incorrect:**
+```java
+// Don't initialize in plugin constructor
+public MixpanelFlutterPlugin(Context context) {
+    this.context = context;
+    // Wrong - too early, token not available
+    this.mixpanel = Mixpanel.getInstance(context, "token");
+}
+```
+
+## Message Codec Handler
+
+Register and implement custom message codec for DateTime and Uri types.
+
+✅ **Correct:**
+```java
+public class MixpanelMessageCodec extends StandardMessageCodec {
+    private static final byte TYPE_DATE_TIME = (byte) 128;
+    private static final byte TYPE_URI = (byte) 129;
+    
+    @Override
+    protected void writeValue(ByteArrayOutputStream stream, Object value) {
+        if (value instanceof Date) {
+            stream.write(TYPE_DATE_TIME);
+            writeLong(stream, ((Date) value).getTime());
+        } else if (value instanceof Uri) {
+            stream.write(TYPE_URI);
+            writeValue(stream, value.toString());
+        } else {
+            super.writeValue(stream, value);
+        }
+    }
+}
+```
+
+❌ **Incorrect:**
+```java
+// Don't ignore custom types
+// DateTime objects will fail without custom codec
+protected void writeValue(ByteArrayOutputStream stream, Object value) {
+    super.writeValue(stream, value); // Missing DateTime/Uri handling
+}
+```
+
+## Property Merging Pattern
+
+Always merge library properties with user properties correctly.
+
+✅ **Correct:**
+```java
+public static JSONObject getMergedProperties(
+    Map<String, Object> properties, 
+    Map<String, Object> mixpanelProperties
+) throws JSONException {
+    JSONObject jsonObject = new JSONObject();
+    
+    // Add user properties first
+    if (properties != null) {
+        for (Map.Entry<String, Object> entry : properties.entrySet()) {
+            jsonObject.put(entry.getKey(), entry.getValue());
+        }
+    }
+    
+    // Add library properties (these can override user properties)
+    for (Map.Entry<String, Object> entry : mixpanelProperties.entrySet()) {
+        jsonObject.put(entry.getKey(), entry.getValue());
+    }
+    
+    return jsonObject;
+}
+```
+
+❌ **Incorrect:**
+```java
+// Don't forget to merge library properties
+JSONObject jsonObject = MixpanelFlutterHelper.toJSONObject(properties);
+// Missing library properties like $lib_version
+mixpanel.track(eventName, jsonObject);
+```
+
+## Null Safety
+
+Handle null arguments gracefully without crashing.
+
+✅ **Correct:**
+```java
+Map<String, Object> properties = call.argument("properties");
+if (properties == null) {
+    properties = new HashMap<>();
+}
+
+Boolean trackAutomaticEvents = call.argument("trackAutomaticEvents");
+if (trackAutomaticEvents != null && trackAutomaticEvents) {
+    mixpanel.trackAutomaticEvents();
+}
+```
+
+❌ **Incorrect:**
+```java
+// Don't assume non-null values
+Map<String, Object> properties = call.argument("properties");
+properties.put("key", "value"); // NPE if properties is null
+
+boolean trackEvents = call.argument("trackAutomaticEvents"); // NPE on null
+```

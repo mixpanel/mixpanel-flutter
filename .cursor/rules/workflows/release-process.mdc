@@ -1,0 +1,237 @@
+---
+description: Step-by-step workflow for releasing a new version of the Mixpanel Flutter SDK
+globs: []
+alwaysApply: false
+---
+
+# Release Process Workflow
+
+This workflow ensures consistent and error-free releases of the Mixpanel Flutter SDK.
+
+## Pre-Release Checklist
+
+Before starting the release process, ensure:
+
+- [ ] All tests pass on all platforms
+- [ ] Static analysis shows no issues (`flutter analyze`)
+- [ ] Example app works correctly on iOS, Android, and Web
+- [ ] CHANGELOG.md is updated with all changes
+- [ ] No uncommitted changes in working directory
+
+## Step 1: Determine Version Number
+
+Follow semantic versioning (MAJOR.MINOR.PATCH):
+
+- **PATCH** (x.x.1): Bug fixes, minor improvements
+- **MINOR** (x.1.0): New features, backward compatible
+- **MAJOR** (1.0.0): Breaking changes
+
+✅ **Examples:**
+```bash
+# Bug fix: 2.4.4 → 2.4.5
+python tool/release.py --old 2.4.4 --new 2.4.5
+
+# New feature: 2.4.4 → 2.5.0
+python tool/release.py --old 2.4.4 --new 2.5.0
+
+# Breaking change: 2.4.4 → 3.0.0
+python tool/release.py --old 2.4.4 --new 3.0.0
+```
+
+## Step 2: Run Release Script
+
+The release script automatically updates version in all required files:
+
+```bash
+# From project root
+python tool/release.py --old CURRENT_VERSION --new NEW_VERSION
+```
+
+The script updates:
+1. `pubspec.yaml` - Package version
+2. `lib/mixpanel_flutter.dart` - $lib_version in tracking
+3. `test/mixpanel_flutter_test.dart` - Version in tests
+4. `ios/mixpanel_flutter.podspec` - Pod version
+
+✅ **Verify Changes:**
+```bash
+# Check that all files were updated correctly
+git diff --name-only
+# Should show:
+# - pubspec.yaml
+# - lib/mixpanel_flutter.dart
+# - test/mixpanel_flutter_test.dart
+# - ios/mixpanel_flutter.podspec
+```
+
+## Step 3: Update CHANGELOG.md
+
+Add a new section at the top with release notes:
+
+✅ **Correct Format:**
+```markdown
+# Change Log
+
+## Version 2.5.0
+* Added screen tracking functionality
+* Fixed issue with null properties on web platform
+* Improved error handling for empty event names
+
+## Version 2.4.4
+* Previous release notes...
+```
+
+❌ **Incorrect:**
+```markdown
+# Change Log
+
+## Latest
+* Some changes // Wrong - use specific version number
+
+Version 2.5.0 // Wrong - missing ## prefix
+- Changes // Wrong - use * for bullets
+```
+
+## Step 4: Commit Version Changes
+
+Create a commit with the version update:
+
+```bash
+git add -A
+git commit -m "Version NEW_VERSION"
+# Example: git commit -m "Version 2.5.0"
+```
+
+## Step 5: Create and Push Tag
+
+Create a git tag for the release:
+
+```bash
+git tag vNEW_VERSION
+# Example: git tag v2.5.0
+
+# Push changes and tag
+git push origin main
+git push origin vNEW_VERSION
+```
+
+## Step 6: Run Final Tests
+
+Before publishing, run tests one more time:
+
+```bash
+# Run Flutter tests
+flutter test
+
+# Run example app on each platform
+cd example
+flutter run # Choose iOS
+flutter run # Choose Android
+flutter run -d chrome # Web
+```
+
+## Step 7: Publish to pub.dev
+
+Publish the package:
+
+```bash
+# Dry run first to check everything
+flutter pub publish --dry-run
+
+# If everything looks good, publish
+flutter pub publish
+```
+
+Follow the prompts and authenticate if required.
+
+## Step 8: Create GitHub Release
+
+1. Go to GitHub repository releases page
+2. Click "Create a new release"
+3. Select the tag you just created (e.g., v2.5.0)
+4. Set release title: "Version 2.5.0"
+5. Copy changelog entries for this version into description
+6. Publish release
+
+## Post-Release Verification
+
+After publishing:
+
+- [ ] Package appears on pub.dev
+- [ ] Version badge updated on pub.dev
+- [ ] Example in pub.dev shows new version
+- [ ] GitHub release is visible
+
+## Troubleshooting Common Issues
+
+### Version Mismatch Error
+
+If you get version mismatch errors:
+
+✅ **Fix:**
+```bash
+# Manually verify all version locations match
+grep -r "2\.4\.4" --include="*.dart" --include="*.yaml" --include="*.podspec"
+
+# Update any missed files manually
+```
+
+### Publishing Authentication Issues
+
+If authentication fails:
+
+✅ **Fix:**
+```bash
+# Ensure you're logged in to pub.dev
+flutter pub login
+
+# Verify you have publishing rights
+# Check https://pub.dev/packages/mixpanel_flutter/admin
+```
+
+### Tag Already Exists
+
+If git tag already exists:
+
+✅ **Fix:**
+```bash
+# Delete local tag
+git tag -d v2.5.0
+
+# Delete remote tag
+git push origin :refs/tags/v2.5.0
+
+# Recreate tag
+git tag v2.5.0
+git push origin v2.5.0
+```
+
+## Release Communication
+
+After successful release:
+
+1. Update any internal documentation
+2. Notify relevant stakeholders
+3. Monitor pub.dev and GitHub for any immediate issues
+4. Be prepared to hotfix if critical issues found
+
+## Hotfix Process
+
+For critical bugs in a release:
+
+1. Create hotfix branch from tag
+2. Fix the issue
+3. Increment PATCH version
+4. Follow abbreviated release process
+5. Cherry-pick to main if applicable
+
+✅ **Example:**
+```bash
+# Create hotfix from release
+git checkout -b hotfix/2.5.1 v2.5.0
+
+# Make fixes...
+
+# Release hotfix
+python tool/release.py --old 2.5.0 --new 2.5.1
+```

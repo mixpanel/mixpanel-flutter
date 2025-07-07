@@ -1,0 +1,195 @@
+---
+description: Testing patterns, documentation standards, and quality requirements for maintainable code
+globs: []
+alwaysApply: true
+---
+
+# Code Quality Standards
+
+These rules ensure high-quality, maintainable code with proper testing and documentation.
+
+## Test Structure Pattern
+
+All tests must use proper initialization and mock the platform channel correctly.
+
+✅ **Correct:**
+```dart
+test('track sends correct arguments', () async {
+  final mixpanel = await Mixpanel.init('test_token', trackAutomaticEvents: false);
+  
+  await mixpanel.track('test event', properties: {'a': 'b'});
+  
+  expect(
+    methodCall,
+    isMethodCall(
+      'track',
+      arguments: <String, dynamic>{
+        'eventName': 'test event',
+        'properties': <String, dynamic>{'a': 'b'},
+      },
+    ),
+  );
+});
+```
+
+❌ **Incorrect:**
+```dart
+test('track test', () async {
+  // Don't use constructor directly - breaks initialization flow
+  final mixpanel = Mixpanel('token');
+  
+  // Missing proper assertions
+  await mixpanel.track('event');
+  expect(methodCall, isNotNull); // Too vague
+});
+```
+
+## Validation Test Requirements
+
+Every public method must have tests for invalid inputs.
+
+✅ **Correct:**
+```dart
+test('track() should not crash when event name is empty', () async {
+  final mixpanel = await Mixpanel.init('test_token', trackAutomaticEvents: false);
+  
+  await mixpanel.track('', properties: {'a': 'b'});
+  expect(methodCall, null); // Verify no platform call made
+});
+
+test('track() should not crash when event name is null', () async {
+  final mixpanel = await Mixpanel.init('test_token', trackAutomaticEvents: false);
+  
+  await mixpanel.track(null as dynamic, properties: {'a': 'b'});
+  expect(methodCall, null);
+});
+```
+
+❌ **Incorrect:**
+```dart
+// Missing validation tests allows crashes in production
+test('track works', () async {
+  await mixpanel.track('valid event');
+  // Only testing happy path
+});
+```
+
+## Documentation Format
+
+All public methods must have comprehensive dartdoc comments.
+
+✅ **Correct:**
+```dart
+/// Track an event.
+///
+/// Every call to track eventually results in a data point sent to Mixpanel.
+/// These data points are what are measured, counted, and broken down to create
+/// your Mixpanel reports. Events have a string name, and an optional set of
+/// name/value pairs that describe the properties of that event.
+///
+/// * [eventName] The name of the event to send
+/// * [properties] A Map containing the key value pairs of the properties
+///   to include in this event. Pass null if no extra properties exist.
+Future<void> track(String eventName, {Map<String, dynamic>? properties}) async {
+  // Implementation
+}
+```
+
+❌ **Incorrect:**
+```dart
+// Missing or incomplete documentation
+// Tracks an event
+Future<void> track(String eventName, {Map<String, dynamic>? properties}) async {
+  // Implementation
+}
+```
+
+## Error Logging Standards
+
+Use consistent logging with the 'Mixpanel' tag and descriptive messages.
+
+✅ **Correct:**
+```dart
+if (!_MixpanelHelper.isValidString(eventName)) {
+  developer.log('`track` failed: eventName cannot be blank', name: 'Mixpanel');
+  return;
+}
+
+if (!_MixpanelHelper.isValidString(distinctId)) {
+  developer.log('`identify` failed: distinctId cannot be blank', name: 'Mixpanel');
+  return;
+}
+```
+
+❌ **Incorrect:**
+```dart
+if (!valid) {
+  print('Error'); // Don't use print
+  developer.log('Failed'); // Missing context and tag
+  debugPrint('track failed: $eventName'); // Don't log sensitive data
+}
+```
+
+## Version Management
+
+SDK version must be updated in all required locations when releasing.
+
+✅ **Correct:**
+```dart
+// In lib/mixpanel_flutter.dart
+static Map<String, String> _getMixpanelProperties() {
+  return <String, String>{
+    '\$lib_version': '2.4.4',  // Must match pubspec.yaml
+    'mp_lib': 'flutter',
+  };
+}
+
+// In pubspec.yaml
+version: 2.4.4
+
+// In ios/mixpanel_flutter.podspec
+s.version = '2.4.4'
+```
+
+❌ **Incorrect:**
+```dart
+// Mismatched versions cause tracking inconsistencies
+// lib/mixpanel_flutter.dart shows '2.4.3'
+// pubspec.yaml shows '2.4.4'
+// Different versions break release process
+```
+
+## Example App Requirements
+
+Every new feature must have a corresponding example page demonstrating usage.
+
+✅ **Correct:**
+```dart
+// In example/lib/gdpr_page.dart
+class GDPRPage extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text('GDPR Compliance')),
+      body: ListView(
+        children: [
+          ElevatedButton(
+            onPressed: () => _mixpanel.optInTracking(),
+            child: Text('Opt In to Tracking'),
+          ),
+          ElevatedButton(
+            onPressed: () => _mixpanel.optOutTracking(),
+            child: Text('Opt Out of Tracking'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+```
+
+❌ **Incorrect:**
+```dart
+// Adding features without example usage makes testing difficult
+// No example page for new GDPR features
+```
