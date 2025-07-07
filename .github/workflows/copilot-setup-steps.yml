@@ -55,9 +55,6 @@ jobs:
           
           # Install coverage tools
           dart pub global activate coverage
-          
-          # Install test_coverage for coverage reports
-          dart pub global activate test_coverage
 
       - name: Run Flutter analyze
         run: flutter analyze
