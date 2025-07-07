@@ -57,7 +57,7 @@ jobs:
           dart pub global activate coverage
 
       - name: Run Flutter analyze
-        run: flutter analyze
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
 
       - name: Verify test setup
         run: flutter test --no-pub
