@@ -1,0 +1,354 @@
+---
+description: Example app implementation patterns for demonstrating SDK features
+globs: ["**/example/lib/**/*.dart"]
+alwaysApply: false
+---
+
+# Example App Implementation Rules
+
+These rules ensure the example app properly demonstrates all SDK features with clear, testable code.
+
+## Page Structure Pattern
+
+Each feature should have its own dedicated page with clear UI and actions.
+
+✅ **Correct:**
+```dart
+class TrackingPage extends StatelessWidget {
+  final Mixpanel _mixpanel;
+  
+  const TrackingPage(this._mixpanel, {Key? key}) : super(key: key);
+  
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Event Tracking'),
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Text(
+            'Basic Tracking',
+            style: Theme.of(context).textTheme.headlineSmall,
+          ),
+          const SizedBox(height: 16),
+          ElevatedButton(
+            onPressed: () => _trackBasicEvent(),
+            child: const Text('Track Basic Event'),
+          ),
+          ElevatedButton(
+            onPressed: () => _trackEventWithProperties(),
+            child: const Text('Track Event with Properties'),
+          ),
+          const Divider(height: 32),
+          Text(
+            'Timed Events',
+            style: Theme.of(context).textTheme.headlineSmall,
+          ),
+          // Continue with more examples...
+        ],
+      ),
+    );
+  }
+  
+  void _trackBasicEvent() {
+    _mixpanel.track('Example Event');
+    _showSnackBar('Tracked: Example Event');
+  }
+  
+  void _trackEventWithProperties() {
+    _mixpanel.track('Purchase', properties: {
+      'Item': 'Coffee',
+      'Price': 2.99,
+      'Quantity': 1,
+    });
+    _showSnackBar('Tracked: Purchase with properties');
+  }
+}
+```
+
+❌ **Incorrect:**
+```dart
+// Don't mix multiple features in one page
+class MainPage extends StatelessWidget {
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Column(
+        children: [
+          // Everything crammed into one page
+          TextButton(onPressed: track, child: Text('Track')),
+          TextButton(onPressed: identify, child: Text('Identify')),
+          TextButton(onPressed: setProfile, child: Text('Profile')),
+          // Hard to test individual features
+        ],
+      ),
+    );
+  }
+}
+```
+
+## Navigation Pattern
+
+Use a clear navigation structure to access different feature pages.
+
+✅ **Correct:**
+```dart
+class MyApp extends StatelessWidget {
+  final Mixpanel mixpanel;
+  
+  const MyApp(this.mixpanel, {Key? key}) : super(key: key);
+  
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Mixpanel Flutter Example',
+      theme: ThemeData(
+        primarySwatch: Colors.blue,
+        useMaterial3: true,
+      ),
+      home: HomePage(mixpanel),
+      routes: {
+        '/tracking': (context) => TrackingPage(mixpanel),
+        '/user-profile': (context) => UserProfilePage(mixpanel),
+        '/groups': (context) => GroupsPage(mixpanel),
+        '/gdpr': (context) => GDPRPage(mixpanel),
+        '/advanced': (context) => AdvancedPage(mixpanel),
+      },
+    );
+  }
+}
+
+class HomePage extends StatelessWidget {
+  final Mixpanel _mixpanel;
+  
+  const HomePage(this._mixpanel, {Key? key}) : super(key: key);
+  
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Mixpanel Example')),
+      body: ListView(
+        children: [
+          ListTile(
+            title: const Text('Event Tracking'),
+            subtitle: const Text('Basic and timed events'),
+            trailing: const Icon(Icons.arrow_forward_ios),
+            onTap: () => Navigator.pushNamed(context, '/tracking'),
+          ),
+          ListTile(
+            title: const Text('User Profiles'),
+            subtitle: const Text('Set and update user properties'),
+            trailing: const Icon(Icons.arrow_forward_ios),
+            onTap: () => Navigator.pushNamed(context, '/user-profile'),
+          ),
+          // Continue with other features...
+        ],
+      ),
+    );
+  }
+}
+```
+
+❌ **Incorrect:**
+```dart
+// Don't use unclear navigation
+class MyApp extends StatelessWidget {
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      home: Scaffold(
+        body: PageView(
+          children: [
+            Page1(),
+            Page2(), // Unclear what each page does
+            Page3(),
+          ],
+        ),
+      ),
+    );
+  }
+}
+```
+
+## Property Type Demonstration
+
+Show examples of all supported property types.
+
+✅ **Correct:**
+```dart
+void _trackWithAllPropertyTypes() {
+  _mixpanel.track('Property Types Demo', properties: {
+    'string': 'Hello World',
+    'integer': 42,
+    'double': 3.14159,
+    'boolean': true,
+    'datetime': DateTime.now(),
+    'uri': Uri.parse('https://mixpanel.com'),
+    'list': ['item1', 'item2', 'item3'],
+    'map': {
+      'nested_string': 'value',
+      'nested_number': 123,
+    },
+    'null_value': null,
+  });
+  
+  _showSnackBar('Tracked event with all property types');
+}
+```
+
+❌ **Incorrect:**
+```dart
+// Don't only show basic types
+void _trackEvent() {
+  _mixpanel.track('Event', properties: {
+    'key': 'value', // Only showing strings
+  });
+}
+```
+
+## Error Scenario Demonstration
+
+Include examples that show SDK's error handling behavior.
+
+✅ **Correct:**
+```dart
+class ErrorHandlingSection extends StatelessWidget {
+  final Mixpanel _mixpanel;
+  
+  const ErrorHandlingSection(this._mixpanel, {Key? key}) : super(key: key);
+  
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Error Handling',
+          style: Theme.of(context).textTheme.headlineSmall,
+        ),
+        const Text('SDK handles invalid inputs gracefully:'),
+        const SizedBox(height: 8),
+        ElevatedButton(
+          onPressed: () => _testEmptyEventName(),
+          child: const Text('Track with Empty Event Name'),
+        ),
+        ElevatedButton(
+          onPressed: () => _testNullProperties(),
+          child: const Text('Track with Null Properties'),
+        ),
+      ],
+    );
+  }
+  
+  void _testEmptyEventName() {
+    // This should not crash - SDK validates input
+    _mixpanel.track('');
+    _showSnackBar('Empty event name handled gracefully');
+  }
+  
+  void _testNullProperties() {
+    // This should work fine
+    _mixpanel.track('Test Event', properties: null);
+    _showSnackBar('Null properties handled gracefully');
+  }
+}
+```
+
+❌ **Incorrect:**
+```dart
+// Don't skip error scenarios
+// Only showing happy path examples
+```
+
+## State Management Pattern
+
+Use StatefulWidget when demonstrating features that require state.
+
+✅ **Correct:**
+```dart
+class TimedEventsPage extends StatefulWidget {
+  final Mixpanel mixpanel;
+  
+  const TimedEventsPage(this.mixpanel, {Key? key}) : super(key: key);
+  
+  @override
+  State<TimedEventsPage> createState() => _TimedEventsPageState();
+}
+
+class _TimedEventsPageState extends State<TimedEventsPage> {
+  bool _timerStarted = false;
+  String? _currentTimer;
+  
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Column(
+        children: [
+          ElevatedButton(
+            onPressed: _timerStarted ? null : _startTimer,
+            child: Text('Start Timer: ${_currentTimer ?? "None"}'),
+          ),
+          ElevatedButton(
+            onPressed: _timerStarted ? _stopTimer : null,
+            child: const Text('Stop Timer and Track'),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  void _startTimer() {
+    setState(() {
+      _currentTimer = 'Reading Article';
+      _timerStarted = true;
+    });
+    widget.mixpanel.timeEvent(_currentTimer!);
+  }
+  
+  void _stopTimer() {
+    widget.mixpanel.track(_currentTimer!);
+    setState(() {
+      _timerStarted = false;
+      _currentTimer = null;
+    });
+  }
+}
+```
+
+❌ **Incorrect:**
+```dart
+// Don't use StatelessWidget for stateful operations
+class TimedEventsPage extends StatelessWidget {
+  void _startTimer() {
+    mixpanel.timeEvent('Event'); // No way to track state
+  }
+}
+```
+
+## User Feedback Pattern
+
+Provide visual feedback for all actions.
+
+✅ **Correct:**
+```dart
+class ExamplePage extends StatelessWidget {
+  void _performAction(BuildContext context) {
+    _mixpanel.track('Action Performed');
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Action tracked successfully'),
+        duration: Duration(seconds: 1),
+      ),
+    );
+  }
+}
+```
+
+❌ **Incorrect:**
+```dart
+void _performAction() {
+  _mixpanel.track('Action');
+  // No feedback - user doesn't know if it worked
+}
+```

@@ -1,0 +1,200 @@
+---
+description: Architectural boundaries and component separation rules that maintain system integrity
+globs: []
+alwaysApply: true
+---
+
+# Architecture Principles
+
+These rules maintain the layered architecture and ensure proper separation of concerns across the Mixpanel Flutter SDK.
+
+## Platform Channel Architecture
+
+Maintain strict separation between Dart API layer and platform implementations.
+
+✅ **Correct:**
+```dart
+// In lib/mixpanel_flutter.dart - Dart API layer only
+class Mixpanel {
+  static final MethodChannel _channel = kIsWeb
+      ? const MethodChannel('mixpanel_flutter')
+      : const MethodChannel(
+          'mixpanel_flutter', StandardMethodCodec(MixpanelMessageCodec()));
+  
+  Future<void> track(String eventName, {Map<String, dynamic>? properties}) async {
+    // Only validation and channel invocation
+    if (_MixpanelHelper.isValidString(eventName)) {
+      await _channel.invokeMethod<void>('track', <String, dynamic>{
+        'eventName': eventName,
+        'properties': properties ?? {},
+      });
+    }
+  }
+}
+```
+
+❌ **Incorrect:**
+```dart
+// Don't mix platform-specific logic in Dart API layer
+class Mixpanel {
+  Future<void> track(String eventName, {Map<String, dynamic>? properties}) async {
+    if (Platform.isAndroid) {
+      // Platform-specific logic belongs in native code
+      final json = convertToJSONObject(properties);
+    }
+  }
+}
+```
+
+## Singleton Pattern Requirements
+
+The SDK must use static factory initialization, never expose constructors.
+
+✅ **Correct:**
+```dart
+class Mixpanel {
+  final String _token;
+  
+  // Private constructor
+  Mixpanel._internal(this._token);
+  
+  // Static factory method
+  static Future<Mixpanel> init(String token, {
+    bool optOutTrackingDefault = false,
+    required bool trackAutomaticEvents,
+  }) async {
+    await _channel.invokeMethod<void>('initialize', <String, dynamic>{
+      'token': token,
+      'trackAutomaticEvents': trackAutomaticEvents,
+    });
+    return Mixpanel._internal(token);
+  }
+}
+```
+
+❌ **Incorrect:**
+```dart
+class Mixpanel {
+  // Don't expose public constructors
+  Mixpanel(this.token);  // Wrong - breaks singleton pattern
+}
+```
+
+## Type Serialization Rules
+
+Complex types must be handled through MixpanelMessageCodec for mobile platforms.
+
+✅ **Correct:**
+```dart
+// In codec/mixpanel_message_codec.dart
+class MixpanelMessageCodec extends StandardMessageCodec {
+  @override
+  void writeValue(WriteBuffer buffer, dynamic value) {
+    if (value is DateTime) {
+      buffer.putUint8(_typeDateTime);
+      buffer.putInt64(value.millisecondsSinceEpoch);
+    } else if (value is Uri) {
+      buffer.putUint8(_typeUri);
+      writeValue(buffer, value.toString());
+    } else {
+      super.writeValue(buffer, value);
+    }
+  }
+}
+```
+
+❌ **Incorrect:**
+```dart
+// Don't send complex types directly without codec handling
+await _channel.invokeMethod('track', {
+  'timestamp': DateTime.now(), // Will fail without codec
+});
+```
+
+## Web Platform Separation
+
+Web implementation must be completely separate and use JavaScript interop.
+
+✅ **Correct:**
+```dart
+// In lib/mixpanel_flutter_web.dart
+class MixpanelFlutterWeb {
+  dynamic safeJsify(Object value) {
+    if (value is Map<dynamic, dynamic>) {
+      value = JsLinkedHashMap.from(value);
+    }
+    return jsify(value);
+  }
+  
+  Future<void> track(String eventName, Map<String, dynamic> properties) async {
+    var trackedProperties = safeJsify(properties);
+    mixpanelJs.track(eventName, trackedProperties);
+  }
+}
+```
+
+❌ **Incorrect:**
+```dart
+// Don't use platform channels on web
+if (kIsWeb) {
+  await _channel.invokeMethod('track', args); // Wrong for web
+}
+```
+
+## Component Access Pattern
+
+Sub-components must be accessed through getter methods, not public properties.
+
+✅ **Correct:**
+```dart
+class Mixpanel {
+  People? _people;
+  
+  People getPeople() {
+    _people ??= People(_token);
+    return _people!;
+  }
+}
+
+// Usage
+mixpanel.getPeople().set('name', 'John');
+```
+
+❌ **Incorrect:**
+```dart
+class Mixpanel {
+  // Don't expose as public property
+  final People people = People(); // Wrong
+}
+
+// Usage
+mixpanel.people.set('name', 'John');
+```
+
+## Method Name Consistency
+
+Platform channel method names must match exactly between Dart and native implementations.
+
+✅ **Correct:**
+```dart
+// Dart
+await _channel.invokeMethod<void>('registerSuperProperties', args);
+
+// Android
+case "registerSuperProperties":
+    // Implementation
+
+// iOS  
+case "registerSuperProperties":
+    // Implementation
+```
+
+❌ **Incorrect:**
+```dart
+// Inconsistent naming breaks platform communication
+// Dart
+await _channel.invokeMethod<void>('registerSuperProperties', args);
+
+// Android
+case "register_super_properties": // Wrong - different naming
+```

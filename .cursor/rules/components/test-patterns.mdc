@@ -1,0 +1,275 @@
+---
+description: Testing patterns and requirements for Mixpanel Flutter SDK tests
+globs: ["**/test/**/*_test.dart", "**/test/**/*.dart"]
+alwaysApply: false
+---
+
+# Test Implementation Rules
+
+These rules ensure comprehensive and consistent testing across the Mixpanel Flutter SDK.
+
+## Test Setup Pattern
+
+All tests must properly set up the mock platform channel and use the init method.
+
+✅ **Correct:**
+```dart
+void main() {
+  const MethodChannel channel = MethodChannel('mixpanel_flutter');
+  
+  TestWidgetsFlutterBinding.ensureInitialized();
+  
+  late Mixpanel mixpanel;
+  MethodCall? methodCall;
+  
+  setUp(() async {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (MethodCall call) async {
+      methodCall = call;
+      return null;
+    });
+    
+    // Always use init, never constructor
+    mixpanel = await Mixpanel.init('test_token', trackAutomaticEvents: false);
+    methodCall = null; // Reset after init
+  });
+  
+  tearDown(() {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, null);
+  });
+}
+```
+
+❌ **Incorrect:**
+```dart
+void main() {
+  late Mixpanel mixpanel;
+  
+  setUp(() {
+    // Wrong - using constructor directly
+    mixpanel = Mixpanel('test_token');
+    
+    // Missing channel setup
+  });
+}
+```
+
+## Method Call Assertion Pattern
+
+Use the custom isMethodCall matcher for clear, readable assertions.
+
+✅ **Correct:**
+```dart
+test('track sends correct arguments', () async {
+  await mixpanel.track('Button Clicked', properties: {
+    'button_name': 'purchase',
+    'price': 99.99,
+  });
+  
+  expect(
+    methodCall,
+    isMethodCall(
+      'track',
+      arguments: <String, dynamic>{
+        'eventName': 'Button Clicked',
+        'properties': <String, dynamic>{
+          'button_name': 'purchase',
+          'price': 99.99,
+        },
+      },
+    ),
+  );
+});
+```
+
+❌ **Incorrect:**
+```dart
+test('track test', () async {
+  await mixpanel.track('event');
+  
+  // Too vague assertions
+  expect(methodCall, isNotNull);
+  expect(methodCall?.method, equals('track'));
+  // Missing argument verification
+});
+```
+
+## Validation Test Requirements
+
+Every public method must have tests for invalid inputs.
+
+✅ **Correct:**
+```dart
+group('Input Validation', () {
+  test('track() should not crash when event name is empty', () async {
+    await mixpanel.track('', properties: {'key': 'value'});
+    expect(methodCall, null); // No platform call should be made
+  });
+  
+  test('track() should not crash when event name is null', () async {
+    await mixpanel.track(null as dynamic);
+    expect(methodCall, null);
+  });
+  
+  test('identify() should not crash when distinctId is empty', () async {
+    await mixpanel.identify('');
+    expect(methodCall, null);
+  });
+  
+  test('alias() should not crash when alias is empty', () async {
+    await mixpanel.alias('', 'distinctId');
+    expect(methodCall, null);
+  });
+});
+```
+
+❌ **Incorrect:**
+```dart
+// Only testing happy path - missing validation tests
+test('track works', () async {
+  await mixpanel.track('valid event');
+  expect(methodCall, isMethodCall('track'));
+});
+```
+
+## Property Type Testing
+
+Test that different property types are handled correctly.
+
+✅ **Correct:**
+```dart
+test('track handles all property types', () async {
+  final testDate = DateTime(2024, 1, 15, 10, 30);
+  final testUri = Uri.parse('https://mixpanel.com');
+  
+  await mixpanel.track('Test Event', properties: {
+    'string': 'value',
+    'int': 42,
+    'double': 3.14,
+    'bool': true,
+    'date': testDate,
+    'uri': testUri,
+    'list': [1, 2, 3],
+    'map': {'nested': 'value'},
+    'null': null,
+  });
+  
+  expect(
+    methodCall,
+    isMethodCall(
+      'track',
+      arguments: <String, dynamic>{
+        'eventName': 'Test Event',
+        'properties': <String, dynamic>{
+          'string': 'value',
+          'int': 42,
+          'double': 3.14,
+          'bool': true,
+          'date': testDate,
+          'uri': testUri,
+          'list': [1, 2, 3],
+          'map': {'nested': 'value'},
+          'null': null,
+        },
+      },
+    ),
+  );
+});
+```
+
+❌ **Incorrect:**
+```dart
+// Not testing various property types
+test('track with properties', () async {
+  await mixpanel.track('event', properties: {'key': 'value'});
+  // Only testing string properties
+});
+```
+
+## Group Testing Pattern
+
+Test group functionality with proper accessor pattern.
+
+✅ **Correct:**
+```dart
+group('Group Analytics', () {
+  test('getGroup returns group instance', () async {
+    final group = mixpanel.getGroup('company', 'mixpanel');
+    expect(group, isNotNull);
+    expect(group.groupKey, equals('company'));
+    expect(group.groupID, equals('mixpanel'));
+  });
+  
+  test('group operations send correct method calls', () async {
+    final group = mixpanel.getGroup('company', 'mixpanel');
+    
+    await group.set({'plan': 'premium'});
+    expect(
+      methodCall,
+      isMethodCall(
+        'groupSetProperties',
+        arguments: <String, dynamic>{
+          'groupKey': 'company',
+          'groupID': 'mixpanel',
+          'properties': {'plan': 'premium'},
+        },
+      ),
+    );
+  });
+});
+```
+
+❌ **Incorrect:**
+```dart
+// Not testing through proper accessor
+test('group test', () async {
+  // Wrong - trying to call group methods directly on mixpanel
+  await mixpanel.groupSet('company', 'id', {}); // No such method
+});
+```
+
+## Custom Matcher Implementation
+
+Include the custom test matcher for better assertions.
+
+✅ **Correct:**
+```dart
+class _IsMethodCall extends Matcher {
+  final String method;
+  final dynamic arguments;
+
+  const _IsMethodCall(this.method, {this.arguments});
+
+  @override
+  bool matches(dynamic item, Map matchState) {
+    if (item is! MethodCall) return false;
+    if (item.method != method) return false;
+    if (arguments != null && item.arguments != arguments) {
+      return false;
+    }
+    return true;
+  }
+
+  @override
+  Description describe(Description description) {
+    description.add('method call "$method"');
+    if (arguments != null) {
+      description.add(' with arguments $arguments');
+    }
+    return description;
+  }
+}
+
+Matcher isMethodCall(String method, {dynamic arguments}) {
+  return _IsMethodCall(method, arguments: arguments);
+}
+```
+
+❌ **Incorrect:**
+```dart
+// Don't use verbose assertions without custom matcher
+expect(methodCall?.method, equals('track'));
+expect(methodCall?.arguments['eventName'], equals('event'));
+// Harder to read and maintain
+```

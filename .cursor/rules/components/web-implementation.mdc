@@ -1,0 +1,248 @@
+---
+description: Web-specific implementation patterns for the Mixpanel Flutter plugin
+globs: ["**/*_web.dart", "**/web/**/*.dart"]
+alwaysApply: false
+---
+
+# Web Implementation Rules
+
+These rules ensure proper implementation of web-specific code using JavaScript interop.
+
+## Web Plugin Structure
+
+Web implementation must extend Flutter's web plugin base and use proper registration.
+
+✅ **Correct:**
+```dart
+class MixpanelFlutterWeb {
+  static void registerWith(Registrar registrar) {
+    final MethodChannel channel = MethodChannel(
+      'mixpanel_flutter',
+      const StandardMethodCodec(),
+      registrar,
+    );
+
+    final pluginInstance = MixpanelFlutterWeb();
+    channel.setMethodCallHandler(pluginInstance.handleMethodCall);
+  }
+
+  Future<dynamic> handleMethodCall(MethodCall call) async {
+    switch (call.method) {
+      case 'initialize':
+        return _initialize(call.arguments);
+      case 'track':
+        return track(call.arguments['eventName'], call.arguments['properties']);
+      default:
+        throw PlatformException(
+          code: 'Unimplemented',
+          details: 'mixpanel_flutter for web doesn\'t implement \'${call.method}\'',
+        );
+    }
+  }
+}
+```
+
+❌ **Incorrect:**
+```dart
+// Don't use platform channels directly on web
+class MixpanelFlutterWeb {
+  static const MethodChannel _channel = MethodChannel('mixpanel_flutter');
+  
+  Future<void> track(String event) async {
+    await _channel.invokeMethod('track'); // Wrong - use JS interop
+  }
+}
+```
+
+## JavaScript Interop Pattern
+
+Use @JS annotations and proper type conversion for JavaScript interaction.
+
+✅ **Correct:**
+```dart
+@JS('mixpanel')
+library mixpanel_js;
+
+@JS()
+external MixpanelJS get mixpanel;
+
+@JS()
+class MixpanelJS {
+  external void init(String token, dynamic config);
+  external void track(String eventName, [dynamic properties]);
+  external void identify(String distinctId);
+  external People get people;
+}
+
+@JS()
+class People {
+  external void set(dynamic properties);
+  external void setOnce(dynamic properties);
+}
+```
+
+❌ **Incorrect:**
+```dart
+// Don't access JavaScript without proper annotations
+external dynamic get mixpanel; // Missing @JS annotation
+
+// Don't use dart:js directly
+import 'dart:js' as js;
+js.context['mixpanel'].callMethod('track'); // Use @JS instead
+```
+
+## Safe JavaScript Conversion
+
+Always use safeJsify to convert Dart objects to JavaScript-compatible format.
+
+✅ **Correct:**
+```dart
+dynamic safeJsify(Object value) {
+  if (value is Map<dynamic, dynamic>) {
+    value = JsLinkedHashMap.from(value);
+  }
+  var args = jsify(value);
+  return args;
+}
+
+@override
+Future<void> track(String eventName, Map<String, dynamic> properties) async {
+  var jsProperties = safeJsify(properties);
+  mixpanelJs.track(eventName, jsProperties);
+}
+```
+
+❌ **Incorrect:**
+```dart
+// Don't pass Dart objects directly to JavaScript
+Future<void> track(String eventName, Map<String, dynamic> properties) async {
+  mixpanelJs.track(eventName, properties); // Will fail - needs jsify
+}
+
+// Don't use jsify without null checking
+var jsProps = jsify(properties); // Can throw if properties is null
+```
+
+## Initialization Check Pattern
+
+Ensure mixpanel.js is loaded before attempting to use it.
+
+✅ **Correct:**
+```dart
+Future<void> _initialize(Map<dynamic, dynamic> arguments) async {
+  if (!_isMixpanelLoaded()) {
+    throw PlatformException(
+      code: 'NOT_LOADED',
+      message: 'Mixpanel JS library not loaded. Add script tag to index.html',
+    );
+  }
+  
+  String token = arguments['token'];
+  Map<String, dynamic> config = arguments['config'] ?? {};
+  
+  var jsConfig = safeJsify(config);
+  mixpanelJs.init(token, jsConfig);
+  
+  if (arguments['superProperties'] != null) {
+    var superProps = safeJsify(arguments['superProperties']);
+    mixpanelJs.register(superProps);
+  }
+}
+
+bool _isMixpanelLoaded() {
+  return context['mixpanel'] != null;
+}
+```
+
+❌ **Incorrect:**
+```dart
+// Don't assume mixpanel.js is loaded
+Future<void> _initialize(Map arguments) async {
+  mixpanelJs.init(arguments['token']); // May crash if not loaded
+}
+```
+
+## Property Merging for Web
+
+Merge library properties with user properties before tracking.
+
+✅ **Correct:**
+```dart
+@override
+Future<void> track(String eventName, Map<String, dynamic> properties) async {
+  // Merge library properties
+  Map<String, dynamic> mergedProperties = {};
+  if (properties != null) {
+    mergedProperties.addAll(properties);
+  }
+  
+  // Add library metadata
+  mergedProperties['\$lib_version'] = '2.4.4';
+  mergedProperties['mp_lib'] = 'flutter';
+  
+  var jsProperties = safeJsify(mergedProperties);
+  mixpanelJs.track(eventName, jsProperties);
+}
+```
+
+❌ **Incorrect:**
+```dart
+// Don't forget library properties on web
+Future<void> track(String eventName, Map<String, dynamic> properties) async {
+  var jsProperties = safeJsify(properties);
+  mixpanelJs.track(eventName, jsProperties); // Missing lib metadata
+}
+```
+
+## Group Handling on Web
+
+Implement group methods using the JavaScript group API.
+
+✅ **Correct:**
+```dart
+@override
+Future<void> setGroup(String groupKey, dynamic groupID) async {
+  if (groupID is List) {
+    var jsGroupID = JsArray.from(groupID);
+    mixpanelJs.setGroup(groupKey, jsGroupID);
+  } else {
+    mixpanelJs.setGroup(groupKey, groupID);
+  }
+}
+
+@override
+Future<void> addGroup(String groupKey, dynamic groupID) async {
+  mixpanelJs.addGroup(groupKey, groupID);
+}
+```
+
+❌ **Incorrect:**
+```dart
+// Don't ignore array handling for groups
+Future<void> setGroup(String groupKey, dynamic groupID) async {
+  mixpanelJs.setGroup(groupKey, groupID); // Arrays need special handling
+}
+```
+
+## HTML Setup Reminder
+
+Include documentation about required HTML setup.
+
+✅ **Correct:**
+```dart
+/// Web implementation of mixpanel_flutter.
+/// 
+/// IMPORTANT: Add this script tag to your web/index.html:
+/// <script src="https://cdn.mixpanel.com/mixpanel-2-latest.min.js"></script>
+class MixpanelFlutterWeb {
+  // Implementation
+}
+```
+
+❌ **Incorrect:**
+```dart
+// Missing setup instructions causes runtime failures
+class MixpanelFlutterWeb {
+  // Implementation without documenting HTML requirements
+}
+```

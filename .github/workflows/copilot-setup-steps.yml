@@ -1,0 +1,73 @@
+name: "Copilot Setup Steps"
+
+# Automatically run the setup steps when they are changed to allow for easy validation
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/copilot-setup-steps.yml
+  pull_request:
+    paths:
+      - .github/workflows/copilot-setup-steps.yml
+
+jobs:
+  # The job MUST be called `copilot-setup-steps` or it will not be picked up by Copilot.
+  copilot-setup-steps:
+    runs-on: ubuntu-latest
+
+    # Set permissions based on project needs
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.16.0"
+          channel: "stable"
+          cache: true
+
+      - name: Install Flutter dependencies
+        run: |
+          flutter --version
+          flutter pub get
+          cd example && flutter pub get
+
+      - name: Set up Java for Android
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Set up Ruby for iOS tooling
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.0'
+          bundler-cache: true
+
+      - name: Install development tools
+        run: |
+          # Install dartdoc for documentation generation
+          dart pub global activate dartdoc
+          
+          # Install coverage tools
+          dart pub global activate coverage
+          
+          # Install test_coverage for coverage reports
+          dart pub global activate test_coverage
+
+      - name: Run Flutter analyze
+        run: flutter analyze
+
+      - name: Verify test setup
+        run: flutter test --no-pub
+
+      - name: Cache setup validation
+        run: |
+          echo "✓ Flutter SDK configured"
+          echo "✓ Dependencies installed" 
+          echo "✓ Analysis tools ready"
+          echo "✓ Test framework available"

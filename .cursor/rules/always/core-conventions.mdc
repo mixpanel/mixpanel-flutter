@@ -1,0 +1,154 @@
+---
+description: Core naming, structure, and coding conventions that apply to all Mixpanel Flutter SDK code
+globs: []
+alwaysApply: true
+---
+
+# Core Coding Conventions
+
+These conventions ensure consistency across the entire Mixpanel Flutter SDK and make code immediately recognizable as belonging to this project.
+
+## Method Naming Conventions
+
+Use camelCase with specific verb prefixes that indicate the method's purpose.
+
+✅ **Correct:**
+```dart
+// Tracking methods use 'track' prefix
+track(String eventName)
+trackWithGroups(String eventName, Map<String, Object> properties)
+
+// Registration methods use 'register' prefix
+registerSuperProperties(Map<String, dynamic> properties)
+registerSuperPropertiesOnce(Map<String, dynamic> properties)
+
+// Getter methods use 'get' prefix for accessing sub-components
+getPeople()
+getGroup(String groupKey, dynamic groupID)
+```
+
+❌ **Incorrect:**
+```dart
+sendEvent(String eventName)  // Should use 'track'
+setPersistentProperties()    // Should use 'register'
+people()                     // Should use 'getPeople'
+```
+
+## Input Validation Pattern
+
+Always validate string inputs before making platform channel calls to prevent crashes.
+
+✅ **Correct:**
+```dart
+Future<void> track(String eventName, {Map<String, dynamic>? properties}) async {
+  if (_MixpanelHelper.isValidString(eventName)) {
+    await _channel.invokeMethod<void>('track', <String, dynamic>{
+      'eventName': eventName,
+      'properties': properties ?? {},
+    });
+  } else {
+    developer.log('`track` failed: eventName cannot be blank', name: 'Mixpanel');
+  }
+}
+```
+
+❌ **Incorrect:**
+```dart
+Future<void> track(String eventName, {Map<String, dynamic>? properties}) async {
+  // Missing validation - will crash on empty string
+  await _channel.invokeMethod<void>('track', <String, dynamic>{
+    'eventName': eventName,
+    'properties': properties ?? {},
+  });
+}
+```
+
+## Platform Channel Invocation Pattern
+
+Use standardized argument structure for all platform channel calls.
+
+✅ **Correct:**
+```dart
+await _channel.invokeMethod<void>('methodName', <String, dynamic>{
+  'param1': value1,
+  'param2': value2 ?? {},  // Use ?? {} for optional maps
+  'param3': value3,
+});
+```
+
+❌ **Incorrect:**
+```dart
+// Don't use positional arguments or inconsistent naming
+await _channel.invokeMethod<void>('methodName', [value1, value2]);
+await _channel.invokeMethod<void>('methodName', {
+  'Param1': value1,  // Inconsistent casing
+  'properties': null, // Don't pass null for maps
+});
+```
+
+## Error Handling Philosophy
+
+Methods must fail silently with logging - never throw exceptions to calling code.
+
+✅ **Correct:**
+```dart
+if (_MixpanelHelper.isValidString(alias)) {
+  _channel.invokeMethod<void>('alias', <String, dynamic>{
+    'alias': alias,
+    'distinctId': distinctId,
+  });
+} else {
+  developer.log('`alias` failed: alias cannot be blank', name: 'Mixpanel');
+}
+```
+
+❌ **Incorrect:**
+```dart
+if (!_MixpanelHelper.isValidString(alias)) {
+  throw ArgumentError('alias cannot be blank'); // Don't throw
+}
+```
+
+## Library Metadata Injection
+
+All tracking calls must include library version and identifier.
+
+✅ **Correct:**
+```dart
+static Map<String, String> _getMixpanelProperties() {
+  return <String, String>{
+    '\$lib_version': '2.4.4',  // Current SDK version
+    'mp_lib': 'flutter',       // Library identifier
+  };
+}
+```
+
+❌ **Incorrect:**
+```dart
+// Missing library metadata
+static Map<String, String> _getMixpanelProperties() {
+  return <String, String>{};
+}
+```
+
+## Future Return Pattern
+
+All public methods must return Future<void> for consistency, even if implementation is synchronous.
+
+✅ **Correct:**
+```dart
+Future<void> identify(String distinctId) async {
+  if (_MixpanelHelper.isValidString(distinctId)) {
+    return await _channel.invokeMethod<void>('identify', <String, dynamic>{
+      'distinctId': distinctId,
+    });
+  }
+}
+```
+
+❌ **Incorrect:**
+```dart
+void identify(String distinctId) {  // Should return Future
+  _channel.invokeMethod('identify', {'distinctId': distinctId});
+}
+```
