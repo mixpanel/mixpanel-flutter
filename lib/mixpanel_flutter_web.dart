@@ -210,6 +210,15 @@ class MixpanelFlutterPlugin {
     set_config(safeJsify({'api_host': serverURL}));
   }
 
+  /// Handles the setLoggingEnabled method call by configuring debug logging in the Mixpanel JavaScript library.
+  ///
+  /// This method extracts the logging enabled flag from the MethodCall arguments and
+  /// calls the JavaScript `set_config` function with the appropriate debug configuration.
+  ///
+  /// Expected MethodCall arguments:
+  /// - `loggingEnabled` (bool): Whether to enable debug logging
+  ///
+  /// JavaScript call: `mixpanel.set_config({debug: loggingEnabled})`
   void handleSetLoggingEnabled(MethodCall call) {
     Map<Object?, Object?> args = call.arguments as Map<Object?, Object?>;
     bool loggingEnabled = args['loggingEnabled'] as bool;
