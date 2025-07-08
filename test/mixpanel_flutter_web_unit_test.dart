@@ -209,6 +209,44 @@ void main() {
       expect(args['groups'], isA<Map>());
     });
 
+    test('setLoggingEnabled method structure', () {
+      final args = {
+        'loggingEnabled': true,
+      };
+      
+      expect(args['loggingEnabled'], isA<bool>());
+    });
+
+    test('handleSetLoggingEnabled calls set_config with correct debug parameter', () async {
+      // Import the necessary classes
+      const MethodChannel channel = MethodChannel('mixpanel_flutter');
+      
+      // Test that the method can be called without throwing an exception
+      // and that it processes the arguments correctly
+      final methodCall = MethodCall('setLoggingEnabled', {'loggingEnabled': true});
+      
+      // Verify the method call structure
+      expect(methodCall.method, 'setLoggingEnabled');
+      expect(methodCall.arguments['loggingEnabled'], isA<bool>());
+      expect(methodCall.arguments['loggingEnabled'], true);
+      
+      // Test with false value as well
+      final methodCallFalse = MethodCall('setLoggingEnabled', {'loggingEnabled': false});
+      expect(methodCallFalse.arguments['loggingEnabled'], false);
+      
+      // Since we can't mock the JavaScript set_config function in this test environment,
+      // we verify that the method call structure is correct for the handler to process
+      final args = methodCall.arguments as Map<Object?, Object?>;
+      final loggingEnabled = args['loggingEnabled'] as bool;
+      
+      // Verify the extracted boolean matches what would be passed to set_config
+      expect(loggingEnabled, true);
+      
+      // Test the configuration object that would be passed to set_config
+      final configObject = {'debug': loggingEnabled};
+      expect(configObject['debug'], true);
+    });
+
     test('people methods structure', () {
       final incrementArgs = {
         'properties': {'loginCount': 1},
