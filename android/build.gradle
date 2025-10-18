@@ -9,7 +9,7 @@ buildscript {
 
     dependencies {
         // Use a compatible version of Gradle Plugin
-        classpath 'com.android.tools.build:gradle:8.1.0' // Updated to 8.1.0
+        classpath 'com.android.tools.build:gradle:8.12.1'
     }
 }
 
@@ -23,13 +23,13 @@ rootProject.allprojects {
 apply plugin: 'com.android.library'
 
 android {
+    namespace "id.oddbit.flutter.facebook_app_events"
     // Safely handle 'namespace' property for new Android Gradle plugin versions
     if (project.hasProperty("android") && project.android.hasProperty("namespace")) {
         namespace = "com.mixpanel.mixpanel_flutter"
     }
 
-    compileSdkVersion 34
-    buildToolsVersion '34.0.0'
+    compileSdkVersion flutter.compileSdkVersion
 
     defaultConfig {
         minSdkVersion 21
