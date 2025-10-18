@@ -23,7 +23,7 @@ rootProject.allprojects {
 apply plugin: 'com.android.library'
 
 android {
-    namespace "id.oddbit.flutter.facebook_app_events"
+    namespace "com.mixpanel.mixpanel_flutter"
     // Safely handle 'namespace' property for new Android Gradle plugin versions
     if (project.hasProperty("android") && project.android.hasProperty("namespace")) {
         namespace = "com.mixpanel.mixpanel_flutter"
