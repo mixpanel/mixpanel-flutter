@@ -25,7 +25,7 @@ cd example && flutter pub get && cd ..
 
 ### 2. Run Tests
 ```bash
-# Run all unit tests (68 tests)
+# Run all unit tests
 flutter test
 ```
 **Time**: ~5 seconds. **Expected**: All tests pass. The SDK has comprehensive test coverage.
@@ -54,8 +54,8 @@ cd example && flutter build ios --debug --simulator --no-codesign
 ### Core SDK Files
 ```
 lib/
-├── mixpanel_flutter.dart          # Main SDK (794 lines) - Primary API
-├── mixpanel_flutter_web.dart      # Web implementation (426 lines)
+├── mixpanel_flutter.dart          # Main SDK - Primary API
+├── mixpanel_flutter_web.dart      # Web implementation
 ├── codec/
 │   └── mixpanel_message_codec.dart # Custom type serialization
 └── web/
@@ -81,7 +81,7 @@ ios/
 ### Tests
 ```
 test/
-├── mixpanel_flutter_test.dart      # Main test suite (60+ tests)
+├── mixpanel_flutter_test.dart      # Main test suite
 └── mixpanel_flutter_web_unit_test.dart # Web-specific tests
 ```
 
@@ -205,7 +205,7 @@ When adding a new SDK method:
 ## Performance Notes
 
 - `flutter pub get`: 30 seconds
-- `flutter test`: 5 seconds (68 tests)
+- `flutter test`: 5 seconds
 - `flutter analyze`: <1 second
 - Example Android build: 3 min (first), 1 min (incremental)
 - Example iOS build: 5 min (requires `pod repo update`)
@@ -224,8 +224,8 @@ When adding a new SDK method:
 ## Validation Checklist Before Committing
 
 1. ✅ `flutter pub get` - Must succeed
-2. ✅ `flutter test` - All 68 tests pass
-3. ✅ `flutter analyze lib` - No new errors (70 infos OK)
+2. ✅ `flutter test` - All tests pass
+3. ✅ `flutter analyze lib` - No new errors (~70 infos OK)
 4. ✅ Check method names match across all platforms
 5. ✅ Verify input validation exists for all public methods
 6. ✅ Confirm tests added for new functionality
