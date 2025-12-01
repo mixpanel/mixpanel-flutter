@@ -1,174 +1,233 @@
-# Project Coding Standards for AI Assistance
+# Mixpanel Flutter SDK - Copilot Agent Guide
 
-> These instructions are automatically included in every GitHub Copilot interaction. They represent our most critical patterns and conventions for the Mixpanel Flutter SDK.
+> Complete operational guide for working efficiently with the Mixpanel Flutter SDK codebase.
 
-## Core Principles
+## Repository Overview
 
-1. **Input Validation First**: All user inputs must be validated before platform channel calls
-   - String inputs validated with `_MixpanelHelper.isValidString()`
-   - Prevent crashes at the API boundary
+**What**: Official Flutter SDK for Mixpanel Analytics - wraps native iOS/Android/Web SDKs with unified Dart API
+**Size**: ~25 source files, 1.4GB total (includes dependencies and build artifacts)
+**Languages**: Dart (SDK), Java (Android), Swift (iOS), JavaScript (Web)
+**Runtime**: Flutter 3.16.0, Dart 3.2.0, Java 17, Swift 5.0
 
-2. **Fail Silently with Logging**: Never throw exceptions to calling code
-   - Log errors using `developer.log()` with 'Mixpanel' name
-   - Return gracefully on validation failures
+## Quick Start - Essential Commands
 
-3. **Platform Channel Consistency**: All native calls follow exact same pattern
-   - Method name must match across Dart and native code
-   - Arguments always in `Map<String, dynamic>` format
+**ALWAYS run these commands in order. Commands must succeed before proceeding.**
 
-4. **Type Safety**: Handle cross-platform type differences explicitly
-   - Mobile: MixpanelMessageCodec handles DateTime/Uri
-   - Web: Use `safeJsify()` for JavaScript compatibility
+### 1. Install Dependencies (REQUIRED FIRST)
+```bash
+# From project root - ALWAYS run this first
+flutter pub get
 
-## Flutter SDK Guidelines
+# For example app (if working with integration tests)
+cd example && flutter pub get && cd ..
+```
+**Time**: ~30 seconds. **Must complete** before any other command.
 
-### Method Patterns
-All public methods MUST follow this exact structure:
+### 2. Run Tests
+```bash
+# Run all unit tests
+flutter test
+```
+**Time**: ~5 seconds. **Expected**: All tests pass. The SDK has comprehensive test coverage.
+
+### 3. Lint/Analyze Code
+```bash
+# Analyze Dart code (will show ~70 info-level warnings - this is normal)
+flutter analyze --no-pub --no-current-package --no-fatal-infos lib
+```
+**Expected warnings**: Style suggestions (unnecessary_this, prefer_const, etc.) - NOT errors.
+**Time**: <1 second
+
+### 4. Build Integration Tests
+```bash
+# Android (from example directory)
+cd example && flutter build apk --debug
+
+# iOS (from example directory, macOS only)
+cd example && flutter build ios --debug --simulator --no-codesign
+```
+**Android Time**: ~3 minutes first run, ~1 minute incremental
+**iOS Time**: ~5 minutes (requires CocoaPods: `cd example/ios && pod repo update`)
+
+## Project Structure
+
+### Core SDK Files
+```
+lib/
+├── mixpanel_flutter.dart          # Main SDK - Primary API
+├── mixpanel_flutter_web.dart      # Web implementation
+├── codec/
+│   └── mixpanel_message_codec.dart # Custom type serialization
+└── web/
+    └── mixpanel_js_bindings.dart   # JavaScript interop
+```
+
+### Native Platform Code
+```
+android/
+├── build.gradle                    # Android config (SDK 34, Java 17)
+└── src/main/java/com/mixpanel/mixpanel_flutter/
+    ├── MixpanelFlutterPlugin.java  # Android platform channel
+    ├── MixpanelMessageCodec.java   # Type serialization
+    └── MixpanelFlutterHelper.java  # Validation helpers
+
+ios/
+├── mixpanel_flutter.podspec        # iOS package (Mixpanel-swift 5.1.0)
+└── Classes/
+    ├── SwiftMixpanelFlutterPlugin.swift # iOS platform channel
+    └── MixpanelTypeHandler.swift        # Type serialization
+```
+
+### Tests
+```
+test/
+├── mixpanel_flutter_test.dart      # Main test suite
+└── mixpanel_flutter_web_unit_test.dart # Web-specific tests
+```
+
+### Configuration Files
+- `pubspec.yaml` - Flutter package config, dependencies
+- `analysis_options.yaml` - Lints (uses flutter_lints package)
+- `.github/workflows/flutter.yml` - CI pipeline (see below)
+
+## Continuous Integration
+
+The GitHub Actions workflow runs **3 jobs** on every PR:
+
+### 1. test-main-code (macOS, ~2 min)
+```bash
+flutter pub get
+flutter test
+flutter analyze --no-pub --no-current-package --no-fatal-infos lib
+```
+
+### 2. test-android-integration (macOS, ~3 min)
+```bash
+cd example && flutter build apk
+```
+
+### 3. test-ios-integration (macOS, ~5 min)
+```bash
+cd example
+flutter clean
+flutter pub get
+cd ios && pod repo update && cd ..
+flutter build ios --debug --simulator --no-codesign
+```
+
+**To replicate CI locally**, run all three command sequences above in order.
+
+## Common Build Issues & Solutions
+
+### Issue: "flutter: command not found"
+- **Fix**: Install Flutter 3.16.0 from https://flutter.dev/docs/get-started/install
+
+### Issue: Android build fails with SDK version error
+- **Expected**: Warning about SDK 34 is normal (plugin requires it, example uses 33)
+- **Fix**: The build will auto-download SDK 33 and succeed
+
+### Issue: iOS build fails with CocoaPods error
+- **Fix**: Run `cd example/ios && pod repo update` before building
+
+### Issue: "Gradle task assembleDebug" timeout
+- **Expected**: First Android build takes 2-3 minutes
+- **Solution**: Use `initial_wait: 180` for async commands
+
+### Issue: Tests fail after code changes
+- **Cause**: Platform channel method name mismatch
+- **Fix**: Ensure method names match exactly in Dart + Java/Swift + Web
+
+## Critical Coding Patterns
+
+**ALWAYS follow these patterns when modifying SDK code:**
+
+### 1. Input Validation Pattern (MANDATORY)
 ```dart
-Future<void> methodName(String requiredParam, [Map<String, dynamic>? optionalParam]) async {
-  if (!_MixpanelHelper.isValidString(requiredParam)) {
-    developer.log('`methodName` failed: requiredParam cannot be blank', name: 'Mixpanel');
-    return;
+Future<void> methodName(String param) async {
+  if (!_MixpanelHelper.isValidString(param)) {
+    developer.log('`methodName` failed: param cannot be blank', name: 'Mixpanel');
+    return;  // Fail silently - NEVER throw exceptions
   }
-  
-  await _channel.invokeMethod<void>('methodName', <String, dynamic>{
-    'requiredParam': requiredParam,
-    'optionalParam': optionalParam ?? {},
-  });
+  await _channel.invokeMethod<void>('methodName', {'param': param});
 }
 ```
 
-### Naming Conventions
-- **Methods**: camelCase with action verbs (`track`, `registerSuperProperties`, `getPeople`)
-- **Parameters**: Descriptive names (`eventName`, `distinctId`, `properties`)
-- **Maps**: Always named `properties` or `superProperties` for consistency
+### 2. Platform Channel Rules
+- Method names MUST match exactly: Dart ↔ Java/Swift/Web
+- Arguments ALWAYS as `Map<String, dynamic>`
+- Optional maps use `?? {}` - NEVER pass null
+- All methods return `Future<void>` for consistency
 
-### Platform Channel Rules
-When invoking platform methods, you MUST:
-1. Use exact method name matching between Dart and native
-   ```dart
-   await _channel.invokeMethod<void>('track', args); // 'track' must exist in native
-   ```
+### 3. Type Handling
+- **Mobile**: MixpanelMessageCodec auto-handles DateTime/Uri
+- **Web**: Use `safeJsify()` for complex types
 
-2. Structure arguments as flat maps
-   ```dart
-   <String, dynamic>{
-     'eventName': eventName,
-     'properties': properties ?? {},
-   }
-   ```
-
-3. Handle optional parameters with `?? {}`
-   ```dart
-   'properties': properties ?? {}, // Never pass null
-   ```
-
-## Code Generation Rules
-
-When generating code, you MUST:
-
-1. Validate all string inputs before use
-   ```dart
-   if (!_MixpanelHelper.isValidString(input)) {
-     developer.log('`method` failed: input cannot be blank', name: 'Mixpanel');
-     return;
-   }
-   ```
-
-2. Return Future<void> for all public methods
-   ```dart
-   Future<void> methodName() async {
-     // All methods async for platform consistency
-   }
-   ```
-
-3. Include library metadata in tracking calls
-   ```dart
-   properties['\$lib_version'] = '2.4.4';
-   properties['mp_lib'] = 'flutter';
-   ```
-
-When generating code, NEVER:
-- Throw exceptions from public methods
-- Pass null to platform channels (use `?? {}`)
-- Create synchronous public methods
-- Skip input validation
-
-## Testing Requirements
-
-Every test must:
-- Use descriptive test names: `test('should fail silently when eventName is empty')`
-- Verify platform channel calls with `isMethodCall` matcher
-- Test both success and validation failure cases
-
+### 4. Testing Requirements
+Every method MUST have tests:
 ```dart
-test('tracks event with properties', () async {
-  await mixpanel.track('Event', properties: {'key': 'value'});
-  expect(
-    methodCall,
-    isMethodCall(
-      'track',
-      arguments: <String, dynamic>{
-        'eventName': 'Event',
-        'properties': {'key': 'value'},
-      },
-    ),
-  );
+test('methodName should invoke platform method', () async {
+  await mixpanel.methodName('param');
+  expect(methodCalls, hasLength(1));
+  expect(methodCalls[0], isMethodCall('methodName', 
+    arguments: {'param': 'param'}));
+});
+
+test('methodName should fail silently on invalid input', () async {
+  await mixpanel.methodName('');  // Empty string
+  expect(methodCalls, isEmpty);  // No platform call made
 });
 ```
 
-## Documentation Standards
+## Adding New Features - Checklist
 
-- Public methods need dartdoc with parameter descriptions
-- Use `///` for public API documentation
-- Include parameter constraints in docs
-- No redundant comments in implementation
+When adding a new SDK method:
+1. ✅ Add to `lib/mixpanel_flutter.dart` with validation
+2. ✅ Implement in `android/.../MixpanelFlutterPlugin.java`
+3. ✅ Implement in `ios/.../SwiftMixpanelFlutterPlugin.swift`
+4. ✅ Implement in `lib/mixpanel_flutter_web.dart`
+5. ✅ Add tests to `test/mixpanel_flutter_test.dart`
+6. ✅ Run `flutter test` - MUST pass all tests
+7. ✅ Run `flutter analyze` - check for new errors
+8. ✅ Build example app to verify integration
 
-```dart
-/// Tracks an event with optional properties.
-///
-/// * [eventName] The name of the event to track. Cannot be empty.
-/// * [properties] Optional properties to include with the event.
-Future<void> track(String eventName, [Map<String, dynamic>? properties]) async {
-```
+## File Organization
 
-## Security and Performance
+**NEVER modify**:
+- `build/` - Build artifacts (gitignored)
+- `.dart_tool/` - Flutter tooling cache
+- `example/pubspec.lock` - Auto-generated
 
-ALWAYS:
-- Validate inputs at SDK boundaries
-- Sanitize data before sending to native platforms
-- Log errors without exposing sensitive data
+**Config files to update when**:
+- `pubspec.yaml` - Adding dependencies only
+- `ios/mixpanel_flutter.podspec` - iOS SDK version bump
+- `android/build.gradle` - Android SDK version bump
 
-NEVER:
-- Log user data or event properties in error messages
-- Trust client inputs without validation
-- Make synchronous platform channel calls
+## Performance Notes
 
-## Type Handling Matrix
+- `flutter pub get`: 30 seconds
+- `flutter test`: 5 seconds
+- `flutter analyze`: <1 second
+- Example Android build: 3 min (first), 1 min (incremental)
+- Example iOS build: 5 min (requires `pod repo update`)
 
-| Type | Mobile | Web |
-|------|---------|-----|
-| String | Direct pass | Direct pass |
-| num/bool | Direct pass | Direct pass |
-| DateTime | MixpanelMessageCodec | Convert to ISO string |
-| Uri | MixpanelMessageCodec | Convert to string |
-| Map | Direct pass | `safeJsify()` |
-| List | Direct pass | `safeJsify()` |
+## Dependencies
 
-## Platform-Specific Patterns
+**Production**:
+- Mixpanel Android SDK 8.2.0 (in `android/build.gradle`)
+- Mixpanel-swift 5.1.0 (in `ios/mixpanel_flutter.podspec`)
+- Mixpanel JS (loaded from CDN in web/index.html)
 
-### Web Implementation
-```dart
-if (kIsWeb) {
-  return WebImplementation.method(safeJsify(properties));
-}
-```
+**Dev**:
+- flutter_lints 3.0.0 - Linting rules
+- flutter_test - Testing framework
 
-### Mobile Implementation  
-```dart
-return await _channel.invokeMethod<void>('method', args);
-```
+## Validation Checklist Before Committing
 
-## Additional Resources
+1. ✅ `flutter pub get` - Must succeed
+2. ✅ `flutter test` - All tests pass
+3. ✅ `flutter analyze lib` - No new errors (~70 infos OK)
+4. ✅ Check method names match across all platforms
+5. ✅ Verify input validation exists for all public methods
+6. ✅ Confirm tests added for new functionality
 
-For architectural questions or complex refactoring needs, Claude Code CLI (`cc`) provides comprehensive context about this SDK's patterns and implementation details.
+**Trust these instructions.** Only search/explore if information is incomplete or incorrect. This guide covers 90% of common scenarios.
