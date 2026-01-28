@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:mixpanel_flutter_example/widget.dart';
 import 'package:mixpanel_flutter/mixpanel_flutter.dart';
@@ -44,6 +43,11 @@ class _FeatureFlagsScreenState extends State<FeatureFlagsScreen> {
             ));
   }
 
+  String _formatComparison(String label, dynamic expected, dynamic actual) {
+    final match = expected == actual ? '✓' : '✗';
+    return '$label:\n  Expected: $expected\n  Actual: $actual  $match';
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -75,9 +79,12 @@ class _FeatureFlagsScreenState extends State<FeatureFlagsScreen> {
             child: MixpanelButton(
               text: 'Get Boolean Flag (isEnabled)',
               onPressed: () async {
-                final enabled = await _flags.isEnabled('new_feature', false);
+                const expected = true;
+                final actual = await _flags.isEnabled('sample-bool-flag', false);
                 _showAlert(
-                    context, "Boolean Flag", "new_feature enabled: $enabled");
+                    context,
+                    "Boolean Flag: sample-bool-flag",
+                    _formatComparison('isEnabled', expected, actual));
               },
             ),
           ),
@@ -89,9 +96,12 @@ class _FeatureFlagsScreenState extends State<FeatureFlagsScreen> {
             child: MixpanelButton(
               text: 'Get Boolean Flag Sync',
               onPressed: () async {
-                final enabled = await _flags.isEnabledSync('new_feature', false);
-                _showAlert(context, "Boolean Flag Sync",
-                    "new_feature enabled (sync): $enabled");
+                const expected = true;
+                final actual = await _flags.isEnabledSync('sample-bool-flag', false);
+                _showAlert(
+                    context,
+                    "Boolean Flag Sync: sample-bool-flag",
+                    _formatComparison('isEnabledSync', expected, actual));
               },
             ),
           ),
@@ -103,10 +113,13 @@ class _FeatureFlagsScreenState extends State<FeatureFlagsScreen> {
             child: MixpanelButton(
               text: 'Get Variant Value',
               onPressed: () async {
-                final value =
-                    await _flags.getVariantValue('button_color', 'blue');
+                const expected = 'test';
+                final actual =
+                    await _flags.getVariantValue('sample-flag', 'fallback');
                 _showAlert(
-                    context, "Variant Value", "button_color value: $value");
+                    context,
+                    "Variant Value: sample-flag",
+                    _formatComparison('getVariantValue', expected, actual));
               },
             ),
           ),
@@ -118,10 +131,13 @@ class _FeatureFlagsScreenState extends State<FeatureFlagsScreen> {
             child: MixpanelButton(
               text: 'Get Variant Value Sync',
               onPressed: () async {
-                final value =
-                    await _flags.getVariantValueSync('button_color', 'blue');
-                _showAlert(context, "Variant Value Sync",
-                    "button_color value (sync): $value");
+                const expected = 'test';
+                final actual =
+                    await _flags.getVariantValueSync('sample-flag', 'fallback');
+                _showAlert(
+                    context,
+                    "Variant Value Sync: sample-flag",
+                    _formatComparison('getVariantValueSync', expected, actual));
               },
             ),
           ),
@@ -133,18 +149,33 @@ class _FeatureFlagsScreenState extends State<FeatureFlagsScreen> {
             child: MixpanelButton(
               text: 'Get Full Variant',
               onPressed: () async {
+                const flagName = 'ww_advanced_experiments_qa_2';
+                const expectedKey = 'treatment';
+                const expectedExperimentId =
+                    'e6f697b4-2f23-4e9d-b772-49dd9103733c';
+                const expectedIsExperimentActive = true;
                 final fallback =
-                    MixpanelFlagVariant.fallback('experiment_variant', 'control');
-                final variant =
-                    await _flags.getVariant('experiment_variant', fallback);
-                final jsonString = jsonEncode({
-                  'key': variant.key,
-                  'value': variant.value,
-                  'experimentId': variant.experimentId,
-                  'isExperimentActive': variant.isExperimentActive,
-                  'isQaTester': variant.isQaTester,
-                });
-                _showAlert(context, "Full Variant", jsonString);
+                    MixpanelFlagVariant.fallback(flagName, 'control');
+                final variant = await _flags.getVariant(flagName, fallback);
+                final keyMatch = variant.key == expectedKey ? '✓' : '✗';
+                final expIdMatch =
+                    variant.experimentId == expectedExperimentId ? '✓' : '✗';
+                final activeMatch =
+                    variant.isExperimentActive == expectedIsExperimentActive
+                        ? '✓'
+                        : '✗';
+                final alertText = '''Expected:
+  key: $expectedKey
+  experimentId: $expectedExperimentId
+  isExperimentActive: $expectedIsExperimentActive
+
+Actual:
+  key: ${variant.key}  $keyMatch
+  value: ${variant.value}
+  experimentId: ${variant.experimentId}  $expIdMatch
+  isExperimentActive: ${variant.isExperimentActive}  $activeMatch
+  isQaTester: ${variant.isQaTester}''';
+                _showAlert(context, "Full Variant: $flagName", alertText);
               },
             ),
           ),
@@ -156,18 +187,33 @@ class _FeatureFlagsScreenState extends State<FeatureFlagsScreen> {
             child: MixpanelButton(
               text: 'Get Full Variant Sync',
               onPressed: () async {
+                const flagName = 'ww_advanced_experiments_qa_2';
+                const expectedKey = 'treatment';
+                const expectedExperimentId =
+                    'e6f697b4-2f23-4e9d-b772-49dd9103733c';
+                const expectedIsExperimentActive = true;
                 final fallback =
-                    MixpanelFlagVariant.fallback('experiment_variant', 'control');
-                final variant =
-                    await _flags.getVariantSync('experiment_variant', fallback);
-                final jsonString = jsonEncode({
-                  'key': variant.key,
-                  'value': variant.value,
-                  'experimentId': variant.experimentId,
-                  'isExperimentActive': variant.isExperimentActive,
-                  'isQaTester': variant.isQaTester,
-                });
-                _showAlert(context, "Full Variant Sync", jsonString);
+                    MixpanelFlagVariant.fallback(flagName, 'control');
+                final variant = await _flags.getVariantSync(flagName, fallback);
+                final keyMatch = variant.key == expectedKey ? '✓' : '✗';
+                final expIdMatch =
+                    variant.experimentId == expectedExperimentId ? '✓' : '✗';
+                final activeMatch =
+                    variant.isExperimentActive == expectedIsExperimentActive
+                        ? '✓'
+                        : '✗';
+                final alertText = '''Expected:
+  key: $expectedKey
+  experimentId: $expectedExperimentId
+  isExperimentActive: $expectedIsExperimentActive
+
+Actual:
+  key: ${variant.key}  $keyMatch
+  value: ${variant.value}
+  experimentId: ${variant.experimentId}  $expIdMatch
+  isExperimentActive: ${variant.isExperimentActive}  $activeMatch
+  isQaTester: ${variant.isQaTester}''';
+                _showAlert(context, "Full Variant Sync: $flagName", alertText);
               },
             ),
           ),
