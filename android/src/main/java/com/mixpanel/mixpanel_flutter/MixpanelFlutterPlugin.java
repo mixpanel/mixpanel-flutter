@@ -21,6 +21,7 @@ import io.flutter.plugin.common.MethodChannel.MethodCallHandler;
 import io.flutter.plugin.common.MethodChannel.Result;
 
 import com.mixpanel.android.mpmetrics.MixpanelAPI;
+import com.mixpanel.android.mpmetrics.MixpanelOptions;
 
 /**
  * MixpanelFlutterPlugin
@@ -251,14 +252,20 @@ public class MixpanelFlutterPlugin implements FlutterPlugin, MethodCallHandler {
             }
         }
 
-        mixpanel = MixpanelAPI.getInstance(context, token,
-                optOutTrackingDefault == null ? false : optOutTrackingDefault,
-                superAndMixpanelProperties, null, trackAutomaticEvents);
+        // Build MixpanelOptions with feature flags configuration
+        MixpanelOptions.Builder optionsBuilder = new MixpanelOptions.Builder()
+                .optOutTrackingDefault(optOutTrackingDefault == null ? false : optOutTrackingDefault)
+                .superProperties(superAndMixpanelProperties);
 
-        // Configure feature flags if enabled
-        if (featureFlagsEnabled != null && featureFlagsEnabled && featureFlagsContext != null) {
-            mixpanel.getFlags().updateContext(featureFlagsContext);
+        if (featureFlagsEnabled != null && featureFlagsEnabled) {
+            optionsBuilder.featureFlagsEnabled(true);
+            if (featureFlagsContext != null) {
+                optionsBuilder.featureFlagsContext(featureFlagsContext);
+            }
         }
+
+        boolean trackAutoEvents = trackAutomaticEvents == null ? true : trackAutomaticEvents;
+        mixpanel = MixpanelAPI.getInstance(context, token, trackAutoEvents, optionsBuilder.build());
 
         result.success(Integer.toString(mixpanel.hashCode()));
     }
@@ -716,13 +723,11 @@ public class MixpanelFlutterPlugin implements FlutterPlugin, MethodCallHandler {
             result.success(null);
             return;
         }
-        Map<String, Object> contextMap = call.<HashMap<String, Object>>argument("context");
-        Map<String, Object> optionsMap = call.<HashMap<String, Object>>argument("options");
-        if (optionsMap != null && !optionsMap.isEmpty()) {
-            android.util.Log.i("Mixpanel", "updateFlagsContext: options parameter is not yet supported and will be ignored");
-        }
-        JSONObject context = new JSONObject(contextMap == null ? EMPTY_HASHMAP : contextMap);
-        mixpanel.getFlags().updateContext(context);
+        // Note: The Android SDK does not support updating context after initialization.
+        // Context must be set via MixpanelOptions during getInstance().
+        // Calling loadFlags() to refresh flags with the current user identity.
+        android.util.Log.i("Mixpanel", "updateFlagsContext: Android SDK does not support updating context after initialization. Call identify() and loadFlags() to refresh flags.");
+        mixpanel.getFlags().loadFlags();
         result.success(null);
     }
 
@@ -739,9 +744,9 @@ public class MixpanelFlutterPlugin implements FlutterPlugin, MethodCallHandler {
         Map<String, Object> map = new HashMap<>();
         map.put("key", variant.key);
         map.put("value", variant.value);
-        map.put("experimentId", variant.experimentId);
+        map.put("experimentId", variant.experimentID);
         map.put("isExperimentActive", variant.isExperimentActive);
-        map.put("isQaTester", variant.isQaTester);
+        map.put("isQaTester", variant.isQATester);
         return map;
     }
 
