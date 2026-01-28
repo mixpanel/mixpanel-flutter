@@ -642,9 +642,9 @@ class MixpanelFlutterPlugin {
       return {
         'key': dartMap['key'] as String? ?? '',
         'value': dartMap['value'],
-        'experimentId': dartMap['experimentId'] as String?,
-        'isExperimentActive': dartMap['isExperimentActive'] as bool?,
-        'isQaTester': dartMap['isQaTester'] as bool?,
+        'experimentId': dartMap['experiment_id'] as String?,
+        'isExperimentActive': dartMap['is_experiment_active'] as bool?,
+        'isQaTester': dartMap['is_qa_tester'] as bool?,
       };
     } catch (e) {
       debugPrint('[Mixpanel] _jsVariantToMap failed with error: $e, returning fallback');
