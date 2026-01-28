@@ -183,18 +183,27 @@ public class SwiftMixpanelFlutterPlugin: NSObject, FlutterPlugin {
         self.token = token
         let trackAutomaticEvents = arguments["trackAutomaticEvents"] as! Bool
         self.trackAutomaticEvents = trackAutomaticEvents
-        instance = Mixpanel.initialize(token: token!, trackAutomaticEvents: trackAutomaticEvents,
-                                        instanceName: token!,
-                                       optOutTrackingByDefault: optOutTrackingDefault ?? false,
-                                       superProperties: MixpanelTypeHandler.mixpanelProperties(properties: superProperties, mixpanelProperties: mixpanelProperties))
-        instance?.flushInterval = defaultFlushInterval
 
-        // Configure feature flags if provided
+        // Check for feature flags configuration
+        var featureFlagsEnabled = false
+        var featureFlagsContext: [String: Any] = [:]
         if let featureFlags = arguments["featureFlags"] as? [String: Any],
-           let enabled = featureFlags["enabled"] as? Bool, enabled,
-           let context = featureFlags["context"] as? [String: Any] {
-            instance?.flags.updateContext(context)
+           let enabled = featureFlags["enabled"] as? Bool, enabled {
+            featureFlagsEnabled = true
+            featureFlagsContext = featureFlags["context"] as? [String: Any] ?? [:]
         }
+
+        let options = MixpanelOptions(
+            token: token!,
+            flushInterval: defaultFlushInterval,
+            instanceName: token!,
+            trackAutomaticEvents: trackAutomaticEvents,
+            optOutTrackingByDefault: optOutTrackingDefault ?? false,
+            superProperties: MixpanelTypeHandler.mixpanelProperties(properties: superProperties, mixpanelProperties: mixpanelProperties),
+            featureFlagsEnabled: featureFlagsEnabled,
+            featureFlagsContext: featureFlagsContext
+        )
+        instance = Mixpanel.initialize(options: options)
 
         result(nil)
     }
@@ -692,16 +701,10 @@ public class SwiftMixpanelFlutterPlugin: NSObject, FlutterPlugin {
     }
 
     private func handleUpdateFlagsContext(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
-        let arguments = call.arguments as? [String: Any] ?? [String: Any]()
-        let context = arguments["context"] as? [String: Any] ?? [:]
-        let options = arguments["options"] as? [String: Any]
-        if let opts = options, !opts.isEmpty {
-            NSLog("[Mixpanel] updateFlagsContext: options parameter is not yet supported and will be ignored")
-        }
-        if instance == nil {
-            NSLog("[Mixpanel] updateFlagsContext called before Mixpanel was initialized")
-        }
-        instance?.flags.updateContext(context)
+        // Note: The iOS SDK does not support updating feature flags context after initialization.
+        // Context must be set during Mixpanel.initialize() via MixpanelOptions.
+        // This method is a no-op on iOS but we log a warning to inform developers.
+        NSLog("[Mixpanel] updateFlagsContext is not supported on iOS. Feature flags context must be set during initialization.")
         result(nil)
     }
 
@@ -718,9 +721,9 @@ public class SwiftMixpanelFlutterPlugin: NSObject, FlutterPlugin {
         return [
             "key": variant.key,
             "value": variant.value,
-            "experimentId": variant.experimentId,
+            "experimentId": variant.experimentID,
             "isExperimentActive": variant.isExperimentActive,
-            "isQaTester": variant.isQaTester
+            "isQaTester": variant.isQATester
         ]
     }
 
