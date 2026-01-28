@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:mixpanel_flutter_example/widget.dart';
 
 import 'event.dart';
+import 'feature_flags.dart';
 import 'gdpr.dart';
 import 'group.dart';
 import 'profile.dart';
@@ -30,6 +31,7 @@ class _MyAppState extends State<MyApp> {
         '/profile': (context) => ProfileScreen(),
         '/gdpr': (context) => GDPRScreen(),
         '/group': (context) => GroupScreen(),
+        '/feature_flags': (context) => FeatureFlagsScreen(),
       },
     );
   }
@@ -91,6 +93,18 @@ class FirstScreen extends StatelessWidget {
               text: 'GROUP',
               onPressed: () {
                 Navigator.pushNamed(context, '/group');
+              },
+            ),
+          ),
+          SizedBox(
+            height: 20,
+          ),
+          SizedBox(
+            width: MediaQuery.of(context).size.width * 0.65,
+            child: MixpanelButton(
+              text: 'FEATURE FLAGS',
+              onPressed: () {
+                Navigator.pushNamed(context, '/feature_flags');
               },
             ),
           ),

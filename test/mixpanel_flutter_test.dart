@@ -833,12 +833,517 @@ void main() {
       // The _MixpanelHelper.isValidString functionality is tested through
       // all the existing tests that verify method calls with valid parameters
       // and absence of method calls with empty string parameters.
-      // 
+      //
       // The _MixpanelHelper.ensureSerializableValue and ensureSerializableProperties
       // functionality is tested indirectly through the web platform tests
       // and through successful method calls with complex data types.
-      
+
       expect(true, true); // This test serves as documentation
+    });
+  });
+
+  group('Feature Flags', () {
+    setUp(() async {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (MethodCall m) async {
+        methodCall = m;
+        if (m.method == 'areFlagsReady') {
+          return true;
+        }
+        if (m.method == 'getVariant' || m.method == 'getVariantSync') {
+          return {
+            'key': 'test_flag',
+            'value': 'variant_a',
+            'experimentId': 'exp_123',
+            'isExperimentActive': true,
+            'isQaTester': false,
+          };
+        }
+        if (m.method == 'getVariantValue' || m.method == 'getVariantValueSync') {
+          return 'variant_value';
+        }
+        if (m.method == 'isEnabled' || m.method == 'isEnabledSync') {
+          return true;
+        }
+        return null;
+      });
+
+      _mixpanel = await Mixpanel.init("test token",
+          optOutTrackingDefault: false, trackAutomaticEvents: true);
+    });
+
+    tearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+      methodCall = null;
+    });
+
+    test('check areFlagsReady call', () async {
+      final flags = _mixpanel.getFeatureFlags();
+      final result = await flags.areFlagsReady();
+      expect(result, true);
+      expect(
+        methodCall,
+        isMethodCall(
+          'areFlagsReady',
+          arguments: null,
+        ),
+      );
+    });
+
+    test('check getVariant call', () async {
+      final flags = _mixpanel.getFeatureFlags();
+      final fallback = MixpanelFlagVariant.fallback('test_flag', 'default');
+      final result = await flags.getVariant('test_flag', fallback);
+      expect(result.key, 'test_flag');
+      expect(result.value, 'variant_a');
+      expect(result.experimentId, 'exp_123');
+      expect(result.isExperimentActive, true);
+      expect(result.isQaTester, false);
+      expect(
+        methodCall,
+        isMethodCall(
+          'getVariant',
+          arguments: <String, dynamic>{
+            'flagName': 'test_flag',
+            'fallback': {
+              'key': 'test_flag',
+              'value': 'default',
+              'experimentId': null,
+              'isExperimentActive': null,
+              'isQaTester': null,
+            },
+          },
+        ),
+      );
+    });
+
+    test('check getVariantSync call', () async {
+      final flags = _mixpanel.getFeatureFlags();
+      final fallback = MixpanelFlagVariant.fallback('test_flag', 'default');
+      final result = await flags.getVariantSync('test_flag', fallback);
+      expect(result.value, 'variant_a');
+      expect(
+        methodCall,
+        isMethodCall(
+          'getVariantSync',
+          arguments: <String, dynamic>{
+            'flagName': 'test_flag',
+            'fallback': {
+              'key': 'test_flag',
+              'value': 'default',
+              'experimentId': null,
+              'isExperimentActive': null,
+              'isQaTester': null,
+            },
+          },
+        ),
+      );
+    });
+
+    test('check getVariantValue call', () async {
+      final flags = _mixpanel.getFeatureFlags();
+      final result = await flags.getVariantValue('test_flag', 'fallback');
+      expect(result, 'variant_value');
+      expect(
+        methodCall,
+        isMethodCall(
+          'getVariantValue',
+          arguments: <String, dynamic>{
+            'flagName': 'test_flag',
+            'fallbackValue': 'fallback',
+          },
+        ),
+      );
+    });
+
+    test('check getVariantValueSync call', () async {
+      final flags = _mixpanel.getFeatureFlags();
+      final result = await flags.getVariantValueSync('test_flag', 'fallback');
+      expect(result, 'variant_value');
+      expect(
+        methodCall,
+        isMethodCall(
+          'getVariantValueSync',
+          arguments: <String, dynamic>{
+            'flagName': 'test_flag',
+            'fallbackValue': 'fallback',
+          },
+        ),
+      );
+    });
+
+    test('check isEnabled call', () async {
+      final flags = _mixpanel.getFeatureFlags();
+      final result = await flags.isEnabled('test_flag', false);
+      expect(result, true);
+      expect(
+        methodCall,
+        isMethodCall(
+          'isEnabled',
+          arguments: <String, dynamic>{
+            'flagName': 'test_flag',
+            'fallbackValue': false,
+          },
+        ),
+      );
+    });
+
+    test('check isEnabledSync call', () async {
+      final flags = _mixpanel.getFeatureFlags();
+      final result = await flags.isEnabledSync('test_flag', false);
+      expect(result, true);
+      expect(
+        methodCall,
+        isMethodCall(
+          'isEnabledSync',
+          arguments: <String, dynamic>{
+            'flagName': 'test_flag',
+            'fallbackValue': false,
+          },
+        ),
+      );
+    });
+
+    test('check updateContext call', () async {
+      final flags = _mixpanel.getFeatureFlags();
+      await flags.updateContext({'user_tier': 'premium'});
+      expect(
+        methodCall,
+        isMethodCall(
+          'updateFlagsContext',
+          arguments: <String, dynamic>{
+            'context': {'user_tier': 'premium'},
+            'options': null,
+          },
+        ),
+      );
+    });
+
+    test('check updateContext with options call', () async {
+      final flags = _mixpanel.getFeatureFlags();
+      await flags.updateContext(
+        {'user_tier': 'premium'},
+        options: {'refetch': true},
+      );
+      expect(
+        methodCall,
+        isMethodCall(
+          'updateFlagsContext',
+          arguments: <String, dynamic>{
+            'context': {'user_tier': 'premium'},
+            'options': {'refetch': true},
+          },
+        ),
+      );
+    });
+
+    test('feature flags methods with empty flagName are not called', () async {
+      final flags = _mixpanel.getFeatureFlags();
+      methodCall = null;
+
+      // getVariant with empty flagName
+      final fallback = MixpanelFlagVariant.fallback('', 'default');
+      final variantResult = await flags.getVariant('', fallback);
+      expect(methodCall, isNull);
+      expect(variantResult.key, '');
+      expect(variantResult.value, 'default');
+
+      // getVariantSync with empty flagName
+      methodCall = null;
+      await flags.getVariantSync('', fallback);
+      expect(methodCall, isNull);
+
+      // getVariantValue with empty flagName
+      methodCall = null;
+      final valueResult = await flags.getVariantValue('', 'fallback');
+      expect(methodCall, isNull);
+      expect(valueResult, 'fallback');
+
+      // getVariantValueSync with empty flagName
+      methodCall = null;
+      final valueSyncResult = await flags.getVariantValueSync('', 'fallback');
+      expect(methodCall, isNull);
+      expect(valueSyncResult, 'fallback');
+
+      // isEnabled with empty flagName
+      methodCall = null;
+      final enabledResult = await flags.isEnabled('', false);
+      expect(methodCall, isNull);
+      expect(enabledResult, false);
+
+      // isEnabledSync with empty flagName
+      methodCall = null;
+      final enabledSyncResult = await flags.isEnabledSync('', true);
+      expect(methodCall, isNull);
+      expect(enabledSyncResult, true);
+    });
+
+    test('check initialize with featureFlags config', () async {
+      _mixpanel = await Mixpanel.init(
+        "test token",
+        optOutTrackingDefault: false,
+        trackAutomaticEvents: true,
+        featureFlags: FeatureFlagsConfig(
+          enabled: true,
+          context: {'user_tier': 'premium'},
+        ),
+      );
+      expect(
+        methodCall,
+        isMethodCall(
+          'initialize',
+          arguments: <String, dynamic>{
+            'token': "test token",
+            'optOutTrackingDefault': false,
+            'trackAutomaticEvents': true,
+            'mixpanelProperties': {
+              '\$lib_version': '2.4.4',
+              'mp_lib': 'flutter',
+            },
+            'superProperties': null,
+            'config': null,
+            'featureFlags': {
+              'enabled': true,
+              'context': {'user_tier': 'premium'},
+            },
+          },
+        ),
+      );
+    });
+
+    test('MixpanelFlagVariant fromMap and toMap', () {
+      final variant = MixpanelFlagVariant(
+        key: 'test_key',
+        value: 'test_value',
+        experimentId: 'exp_123',
+        isExperimentActive: true,
+        isQaTester: false,
+      );
+
+      final map = variant.toMap();
+      expect(map['key'], 'test_key');
+      expect(map['value'], 'test_value');
+      expect(map['experimentId'], 'exp_123');
+      expect(map['isExperimentActive'], true);
+      expect(map['isQaTester'], false);
+
+      final fromMap = MixpanelFlagVariant.fromMap(map);
+      expect(fromMap.key, 'test_key');
+      expect(fromMap.value, 'test_value');
+      expect(fromMap.experimentId, 'exp_123');
+      expect(fromMap.isExperimentActive, true);
+      expect(fromMap.isQaTester, false);
+    });
+
+    test('MixpanelFlagVariant fallback factory', () {
+      final fallback = MixpanelFlagVariant.fallback('my_flag', true);
+      expect(fallback.key, 'my_flag');
+      expect(fallback.value, true);
+      expect(fallback.experimentId, null);
+      expect(fallback.isExperimentActive, null);
+      expect(fallback.isQaTester, null);
+    });
+
+    test('FeatureFlagsConfig toMap', () {
+      final config = FeatureFlagsConfig(
+        enabled: true,
+        context: {'key': 'value'},
+      );
+      final map = config.toMap();
+      expect(map['enabled'], true);
+      expect(map['context'], {'key': 'value'});
+    });
+
+    test('FeatureFlagsConfig default values', () {
+      final config = FeatureFlagsConfig();
+      expect(config.enabled, true);
+      expect(config.context, <String, dynamic>{});
+
+      final map = config.toMap();
+      expect(map['enabled'], true);
+      expect(map['context'], <String, dynamic>{});
+    });
+
+    test('areFlagsReady returns false when not ready', () async {
+      // Override handler to return false
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (MethodCall m) async {
+        methodCall = m;
+        if (m.method == 'areFlagsReady') {
+          return false;
+        }
+        return null;
+      });
+
+      final flags = _mixpanel.getFeatureFlags();
+      final result = await flags.areFlagsReady();
+      expect(result, false);
+    });
+
+    test('getVariant returns fallback when platform returns null', () async {
+      // Override handler to return null
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (MethodCall m) async {
+        methodCall = m;
+        return null;
+      });
+
+      final flags = _mixpanel.getFeatureFlags();
+      final fallback = MixpanelFlagVariant.fallback('test_flag', 'fallback_value');
+      final result = await flags.getVariant('test_flag', fallback);
+      expect(result.key, 'test_flag');
+      expect(result.value, 'fallback_value');
+    });
+
+    test('getVariantValue returns fallback when platform returns null', () async {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (MethodCall m) async {
+        methodCall = m;
+        return null;
+      });
+
+      final flags = _mixpanel.getFeatureFlags();
+      final result = await flags.getVariantValue('test_flag', 'my_fallback');
+      expect(result, 'my_fallback');
+    });
+
+    test('isEnabled returns fallback when platform returns null', () async {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (MethodCall m) async {
+        methodCall = m;
+        return null;
+      });
+
+      final flags = _mixpanel.getFeatureFlags();
+      final result = await flags.isEnabled('test_flag', true);
+      expect(result, true);
+    });
+
+    test('MixpanelFlagVariant.fromMap with missing key', () {
+      final map = <String, dynamic>{
+        'value': 'test_value',
+        'experimentId': 'exp_123',
+      };
+      final variant = MixpanelFlagVariant.fromMap(map);
+      expect(variant.key, ''); // Defaults to empty string
+      expect(variant.value, 'test_value');
+      expect(variant.experimentId, 'exp_123');
+    });
+
+    test('MixpanelFlagVariant.fromMap with empty key', () {
+      final map = <String, dynamic>{
+        'key': '',
+        'value': 'test_value',
+      };
+      final variant = MixpanelFlagVariant.fromMap(map);
+      expect(variant.key, '');
+      expect(variant.value, 'test_value');
+    });
+
+    test('MixpanelFlagVariant.fromMap with null key', () {
+      final map = <String, dynamic>{
+        'key': null,
+        'value': 123,
+      };
+      final variant = MixpanelFlagVariant.fromMap(map);
+      expect(variant.key, '');
+      expect(variant.value, 123);
+    });
+
+    test('MixpanelFlagVariant with int value', () {
+      final variant = MixpanelFlagVariant(key: 'int_flag', value: 42);
+      expect(variant.key, 'int_flag');
+      expect(variant.value, 42);
+      expect(variant.value is int, true);
+    });
+
+    test('MixpanelFlagVariant with Map value', () {
+      final mapValue = {'nested': 'value', 'count': 5};
+      final variant = MixpanelFlagVariant(key: 'map_flag', value: mapValue);
+      expect(variant.key, 'map_flag');
+      expect(variant.value, mapValue);
+      expect(variant.value is Map, true);
+    });
+
+    test('MixpanelFlagVariant with List value', () {
+      final listValue = ['a', 'b', 'c'];
+      final variant = MixpanelFlagVariant(key: 'list_flag', value: listValue);
+      expect(variant.key, 'list_flag');
+      expect(variant.value, listValue);
+      expect(variant.value is List, true);
+    });
+
+    test('getVariantSync returns all fields correctly', () async {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (MethodCall m) async {
+        methodCall = m;
+        if (m.method == 'getVariantSync') {
+          return {
+            'key': 'full_flag',
+            'value': 'variant_b',
+            'experimentId': 'exp_456',
+            'isExperimentActive': false,
+            'isQaTester': true,
+          };
+        }
+        return null;
+      });
+
+      final flags = _mixpanel.getFeatureFlags();
+      final fallback = MixpanelFlagVariant.fallback('full_flag', 'default');
+      final result = await flags.getVariantSync('full_flag', fallback);
+
+      expect(result.key, 'full_flag');
+      expect(result.value, 'variant_b');
+      expect(result.experimentId, 'exp_456');
+      expect(result.isExperimentActive, false);
+      expect(result.isQaTester, true);
+    });
+
+    test('MixpanelFlagVariant equality', () {
+      final variant1 = MixpanelFlagVariant(
+        key: 'test_key',
+        value: 'test_value',
+        experimentId: 'exp_123',
+        isExperimentActive: true,
+        isQaTester: false,
+      );
+
+      final variant2 = MixpanelFlagVariant(
+        key: 'test_key',
+        value: 'test_value',
+        experimentId: 'exp_123',
+        isExperimentActive: true,
+        isQaTester: false,
+      );
+
+      final variant3 = MixpanelFlagVariant(
+        key: 'different_key',
+        value: 'test_value',
+        experimentId: 'exp_123',
+        isExperimentActive: true,
+        isQaTester: false,
+      );
+
+      expect(variant1 == variant2, true);
+      expect(variant1.hashCode == variant2.hashCode, true);
+      expect(variant1 == variant3, false);
+    });
+
+    test('MixpanelFlagVariant equality with different values', () {
+      final variant1 = MixpanelFlagVariant(key: 'flag', value: 'a');
+      final variant2 = MixpanelFlagVariant(key: 'flag', value: 'b');
+
+      expect(variant1 == variant2, false);
+    });
+
+    test('MixpanelFlagVariant equality with null metadata', () {
+      final variant1 = MixpanelFlagVariant.fallback('flag', true);
+      final variant2 = MixpanelFlagVariant.fallback('flag', true);
+
+      expect(variant1 == variant2, true);
+      expect(variant1.hashCode == variant2.hashCode, true);
     });
   });
 }

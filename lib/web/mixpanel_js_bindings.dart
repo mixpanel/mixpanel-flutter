@@ -108,3 +108,17 @@ external void people_clear_charge();
 
 @JS('mixpanel.people.delete_users')
 external void people_delete_users();
+
+// Feature Flags bindings
+
+@JS('mixpanel.flags.are_flags_ready')
+external bool flags_are_flags_ready();
+
+@JS('mixpanel.flags.get_variant')
+external JSPromise flags_get_variant(String name, JSAny? fallback);
+
+@JS('mixpanel.flags.get_variant_sync')
+external JSAny? flags_get_variant_sync(String name, JSAny? fallback);
+
+@JS('mixpanel.flags.update_context')
+external void flags_update_context(JSAny? context);
