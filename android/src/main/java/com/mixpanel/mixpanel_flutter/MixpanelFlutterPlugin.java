@@ -245,10 +245,18 @@ public class MixpanelFlutterPlugin implements FlutterPlugin, MethodCallHandler {
         Boolean featureFlagsEnabled = null;
         JSONObject featureFlagsContext = null;
         if (featureFlagsMap != null) {
-            featureFlagsEnabled = (Boolean) featureFlagsMap.get("enabled");
-            Map<String, Object> contextMap = (Map<String, Object>) featureFlagsMap.get("context");
-            if (contextMap != null) {
-                featureFlagsContext = new JSONObject(contextMap);
+            Object enabledValue = featureFlagsMap.get("enabled");
+            if (enabledValue instanceof Boolean) {
+                featureFlagsEnabled = (Boolean) enabledValue;
+            }
+
+            Object contextValue = featureFlagsMap.get("context");
+            if (contextValue instanceof Map) {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> contextMap = (Map<String, Object>) contextValue;
+                if (contextMap != null) {
+                    featureFlagsContext = new JSONObject(contextMap);
+                }
             }
         }
 
