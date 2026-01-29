@@ -66,8 +66,8 @@ JSAny? safeJsify(dynamic value) {
 
 /// A web implementation of the MixpanelFlutter plugin.
 class MixpanelFlutterPlugin {
-  static Map<String, String> _mixpanelProperties = {
-    '\$lib_version': '1.3.1',
+  static final Map<String, String> _mixpanelProperties = {
+    '\$lib_version': '2.4.4',
     'mp_lib': 'flutter',
   };
 
@@ -101,6 +101,9 @@ class MixpanelFlutterPlugin {
         break;
       case "optOutTracking":
         handleOptOutTracking();
+        break;
+      case "setLoggingEnabled":
+        handleSetLoggingEnabled(call);
         break;
       case "identify":
         handleIdentify(call);
@@ -185,6 +188,23 @@ class MixpanelFlutterPlugin {
       case "groupUnionProperty":
         handleGroupUnion(call);
         break;
+      case "areFlagsReady":
+        return handleAreFlagsReady();
+      case "getVariant":
+        return handleGetVariant(call);
+      case "getVariantSync":
+        return handleGetVariantSync(call);
+      case "getVariantValue":
+        return handleGetVariantValue(call);
+      case "getVariantValueSync":
+        return handleGetVariantValueSync(call);
+      case "isEnabled":
+        return handleIsEnabled(call);
+      case "isEnabledSync":
+        return handleIsEnabledSync(call);
+      case "updateFlagsContext":
+        handleUpdateFlagsContext(call);
+        break;
       default:
         throw PlatformException(
           code: 'Unimplemented',
@@ -198,7 +218,23 @@ class MixpanelFlutterPlugin {
     Map<Object?, Object?> args = call.arguments as Map<Object?, Object?>;
     String token = args['token'] as String;
     dynamic config = args['config'];
-    init(token, safeJsify(config ?? <String, dynamic>{}));
+    Map<String, dynamic> initConfig = Map<String, dynamic>.from(config ?? {});
+
+    // Handle feature flags configuration
+    dynamic featureFlags = args['featureFlags'];
+    if (featureFlags != null && featureFlags is Map) {
+      bool enabled = featureFlags['enabled'] == true;
+      if (enabled) {
+        dynamic context = featureFlags['context'];
+        if (context != null && context is Map && context.isNotEmpty) {
+          initConfig['flags'] = {'context': context};
+        } else {
+          initConfig['flags'] = true;
+        }
+      }
+    }
+
+    init(token, safeJsify(initConfig));
   }
 
   void handleSetServerURL(MethodCall call) {
@@ -422,5 +458,203 @@ class MixpanelFlutterPlugin {
 
   void handleOptOutTracking() {
     opt_out_tracking();
+  }
+
+  void handleSetLoggingEnabled(MethodCall call) {
+    Map<Object?, Object?> args = call.arguments as Map<Object?, Object?>;
+    bool loggingEnabled = args['loggingEnabled'] as bool;
+    set_config(safeJsify({'debug': loggingEnabled}));
+  }
+
+  // Feature Flags handlers
+
+  bool handleAreFlagsReady() {
+    return flags_are_flags_ready();
+  }
+
+  Future<Map<String, dynamic>> handleGetVariant(MethodCall call) async {
+    Map<Object?, Object?> args = call.arguments as Map<Object?, Object?>;
+    String flagName = args['flagName'] as String;
+    Map<Object?, Object?> fallbackMap = args['fallback'] as Map<Object?, Object?>? ?? {};
+
+    JSAny? fallbackJs = safeJsify({
+      'key': fallbackMap['key'],
+      'value': fallbackMap['value'],
+    });
+
+    try {
+      JSPromise promise = flags_get_variant(flagName, fallbackJs);
+      JSAny? jsResult = await promise.toDart;
+      return _jsVariantToMap(jsResult, fallbackMap);
+    } catch (e) {
+      debugPrint('[Mixpanel] getVariant failed with error: $e, returning fallback');
+      return _jsVariantToMap(null, fallbackMap);
+    }
+  }
+
+  Map<String, dynamic> handleGetVariantSync(MethodCall call) {
+    Map<Object?, Object?> args = call.arguments as Map<Object?, Object?>;
+    String flagName = args['flagName'] as String;
+    Map<Object?, Object?> fallbackMap = args['fallback'] as Map<Object?, Object?>? ?? {};
+
+    JSAny? fallbackJs = safeJsify({
+      'key': fallbackMap['key'],
+      'value': fallbackMap['value'],
+    });
+
+    try {
+      JSAny? jsResult = flags_get_variant_sync(flagName, fallbackJs);
+      return _jsVariantToMap(jsResult, fallbackMap);
+    } catch (e) {
+      debugPrint('[Mixpanel] getVariantSync failed with error: $e, returning fallback');
+      return _jsVariantToMap(null, fallbackMap);
+    }
+  }
+
+  Future<dynamic> handleGetVariantValue(MethodCall call) async {
+    Map<Object?, Object?> args = call.arguments as Map<Object?, Object?>;
+    String flagName = args['flagName'] as String;
+    dynamic fallbackValue = args['fallbackValue'];
+
+    JSAny? fallbackJs = safeJsify({
+      'key': flagName,
+      'value': fallbackValue,
+    });
+
+    try {
+      JSPromise promise = flags_get_variant(flagName, fallbackJs);
+      JSAny? jsResult = await promise.toDart;
+      Map<String, dynamic> variant = _jsVariantToMap(jsResult, {'key': flagName, 'value': fallbackValue});
+      return variant['value'] ?? fallbackValue;
+    } catch (e) {
+      debugPrint('[Mixpanel] getVariantValue failed with error: $e, returning fallback');
+      return fallbackValue;
+    }
+  }
+
+  dynamic handleGetVariantValueSync(MethodCall call) {
+    Map<Object?, Object?> args = call.arguments as Map<Object?, Object?>;
+    String flagName = args['flagName'] as String;
+    dynamic fallbackValue = args['fallbackValue'];
+
+    JSAny? fallbackJs = safeJsify({
+      'key': flagName,
+      'value': fallbackValue,
+    });
+
+    try {
+      JSAny? jsResult = flags_get_variant_sync(flagName, fallbackJs);
+      Map<String, dynamic> variant = _jsVariantToMap(jsResult, {'key': flagName, 'value': fallbackValue});
+      return variant['value'] ?? fallbackValue;
+    } catch (e) {
+      debugPrint('[Mixpanel] getVariantValueSync failed with error: $e, returning fallback');
+      return fallbackValue;
+    }
+  }
+
+  Future<bool> handleIsEnabled(MethodCall call) async {
+    Map<Object?, Object?> args = call.arguments as Map<Object?, Object?>;
+    String flagName = args['flagName'] as String;
+    bool fallbackValue = args['fallbackValue'] as bool? ?? false;
+
+    JSAny? fallbackJs = safeJsify({
+      'key': flagName,
+      'value': fallbackValue,
+    });
+
+    try {
+      JSPromise promise = flags_get_variant(flagName, fallbackJs);
+      JSAny? jsResult = await promise.toDart;
+      Map<String, dynamic> variant = _jsVariantToMap(jsResult, {'key': flagName, 'value': fallbackValue});
+      dynamic value = variant['value'];
+      if (value is bool) {
+        return value;
+      }
+      if (value != null) {
+        debugPrint('[Mixpanel] isEnabled flag \'$flagName\' has non-boolean value, returning fallback');
+      }
+      return fallbackValue;
+    } catch (e) {
+      debugPrint('[Mixpanel] isEnabled failed with error: $e, returning fallback');
+      return fallbackValue;
+    }
+  }
+
+  bool handleIsEnabledSync(MethodCall call) {
+    Map<Object?, Object?> args = call.arguments as Map<Object?, Object?>;
+    String flagName = args['flagName'] as String;
+    bool fallbackValue = args['fallbackValue'] as bool? ?? false;
+
+    JSAny? fallbackJs = safeJsify({
+      'key': flagName,
+      'value': fallbackValue,
+    });
+
+    try {
+      JSAny? jsResult = flags_get_variant_sync(flagName, fallbackJs);
+      Map<String, dynamic> variant = _jsVariantToMap(jsResult, {'key': flagName, 'value': fallbackValue});
+      dynamic value = variant['value'];
+      if (value is bool) {
+        return value;
+      }
+      if (value != null) {
+        debugPrint('[Mixpanel] isEnabledSync flag \'$flagName\' has non-boolean value, returning fallback');
+      }
+      return fallbackValue;
+    } catch (e) {
+      debugPrint('[Mixpanel] isEnabledSync failed with error: $e, returning fallback');
+      return fallbackValue;
+    }
+  }
+
+  void handleUpdateFlagsContext(MethodCall call) {
+    Map<Object?, Object?> args = call.arguments as Map<Object?, Object?>;
+    dynamic context = args['context'];
+    flags_update_context(safeJsify(context ?? {}));
+  }
+
+  Map<String, dynamic> _jsVariantToMap(JSAny? jsResult, Map<Object?, Object?> fallbackMap) {
+    if (jsResult == null) {
+      debugPrint('[Mixpanel] _jsVariantToMap received null result, returning fallback');
+      return {
+        'key': fallbackMap['key'] as String? ?? '',
+        'value': fallbackMap['value'],
+        'experimentId': null,
+        'isExperimentActive': null,
+        'isQaTester': null,
+      };
+    }
+
+    // Convert JS object to Dart map
+    try {
+      Map<Object?, Object?>? dartMap = (jsResult as JSObject).dartify() as Map<Object?, Object?>?;
+      if (dartMap == null) {
+        debugPrint('[Mixpanel] _jsVariantToMap failed to convert JS object, returning fallback');
+        return {
+          'key': fallbackMap['key'] as String? ?? '',
+          'value': fallbackMap['value'],
+          'experimentId': null,
+          'isExperimentActive': null,
+          'isQaTester': null,
+        };
+      }
+
+      return {
+        'key': dartMap['key'] as String? ?? '',
+        'value': dartMap['value'],
+        'experimentId': dartMap['experiment_id'] as String?,
+        'isExperimentActive': dartMap['is_experiment_active'] as bool?,
+        'isQaTester': dartMap['is_qa_tester'] as bool?,
+      };
+    } catch (e) {
+      debugPrint('[Mixpanel] _jsVariantToMap failed with error: $e, returning fallback');
+      return {
+        'key': fallbackMap['key'] as String? ?? '',
+        'value': fallbackMap['value'],
+        'experimentId': null,
+        'isExperimentActive': null,
+        'isQaTester': null,
+      };
+    }
   }
 }

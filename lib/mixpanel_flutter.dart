@@ -6,23 +6,141 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
 import 'package:mixpanel_flutter/codec/mixpanel_message_codec.dart';
 
+/// Represents a feature flag variant with metadata.
+///
+/// Contains the flag's key, value, and optional experiment-related metadata.
+class MixpanelFlagVariant {
+  /// The key/name of the feature flag.
+  final String key;
+
+  /// The value of the feature flag variant.
+  /// Can be any type: bool, String, int, double, Map, List, etc.
+  final dynamic value;
+
+  /// The experiment ID if this flag is part of an experiment.
+  final String? experimentId;
+
+  /// Whether the experiment is currently active.
+  final bool? isExperimentActive;
+
+  /// Whether the current user is a QA tester.
+  final bool? isQaTester;
+
+  MixpanelFlagVariant({
+    required this.key,
+    required this.value,
+    this.experimentId,
+    this.isExperimentActive,
+    this.isQaTester,
+  });
+
+  /// Creates a MixpanelFlagVariant from a Map (used for platform channel deserialization).
+  factory MixpanelFlagVariant.fromMap(Map<dynamic, dynamic> map) {
+    final key = map['key'] as String?;
+    if (key == null || key.isEmpty) {
+      developer.log(
+          '`MixpanelFlagVariant.fromMap` received map with missing or empty key, using empty string as default',
+          name: 'Mixpanel');
+    }
+    return MixpanelFlagVariant(
+      key: key ?? '',
+      value: map['value'],
+      experimentId: map['experimentId'] as String?,
+      isExperimentActive: map['isExperimentActive'] as bool?,
+      isQaTester: map['isQaTester'] as bool?,
+    );
+  }
+
+  /// Creates a fallback MixpanelFlagVariant with the given key and value.
+  factory MixpanelFlagVariant.fallback(String key, dynamic value) {
+    return MixpanelFlagVariant(key: key, value: value);
+  }
+
+  /// Converts this variant to a Map for serialization.
+  Map<String, dynamic> toMap() {
+    return {
+      'key': key,
+      'value': value,
+      'experimentId': experimentId,
+      'isExperimentActive': isExperimentActive,
+      'isQaTester': isQaTester,
+    };
+  }
+
+  @override
+  String toString() {
+    return 'MixpanelFlagVariant(key: $key, value: $value, experimentId: $experimentId, isExperimentActive: $isExperimentActive, isQaTester: $isQaTester)';
+  }
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    if (other is! MixpanelFlagVariant) return false;
+    return key == other.key &&
+        value == other.value &&
+        experimentId == other.experimentId &&
+        isExperimentActive == other.isExperimentActive &&
+        isQaTester == other.isQaTester;
+  }
+
+  @override
+  int get hashCode {
+    // Use a compatible hash implementation for SDK >=2.12.0
+    var result = 17;
+    result = 37 * result + key.hashCode;
+    result = 37 * result + (value?.hashCode ?? 0);
+    result = 37 * result + (experimentId?.hashCode ?? 0);
+    result = 37 * result + (isExperimentActive?.hashCode ?? 0);
+    result = 37 * result + (isQaTester?.hashCode ?? 0);
+    return result;
+  }
+}
+
+/// Configuration options for feature flags.
+///
+/// Used to configure feature flags during Mixpanel initialization.
+class FeatureFlagsConfig {
+  /// Whether feature flags are enabled.
+  final bool enabled;
+
+  /// Context properties to send with feature flag requests.
+  /// These can be used for targeting and segmentation.
+  final Map<String, dynamic> context;
+
+  FeatureFlagsConfig({
+    this.enabled = true,
+    this.context = const {},
+  });
+
+  /// Converts this config to a Map for serialization.
+  Map<String, dynamic> toMap() {
+    return {
+      'enabled': enabled,
+      'context': context,
+    };
+  }
+}
+
 /// The primary class for integrating Mixpanel with your app.
 class Mixpanel {
+  // ignore: prefer_const_declarations
   static final MethodChannel _channel = kIsWeb
       ? const MethodChannel('mixpanel_flutter')
       : const MethodChannel(
           'mixpanel_flutter', StandardMethodCodec(MixpanelMessageCodec()));
-  static Map<String, String> _mixpanelProperties = {
+  static final Map<String, String> _mixpanelProperties = {
     '\$lib_version': '2.4.4',
     'mp_lib': 'flutter',
   };
 
   final String _token;
   final People _people;
+  final FeatureFlags _featureFlags;
 
   Mixpanel(String token)
       : _token = token,
-        _people = new People(token);
+        _people = People(token),
+        _featureFlags = FeatureFlags(token);
 
   ///
   ///  Initializes an instance of the API with the given project token.
@@ -34,18 +152,23 @@ class Mixpanel {
   ///  include app sessions, first app opens, app updated, etc.
   ///  * [superProperties] Optional super properties to register
   ///  * [config] Optional A dictionary of config options to override (WEB ONLY)
+  ///  * [featureFlags] Optional Feature flags configuration
   ///
   static Future<Mixpanel> init(String token,
       {bool optOutTrackingDefault = false,
       required bool trackAutomaticEvents,
       Map<String, dynamic>? superProperties,
-      Map<String, dynamic>? config}) async {
+      Map<String, dynamic>? config,
+      FeatureFlagsConfig? featureFlags}) async {
     var allProperties = <String, dynamic>{'token': token};
     allProperties['optOutTrackingDefault'] = optOutTrackingDefault;
     allProperties['trackAutomaticEvents'] = trackAutomaticEvents;
     allProperties['mixpanelProperties'] = _mixpanelProperties;
     allProperties['superProperties'] = _MixpanelHelper.ensureSerializableProperties(superProperties);
     allProperties['config'] = _MixpanelHelper.ensureSerializableProperties(config);
+    if (featureFlags != null) {
+      allProperties['featureFlags'] = featureFlags.toMap();
+    }
     await _channel.invokeMethod<void>('initialize', allProperties);
     return Mixpanel(token);
   }
@@ -210,7 +333,12 @@ class Mixpanel {
   ///
   /// return an instance of People that you can use to update records in Mixpanel People Analytics
   People getPeople() {
-    return this._people;
+    return _people;
+  }
+
+  /// Returns a FeatureFlags object that can be used to access feature flag values and metadata.
+  FeatureFlags getFeatureFlags() {
+    return _featureFlags;
   }
 
   ///  Track an event with specific groups.
@@ -262,7 +390,7 @@ class Mixpanel {
   /// return an instance of MixpanelGroup that you can use to update
   ///     records in Mixpanel Group Analytics
   MixpanelGroup getGroup(String groupKey, dynamic groupID) {
-    return new MixpanelGroup(this._token, groupKey, _MixpanelHelper.ensureSerializableValue(groupID));
+    return MixpanelGroup(_token, groupKey, _MixpanelHelper.ensureSerializableValue(groupID));
   }
 
   /// Add a group to this user's membership for a particular group key
@@ -452,6 +580,7 @@ class Mixpanel {
 /// persist across stops and starts of your application, until you make another
 /// call to identify using a different id.
 class People {
+  // ignore: prefer_const_declarations
   static final MethodChannel _channel = kIsWeb
       ? const MethodChannel('mixpanel_flutter')
       : const MethodChannel(
@@ -472,7 +601,7 @@ class People {
     if (_MixpanelHelper.isValidString(prop)) {
       Map<String, dynamic> properties = {prop: to};
       _channel.invokeMethod<void>('set',
-          <String, dynamic>{'token': this._token, 'properties': _MixpanelHelper.ensureSerializableProperties(properties)});
+          <String, dynamic>{'token': _token, 'properties': _MixpanelHelper.ensureSerializableProperties(properties)});
     } else {
       developer.log('`people set` failed: prop cannot be blank',
           name: 'Mixpanel');
@@ -487,7 +616,7 @@ class People {
     if (_MixpanelHelper.isValidString(prop)) {
       Map<String, dynamic> properties = {prop: to};
       _channel.invokeMethod<void>('setOnce',
-          <String, dynamic>{'token': this._token, 'properties': _MixpanelHelper.ensureSerializableProperties(properties)});
+          <String, dynamic>{'token': _token, 'properties': _MixpanelHelper.ensureSerializableProperties(properties)});
     } else {
       developer.log('`people setOnce` failed: prop cannot be blank',
           name: 'Mixpanel');
@@ -504,7 +633,7 @@ class People {
     Map<String, dynamic> properties = {prop: by};
     if (_MixpanelHelper.isValidString(prop)) {
       _channel.invokeMethod<void>('increment',
-          <String, dynamic>{'token': this._token, 'properties': _MixpanelHelper.ensureSerializableProperties(properties)});
+          <String, dynamic>{'token': _token, 'properties': _MixpanelHelper.ensureSerializableProperties(properties)});
     } else {
       developer.log('`people increment` failed: prop cannot be blank',
           name: 'Mixpanel');
@@ -521,10 +650,10 @@ class People {
       if (kIsWeb || Platform.isIOS) {
         Map<String, dynamic> properties = {name: value};
         _channel.invokeMethod<void>('append',
-            <String, dynamic>{'token': this._token, 'properties': _MixpanelHelper.ensureSerializableProperties(properties)});
+            <String, dynamic>{'token': _token, 'properties': _MixpanelHelper.ensureSerializableProperties(properties)});
       } else {
         _channel.invokeMethod<void>('append', <String, dynamic>{
-          'token': this._token,
+          'token': _token,
           'name': name,
           'value': _MixpanelHelper.ensureSerializableValue(value)
         });
@@ -546,10 +675,10 @@ class People {
       if (kIsWeb || Platform.isIOS) {
         Map<String, dynamic> properties = {name: value};
         _channel.invokeMethod<void>('union',
-            <String, dynamic>{'token': this._token, 'properties': _MixpanelHelper.ensureSerializableProperties(properties)});
+            <String, dynamic>{'token': _token, 'properties': _MixpanelHelper.ensureSerializableProperties(properties)});
       } else {
         _channel.invokeMethod<void>('union', <String, dynamic>{
-          'token': this._token,
+          'token': _token,
           'name': name,
           'value': _MixpanelHelper.ensureSerializableValue(value)
         });
@@ -571,10 +700,10 @@ class People {
       if (kIsWeb || Platform.isIOS) {
         Map<String, dynamic> properties = {name: value};
         _channel.invokeMethod<void>('remove',
-            <String, dynamic>{'token': this._token, 'properties': _MixpanelHelper.ensureSerializableProperties(properties)});
+            <String, dynamic>{'token': _token, 'properties': _MixpanelHelper.ensureSerializableProperties(properties)});
       } else {
         _channel.invokeMethod<void>('remove', <String, dynamic>{
-          'token': this._token,
+          'token': _token,
           'name': name,
           'value': _MixpanelHelper.ensureSerializableValue(value)
         });
@@ -591,7 +720,7 @@ class People {
   void unset(String name) {
     if (_MixpanelHelper.isValidString(name)) {
       _channel.invokeMethod<void>(
-          'unset', <String, dynamic>{'token': this._token, 'name': name});
+          'unset', <String, dynamic>{'token': _token, 'name': name});
     } else {
       developer.log('`people unset` failed: name cannot be blank',
           name: 'Mixpanel');
@@ -606,7 +735,7 @@ class People {
     // ignore: unnecessary_null_comparison
     if (amount != null) {
       _channel.invokeMethod<void>('trackCharge', <String, dynamic>{
-        'token': this._token,
+        'token': _token,
         'amount': amount,
         'properties': _MixpanelHelper.ensureSerializableProperties(properties)
       });
@@ -619,7 +748,7 @@ class People {
   /// Permanently clear the whole transaction history for the identified people profile.
   void clearCharges() {
     _channel.invokeMethod<void>(
-        'clearCharges', <String, dynamic>{'token': this._token});
+        'clearCharges', <String, dynamic>{'token': _token});
   }
 
   /// Permanently deletes the identified user's record from People Analytics.
@@ -628,7 +757,7 @@ class People {
   /// to People Analytics using the same distinct id will create and store new values.
   void deleteUser() {
     _channel.invokeMethod<void>(
-        'deleteUser', <String, dynamic>{'token': this._token});
+        'deleteUser', <String, dynamic>{'token': _token});
   }
 }
 
@@ -636,6 +765,7 @@ class People {
 ///
 /// The MixpanelGroup object is used to update properties in a group's Group Analytics record.
 class MixpanelGroup {
+  // ignore: prefer_const_declarations
   static final MethodChannel _channel = kIsWeb
       ? const MethodChannel('mixpanel_flutter')
       : const MethodChannel(
@@ -661,9 +791,9 @@ class MixpanelGroup {
       Map<String, dynamic> properties = {prop: to};
 
       _channel.invokeMethod<void>('groupSetProperties', <String, dynamic>{
-        'token': this._token,
-        'groupKey': this._groupKey,
-        'groupID': this._groupID,
+        'token': _token,
+        'groupKey': _groupKey,
+        'groupID': _groupID,
         'properties': _MixpanelHelper.ensureSerializableProperties(properties)
       });
     } else {
@@ -681,9 +811,9 @@ class MixpanelGroup {
       Map<String, dynamic> properties = {prop: to};
 
       _channel.invokeMethod<void>('groupSetPropertyOnce', <String, dynamic>{
-        'token': this._token,
-        'groupKey': this._groupKey,
-        'groupID': this._groupID,
+        'token': _token,
+        'groupKey': _groupKey,
+        'groupID': _groupID,
         'properties': _MixpanelHelper.ensureSerializableProperties(properties)
       });
     } else {
@@ -698,9 +828,9 @@ class MixpanelGroup {
   void unset(String prop) {
     if (_MixpanelHelper.isValidString(prop)) {
       _channel.invokeMethod<void>('groupUnsetProperty', <String, dynamic>{
-        'token': this._token,
-        'groupKey': this._groupKey,
-        'groupID': this._groupID,
+        'token': _token,
+        'groupKey': _groupKey,
+        'groupID': _groupID,
         'propertyName': prop
       });
     } else {
@@ -718,9 +848,9 @@ class MixpanelGroup {
   void remove(String name, dynamic value) {
     if (_MixpanelHelper.isValidString(name)) {
       _channel.invokeMethod<void>('groupRemovePropertyValue', <String, dynamic>{
-        'token': this._token,
-        'groupKey': this._groupKey,
-        'groupID': this._groupID,
+        'token': _token,
+        'groupKey': _groupKey,
+        'groupID': _groupID,
         'name': name,
         'value': _MixpanelHelper.ensureSerializableValue(value)
       });
@@ -749,11 +879,218 @@ class MixpanelGroup {
       return;
     }
     _channel.invokeMethod<void>('groupUnionProperty', <String, dynamic>{
-      'token': this._token,
-      'groupKey': this._groupKey,
-      'groupID': this._groupID,
+      'token': _token,
+      'groupKey': _groupKey,
+      'groupID': _groupID,
       'name': name,
       'value': _MixpanelHelper.ensureSerializableValue(value)
+    });
+  }
+}
+
+/// Core class for using Mixpanel Feature Flags.
+///
+/// The FeatureFlags object is used to access feature flag values and metadata.
+/// Feature flags allow you to control feature rollout and run experiments.
+class FeatureFlags {
+  // ignore: prefer_const_declarations
+  static final MethodChannel _channel = kIsWeb
+      ? const MethodChannel('mixpanel_flutter')
+      : const MethodChannel(
+          'mixpanel_flutter', StandardMethodCodec(MixpanelMessageCodec()));
+
+  final String _token;
+
+  FeatureFlags(String token) : _token = token;
+
+  /// Check if feature flags have been loaded and are ready to use.
+  ///
+  /// Returns true if flags are loaded and ready, false otherwise.
+  Future<bool> areFlagsReady() async {
+    final result = await _channel.invokeMethod<bool>(
+        'areFlagsReady', <String, dynamic>{'token': _token});
+    return result ?? false;
+  }
+
+  /// Get the full variant for a feature flag, including metadata.
+  ///
+  /// * [flagName] The name of the feature flag
+  /// * [fallback] A fallback variant to use if the flag is not found or not ready
+  ///
+  /// Returns the MixpanelFlagVariant for the flag, or the fallback if not available.
+  Future<MixpanelFlagVariant> getVariant(
+      String flagName, MixpanelFlagVariant fallback) async {
+    if (!_MixpanelHelper.isValidString(flagName)) {
+      developer.log('`getVariant` failed: flagName cannot be blank',
+          name: 'Mixpanel');
+      return fallback;
+    }
+    final result = await _channel.invokeMethod<Map>('getVariant', <String, dynamic>{
+      'token': _token,
+      'flagName': flagName,
+      'fallback': fallback.toMap(),
+    });
+    if (result != null) {
+      return MixpanelFlagVariant.fromMap(result);
+    }
+    return fallback;
+  }
+
+  /// Get the full variant for a feature flag from the local cache.
+  ///
+  /// This method returns immediately with the cached value and does not trigger
+  /// a network request. Use this when you need fast access to flag values that
+  /// have already been fetched. The method returns a Future for API consistency,
+  /// but it resolves synchronously with the cached data.
+  ///
+  /// If flags haven't been loaded yet or the specific flag is not found,
+  /// the fallback will be returned.
+  ///
+  /// * [flagName] The name of the feature flag
+  /// * [fallback] A fallback variant to use if the flag is not found or not ready
+  ///
+  /// Returns the MixpanelFlagVariant for the flag, or the fallback if not available.
+  Future<MixpanelFlagVariant> getVariantSync(
+      String flagName, MixpanelFlagVariant fallback) async {
+    if (!_MixpanelHelper.isValidString(flagName)) {
+      developer.log('`getVariantSync` failed: flagName cannot be blank',
+          name: 'Mixpanel');
+      return fallback;
+    }
+    final result = await _channel.invokeMethod<Map>('getVariantSync', <String, dynamic>{
+      'token': _token,
+      'flagName': flagName,
+      'fallback': fallback.toMap(),
+    });
+    if (result != null) {
+      return MixpanelFlagVariant.fromMap(result);
+    }
+    return fallback;
+  }
+
+  /// Get just the value of a feature flag.
+  ///
+  /// * [flagName] The name of the feature flag
+  /// * [fallbackValue] A fallback value to use if the flag is not found or not ready
+  ///
+  /// Returns the value of the flag, or the fallback value if not available.
+  Future<dynamic> getVariantValue(String flagName, dynamic fallbackValue) async {
+    if (!_MixpanelHelper.isValidString(flagName)) {
+      developer.log('`getVariantValue` failed: flagName cannot be blank',
+          name: 'Mixpanel');
+      return fallbackValue;
+    }
+    final result = await _channel.invokeMethod<dynamic>('getVariantValue', <String, dynamic>{
+      'token': _token,
+      'flagName': flagName,
+      'fallbackValue': _MixpanelHelper.ensureSerializableValue(fallbackValue),
+    });
+    return result ?? fallbackValue;
+  }
+
+  /// Get just the value of a feature flag from the local cache.
+  ///
+  /// This method returns immediately with the cached value and does not trigger
+  /// a network request. Use this when you need fast access to flag values that
+  /// have already been fetched. The method returns a Future for API consistency,
+  /// but it resolves synchronously with the cached data.
+  ///
+  /// If flags haven't been loaded yet or the specific flag is not found,
+  /// the fallback value will be returned.
+  ///
+  /// * [flagName] The name of the feature flag
+  /// * [fallbackValue] A fallback value to use if the flag is not found or not ready
+  ///
+  /// Returns the value of the flag, or the fallback value if not available.
+  Future<dynamic> getVariantValueSync(String flagName, dynamic fallbackValue) async {
+    if (!_MixpanelHelper.isValidString(flagName)) {
+      developer.log('`getVariantValueSync` failed: flagName cannot be blank',
+          name: 'Mixpanel');
+      return fallbackValue;
+    }
+    final result = await _channel.invokeMethod<dynamic>('getVariantValueSync', <String, dynamic>{
+      'token': _token,
+      'flagName': flagName,
+      'fallbackValue': _MixpanelHelper.ensureSerializableValue(fallbackValue),
+    });
+    return result ?? fallbackValue;
+  }
+
+  /// Check if a boolean feature flag is enabled.
+  ///
+  /// This method is designed for feature flags that have boolean values.
+  /// If the flag's value is not a boolean type, the fallback value will be returned.
+  ///
+  /// * [flagName] The name of the feature flag
+  /// * [fallbackValue] A fallback value to use if the flag is not found, not ready,
+  ///   or has a non-boolean value
+  ///
+  /// Returns true if the flag is enabled, the fallback value otherwise.
+  Future<bool> isEnabled(String flagName, bool fallbackValue) async {
+    if (!_MixpanelHelper.isValidString(flagName)) {
+      developer.log('`isEnabled` failed: flagName cannot be blank',
+          name: 'Mixpanel');
+      return fallbackValue;
+    }
+    final result = await _channel.invokeMethod<bool>('isEnabled', <String, dynamic>{
+      'token': _token,
+      'flagName': flagName,
+      'fallbackValue': fallbackValue,
+    });
+    return result ?? fallbackValue;
+  }
+
+  /// Check if a boolean feature flag is enabled from the local cache.
+  ///
+  /// This method returns immediately with the cached value and does not trigger
+  /// a network request. Use this when you need fast access to flag values that
+  /// have already been fetched. The method returns a Future for API consistency,
+  /// but it resolves synchronously with the cached data.
+  ///
+  /// This method is designed for feature flags that have boolean values.
+  /// If the flag's value is not a boolean type, the fallback value will be returned.
+  ///
+  /// * [flagName] The name of the feature flag
+  /// * [fallbackValue] A fallback value to use if the flag is not found, not ready,
+  ///   or has a non-boolean value
+  ///
+  /// Returns true if the flag is enabled, the fallback value otherwise.
+  Future<bool> isEnabledSync(String flagName, bool fallbackValue) async {
+    if (!_MixpanelHelper.isValidString(flagName)) {
+      developer.log('`isEnabledSync` failed: flagName cannot be blank',
+          name: 'Mixpanel');
+      return fallbackValue;
+    }
+    final result = await _channel.invokeMethod<bool>('isEnabledSync', <String, dynamic>{
+      'token': _token,
+      'flagName': flagName,
+      'fallbackValue': fallbackValue,
+    });
+    return result ?? fallbackValue;
+  }
+
+  /// Update the context used for feature flag evaluation.
+  ///
+  /// * [context] A Map of context properties to use for flag evaluation.
+  /// * [options] Reserved for future use. Currently not implemented by the
+  ///   native SDKs and will be ignored.
+  ///
+  /// Platform behavior:
+  /// - Web: the context is forwarded to the underlying Mixpanel SDK, which may
+  ///   use it for subsequent feature flag evaluation and refetching.
+  /// - Mobile (iOS/Android): the current native implementations treat
+  ///   `updateFlagsContext` as unsupported / a no-op (iOS logs a warning;
+  ///   Android does not apply the passed context). On these platforms, calling
+  ///   this method will not change how flags are evaluated.
+  ///
+  /// Do not rely on this method changing feature flag behavior on platforms
+  /// where the underlying SDK does not yet support updating the flags context.
+  Future<void> updateContext(Map<String, dynamic> context,
+      {Map<String, dynamic>? options}) async {
+    await _channel.invokeMethod<void>('updateFlagsContext', <String, dynamic>{
+      'token': _token,
+      'context': _MixpanelHelper.ensureSerializableProperties(context),
+      'options': _MixpanelHelper.ensureSerializableProperties(options),
     });
   }
 }

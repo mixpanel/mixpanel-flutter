@@ -143,27 +143,70 @@ public class SwiftMixpanelFlutterPlugin: NSObject, FlutterPlugin {
         case "setFlushBatchSize":
             handleSetFlushBatchSize(call, result: result)
             break
+        case "areFlagsReady":
+            handleAreFlagsReady(call, result: result)
+            break
+        case "getVariant":
+            handleGetVariant(call, result: result)
+            break
+        case "getVariantSync":
+            handleGetVariantSync(call, result: result)
+            break
+        case "getVariantValue":
+            handleGetVariantValue(call, result: result)
+            break
+        case "getVariantValueSync":
+            handleGetVariantValueSync(call, result: result)
+            break
+        case "isEnabled":
+            handleIsEnabled(call, result: result)
+            break
+        case "isEnabledSync":
+            handleIsEnabledSync(call, result: result)
+            break
+        case "updateFlagsContext":
+            handleUpdateFlagsContext(call, result: result)
+            break
         default:
             result(FlutterMethodNotImplemented)
         }
-        
+
         return
     }
     
     private func handleInitialize(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
         let arguments = call.arguments as? [String: Any] ?? [String: Any]()
-        let token = arguments["token"] as? String
+        guard let token = arguments["token"] as? String, !token.isEmpty else {
+            result(FlutterError(code: "INVALID_TOKEN", message: "Token is required and cannot be empty", details: nil))
+            return
+        }
         let optOutTrackingDefault = arguments["optOutTrackingDefault"] as? Bool
         mixpanelProperties = arguments["mixpanelProperties"] as? [String: String]
         let superProperties = arguments["superProperties"] as? [String: Any]
         self.token = token
         let trackAutomaticEvents = arguments["trackAutomaticEvents"] as! Bool
         self.trackAutomaticEvents = trackAutomaticEvents
-        instance = Mixpanel.initialize(token: token!, trackAutomaticEvents: trackAutomaticEvents,
-                                        instanceName: token!,
-                                       optOutTrackingByDefault: optOutTrackingDefault ?? false,
-                                       superProperties: MixpanelTypeHandler.mixpanelProperties(properties: superProperties, mixpanelProperties: mixpanelProperties))
-        instance?.flushInterval = defaultFlushInterval
+
+        // Check for feature flags configuration
+        var featureFlagsEnabled = false
+        var featureFlagsContext: [String: Any] = [:]
+        if let featureFlags = arguments["featureFlags"] as? [String: Any],
+           let enabled = featureFlags["enabled"] as? Bool, enabled {
+            featureFlagsEnabled = true
+            featureFlagsContext = featureFlags["context"] as? [String: Any] ?? [:]
+        }
+
+        let options = MixpanelOptions(
+            token: token,
+            flushInterval: defaultFlushInterval,
+            instanceName: token,
+            trackAutomaticEvents: trackAutomaticEvents,
+            optOutTrackingByDefault: optOutTrackingDefault ?? false,
+            superProperties: MixpanelTypeHandler.mixpanelProperties(properties: superProperties, mixpanelProperties: mixpanelProperties),
+            featureFlagsEnabled: featureFlagsEnabled,
+            featureFlagsContext: featureFlagsContext
+        )
+        instance = Mixpanel.initialize(options: options)
 
         result(nil)
     }
@@ -531,7 +574,162 @@ public class SwiftMixpanelFlutterPlugin: NSObject, FlutterPlugin {
         instance?.flushBatchSize = batchSize
         result(nil)
     }
-    
+
+    // MARK: - Feature Flags
+
+    private func handleAreFlagsReady(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+        if instance == nil {
+            NSLog("[Mixpanel] areFlagsReady called before Mixpanel was initialized, returning false")
+        }
+        result(instance?.flags.areFlagsReady() ?? false)
+    }
+
+    private func handleGetVariant(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+        let arguments = call.arguments as? [String: Any] ?? [String: Any]()
+        guard let flagName = arguments["flagName"] as? String, !flagName.isEmpty else {
+            NSLog("[Mixpanel] getVariant called with missing or empty flagName, returning nil")
+            result(nil)
+            return
+        }
+        let fallbackMap = arguments["fallback"] as? [String: Any]
+        let fallback = mapToFlagVariant(fallbackMap)
+        guard let inst = instance else {
+            NSLog("[Mixpanel] getVariant called before Mixpanel was initialized, returning fallback")
+            result(flagVariantToMap(fallback))
+            return
+        }
+        inst.flags.getVariant(flagName, fallback: fallback) { variant in
+            result(self.flagVariantToMap(variant))
+        }
+    }
+
+    private func handleGetVariantSync(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+        let arguments = call.arguments as? [String: Any] ?? [String: Any]()
+        guard let flagName = arguments["flagName"] as? String, !flagName.isEmpty else {
+            NSLog("[Mixpanel] getVariantSync called with missing or empty flagName, returning nil")
+            result(nil)
+            return
+        }
+        let fallbackMap = arguments["fallback"] as? [String: Any]
+        let fallback = mapToFlagVariant(fallbackMap)
+        if instance == nil {
+            NSLog("[Mixpanel] getVariantSync called before Mixpanel was initialized, returning fallback")
+        }
+        let variant = instance?.flags.getVariantSync(flagName, fallback: fallback) ?? fallback
+        result(flagVariantToMap(variant))
+    }
+
+    private func handleGetVariantValue(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+        let arguments = call.arguments as? [String: Any] ?? [String: Any]()
+        guard let flagName = arguments["flagName"] as? String, !flagName.isEmpty else {
+            NSLog("[Mixpanel] getVariantValue called with missing or empty flagName, returning nil")
+            result(nil)
+            return
+        }
+        let fallbackValue = arguments["fallbackValue"]
+        let fallback = MixpanelFlagVariant(key: flagName, value: fallbackValue)
+        guard let inst = instance else {
+            NSLog("[Mixpanel] getVariantValue called before Mixpanel was initialized, returning fallback")
+            result(fallbackValue)
+            return
+        }
+        inst.flags.getVariant(flagName, fallback: fallback) { variant in
+            result(variant.value)
+        }
+    }
+
+    private func handleGetVariantValueSync(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+        let arguments = call.arguments as? [String: Any] ?? [String: Any]()
+        guard let flagName = arguments["flagName"] as? String, !flagName.isEmpty else {
+            NSLog("[Mixpanel] getVariantValueSync called with missing or empty flagName, returning nil")
+            result(nil)
+            return
+        }
+        let fallbackValue = arguments["fallbackValue"]
+        let fallback = MixpanelFlagVariant(key: flagName, value: fallbackValue)
+        if instance == nil {
+            NSLog("[Mixpanel] getVariantValueSync called before Mixpanel was initialized, returning fallback")
+        }
+        let variant = instance?.flags.getVariantSync(flagName, fallback: fallback) ?? fallback
+        result(variant.value)
+    }
+
+    private func handleIsEnabled(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+        let arguments = call.arguments as? [String: Any] ?? [String: Any]()
+        guard let flagName = arguments["flagName"] as? String, !flagName.isEmpty else {
+            NSLog("[Mixpanel] isEnabled called with missing or empty flagName, returning false")
+            result(false)
+            return
+        }
+        let fallbackValue = arguments["fallbackValue"] as? Bool ?? false
+        let fallback = MixpanelFlagVariant(key: flagName, value: fallbackValue)
+        guard let inst = instance else {
+            NSLog("[Mixpanel] isEnabled called before Mixpanel was initialized, returning fallback")
+            result(fallbackValue)
+            return
+        }
+        inst.flags.getVariant(flagName, fallback: fallback) { variant in
+            if let boolValue = variant.value as? Bool {
+                result(boolValue)
+            } else {
+                if variant.value != nil {
+                    NSLog("[Mixpanel] isEnabled flag '\(flagName)' has non-boolean value, returning fallback")
+                }
+                result(fallbackValue)
+            }
+        }
+    }
+
+    private func handleIsEnabledSync(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+        let arguments = call.arguments as? [String: Any] ?? [String: Any]()
+        guard let flagName = arguments["flagName"] as? String, !flagName.isEmpty else {
+            NSLog("[Mixpanel] isEnabledSync called with missing or empty flagName, returning false")
+            result(false)
+            return
+        }
+        let fallbackValue = arguments["fallbackValue"] as? Bool ?? false
+        let fallback = MixpanelFlagVariant(key: flagName, value: fallbackValue)
+        if instance == nil {
+            NSLog("[Mixpanel] isEnabledSync called before Mixpanel was initialized, returning fallback")
+        }
+        let variant = instance?.flags.getVariantSync(flagName, fallback: fallback) ?? fallback
+        if let boolValue = variant.value as? Bool {
+            result(boolValue)
+        } else {
+            if variant.value != nil {
+                NSLog("[Mixpanel] isEnabledSync flag '\(flagName)' has non-boolean value, returning fallback")
+            }
+            result(fallbackValue)
+        }
+    }
+
+    private func handleUpdateFlagsContext(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+        // Note: The iOS SDK does not support updating feature flags context after initialization.
+        // Context must be set during Mixpanel.initialize() via MixpanelOptions.
+        // This method is a no-op on iOS but we log a warning to inform developers.
+        NSLog("[Mixpanel] updateFlagsContext is not supported on iOS. Feature flags context must be set during initialization.")
+        result(nil)
+    }
+
+    private func mapToFlagVariant(_ map: [String: Any]?) -> MixpanelFlagVariant {
+        guard let map = map else {
+            return MixpanelFlagVariant(key: "", value: nil)
+        }
+        let key = map["key"] as? String ?? ""
+        let value = map["value"]
+        return MixpanelFlagVariant(key: key, value: value)
+    }
+
+    private func flagVariantToMap(_ variant: MixpanelFlagVariant) -> [String: Any] {
+        return [
+            "key": variant.key,
+            "value": variant.value ?? NSNull(),
+            "experimentId": variant.experimentID ?? NSNull(),
+            "isExperimentActive": variant.isExperimentActive ?? NSNull(),
+            "isQaTester": variant.isQATester ?? NSNull()
+        ]
+    }
+
 }
 
 let DATE_TIME: UInt8 = 128

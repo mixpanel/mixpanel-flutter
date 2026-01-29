@@ -21,6 +21,7 @@ import io.flutter.plugin.common.MethodChannel.MethodCallHandler;
 import io.flutter.plugin.common.MethodChannel.Result;
 
 import com.mixpanel.android.mpmetrics.MixpanelAPI;
+import com.mixpanel.android.mpmetrics.MixpanelOptions;
 
 /**
  * MixpanelFlutterPlugin
@@ -176,6 +177,30 @@ public class MixpanelFlutterPlugin implements FlutterPlugin, MethodCallHandler {
             case "groupUnionProperty":
                 handleGroupUnionProperty(call, result);
                 break;
+            case "areFlagsReady":
+                handleAreFlagsReady(call, result);
+                break;
+            case "getVariant":
+                handleGetVariant(call, result);
+                break;
+            case "getVariantSync":
+                handleGetVariantSync(call, result);
+                break;
+            case "getVariantValue":
+                handleGetVariantValue(call, result);
+                break;
+            case "getVariantValueSync":
+                handleGetVariantValueSync(call, result);
+                break;
+            case "isEnabled":
+                handleIsEnabled(call, result);
+                break;
+            case "isEnabledSync":
+                handleIsEnabledSync(call, result);
+                break;
+            case "updateFlagsContext":
+                handleUpdateFlagsContext(call, result);
+                break;
             default:
                 result.notImplemented();
                 break;
@@ -215,9 +240,41 @@ public class MixpanelFlutterPlugin implements FlutterPlugin, MethodCallHandler {
         Boolean optOutTrackingDefault = call.<Boolean>argument("optOutTrackingDefault");
         Boolean trackAutomaticEvents = call.<Boolean>argument("trackAutomaticEvents");
 
-        mixpanel = MixpanelAPI.getInstance(context, token,
-                optOutTrackingDefault == null ? false : optOutTrackingDefault,
-                superAndMixpanelProperties, null, trackAutomaticEvents);
+        // Parse feature flags config if provided
+        Map<String, Object> featureFlagsMap = call.<HashMap<String, Object>>argument("featureFlags");
+        Boolean featureFlagsEnabled = null;
+        JSONObject featureFlagsContext = null;
+        if (featureFlagsMap != null) {
+            Object enabledValue = featureFlagsMap.get("enabled");
+            if (enabledValue instanceof Boolean) {
+                featureFlagsEnabled = (Boolean) enabledValue;
+            }
+            Object contextValue = featureFlagsMap.get("context");
+            if (contextValue instanceof Map) {
+                try {
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> contextMap = (Map<String, Object>) contextValue;
+                    featureFlagsContext = new JSONObject(contextMap);
+                } catch (Exception e) {
+                    android.util.Log.w("Mixpanel", "Failed to parse feature flags context: " + e.getMessage());
+                }
+            }
+        }
+
+        // Build MixpanelOptions with feature flags configuration
+        MixpanelOptions.Builder optionsBuilder = new MixpanelOptions.Builder()
+                .optOutTrackingDefault(optOutTrackingDefault == null ? false : optOutTrackingDefault)
+                .superProperties(superAndMixpanelProperties);
+
+        if (featureFlagsEnabled != null && featureFlagsEnabled) {
+            optionsBuilder.featureFlagsEnabled(true);
+            if (featureFlagsContext != null) {
+                optionsBuilder.featureFlagsContext(featureFlagsContext);
+            }
+        }
+
+        boolean trackAutoEvents = trackAutomaticEvents == null ? true : trackAutomaticEvents;
+        mixpanel = MixpanelAPI.getInstance(context, token, trackAutoEvents, optionsBuilder.build());
 
         result.success(Integer.toString(mixpanel.hashCode()));
     }
@@ -525,6 +582,186 @@ public class MixpanelFlutterPlugin implements FlutterPlugin, MethodCallHandler {
         ArrayList<Object> value = call.argument("value");
         mixpanel.getGroup(groupKey, groupID).union(name, new JSONArray(value));
         result.success(null);
+    }
+
+    // Feature Flags handlers
+
+    private void handleAreFlagsReady(MethodCall call, Result result) {
+        if (mixpanel == null) {
+            android.util.Log.w("Mixpanel", "areFlagsReady called before Mixpanel was initialized, returning false");
+            result.success(false);
+            return;
+        }
+        result.success(mixpanel.getFlags().areFlagsReady());
+    }
+
+    private void handleGetVariant(MethodCall call, Result result) {
+        String flagName = call.argument("flagName");
+        Map<String, Object> fallbackMap = call.<HashMap<String, Object>>argument("fallback");
+        com.mixpanel.android.mpmetrics.MixpanelFlagVariant fallback = mapToFlagVariant(fallbackMap);
+        if (mixpanel == null) {
+            android.util.Log.w("Mixpanel", "getVariant called before Mixpanel was initialized, returning fallback");
+            result.success(flagVariantToMap(fallback));
+            return;
+        }
+        if (flagName == null || flagName.isEmpty()) {
+            android.util.Log.w("Mixpanel", "getVariant called with empty flagName, returning fallback");
+            result.success(flagVariantToMap(fallback));
+            return;
+        }
+        mixpanel.getFlags().getVariant(flagName, fallback, variant -> {
+            result.success(flagVariantToMap(variant));
+        });
+    }
+
+    private void handleGetVariantSync(MethodCall call, Result result) {
+        String flagName = call.argument("flagName");
+        Map<String, Object> fallbackMap = call.<HashMap<String, Object>>argument("fallback");
+        com.mixpanel.android.mpmetrics.MixpanelFlagVariant fallback = mapToFlagVariant(fallbackMap);
+        if (mixpanel == null) {
+            android.util.Log.w("Mixpanel", "getVariantSync called before Mixpanel was initialized, returning fallback");
+            result.success(flagVariantToMap(fallback));
+            return;
+        }
+        if (flagName == null || flagName.isEmpty()) {
+            android.util.Log.w("Mixpanel", "getVariantSync called with empty flagName, returning fallback");
+            result.success(flagVariantToMap(fallback));
+            return;
+        }
+        com.mixpanel.android.mpmetrics.MixpanelFlagVariant variant = mixpanel.getFlags().getVariantSync(flagName, fallback);
+        result.success(flagVariantToMap(variant));
+    }
+
+    private void handleGetVariantValue(MethodCall call, Result result) {
+        String flagName = call.argument("flagName");
+        Object fallbackValue = call.argument("fallbackValue");
+        if (mixpanel == null) {
+            android.util.Log.w("Mixpanel", "getVariantValue called before Mixpanel was initialized, returning fallback");
+            result.success(fallbackValue);
+            return;
+        }
+        if (flagName == null || flagName.isEmpty()) {
+            android.util.Log.w("Mixpanel", "getVariantValue called with empty flagName, returning fallback");
+            result.success(fallbackValue);
+            return;
+        }
+        mixpanel.getFlags().getVariant(flagName, new com.mixpanel.android.mpmetrics.MixpanelFlagVariant(flagName, fallbackValue), variant -> {
+            result.success(variant.value);
+        });
+    }
+
+    private void handleGetVariantValueSync(MethodCall call, Result result) {
+        String flagName = call.argument("flagName");
+        Object fallbackValue = call.argument("fallbackValue");
+        if (mixpanel == null) {
+            android.util.Log.w("Mixpanel", "getVariantValueSync called before Mixpanel was initialized, returning fallback");
+            result.success(fallbackValue);
+            return;
+        }
+        if (flagName == null || flagName.isEmpty()) {
+            android.util.Log.w("Mixpanel", "getVariantValueSync called with empty flagName, returning fallback");
+            result.success(fallbackValue);
+            return;
+        }
+        com.mixpanel.android.mpmetrics.MixpanelFlagVariant variant = mixpanel.getFlags().getVariantSync(
+            flagName,
+            new com.mixpanel.android.mpmetrics.MixpanelFlagVariant(flagName, fallbackValue)
+        );
+        result.success(variant.value);
+    }
+
+    private void handleIsEnabled(MethodCall call, Result result) {
+        String flagName = call.argument("flagName");
+        Boolean fallbackValue = call.argument("fallbackValue");
+        boolean safeFallback = fallbackValue != null ? fallbackValue : false;
+        if (mixpanel == null) {
+            android.util.Log.w("Mixpanel", "isEnabled called before Mixpanel was initialized, returning fallback");
+            result.success(safeFallback);
+            return;
+        }
+        if (flagName == null || flagName.isEmpty()) {
+            android.util.Log.w("Mixpanel", "isEnabled called with empty flagName, returning fallback");
+            result.success(safeFallback);
+            return;
+        }
+        mixpanel.getFlags().getVariant(flagName, new com.mixpanel.android.mpmetrics.MixpanelFlagVariant(flagName, safeFallback), variant -> {
+            Object value = variant.value;
+            if (value instanceof Boolean) {
+                result.success(value);
+            } else {
+                if (value != null) {
+                    android.util.Log.w("Mixpanel", "isEnabled flag '" + flagName + "' has non-boolean value of type " + value.getClass().getSimpleName() + ", returning fallback");
+                }
+                result.success(safeFallback);
+            }
+        });
+    }
+
+    private void handleIsEnabledSync(MethodCall call, Result result) {
+        String flagName = call.argument("flagName");
+        Boolean fallbackValue = call.argument("fallbackValue");
+        boolean safeFallback = fallbackValue != null ? fallbackValue : false;
+        if (mixpanel == null) {
+            android.util.Log.w("Mixpanel", "isEnabledSync called before Mixpanel was initialized, returning fallback");
+            result.success(safeFallback);
+            return;
+        }
+        if (flagName == null || flagName.isEmpty()) {
+            android.util.Log.w("Mixpanel", "isEnabledSync called with empty flagName, returning fallback");
+            result.success(safeFallback);
+            return;
+        }
+        com.mixpanel.android.mpmetrics.MixpanelFlagVariant variant = mixpanel.getFlags().getVariantSync(
+            flagName,
+            new com.mixpanel.android.mpmetrics.MixpanelFlagVariant(flagName, safeFallback)
+        );
+        Object value = variant.value;
+        if (value instanceof Boolean) {
+            result.success(value);
+        } else {
+            if (value != null) {
+                android.util.Log.w("Mixpanel", "isEnabledSync flag '" + flagName + "' has non-boolean value of type " + value.getClass().getSimpleName() + ", returning fallback");
+            }
+            result.success(safeFallback);
+        }
+    }
+
+    private void handleUpdateFlagsContext(MethodCall call, Result result) {
+        if (mixpanel == null) {
+            android.util.Log.w("Mixpanel", "updateFlagsContext called before Mixpanel was initialized");
+            result.success(null);
+            return;
+        }
+        // Note: The Android SDK does not support updating context after initialization.
+        // Context must be set via MixpanelOptions during getInstance().
+        // Calling loadFlags() to refresh flags with the current user identity.
+        Map<String, Object> contextMap = call.<HashMap<String, Object>>argument("context");
+        if (contextMap != null && !contextMap.isEmpty()) {
+            android.util.Log.i("Mixpanel", "updateFlagsContext: Received context with keys " + contextMap.keySet() + ", but Android SDK does not support updating context after initialization. Context will be ignored. Call identify() and loadFlags() to refresh flags.");
+        } else {
+            android.util.Log.i("Mixpanel", "updateFlagsContext: Android SDK does not support updating context after initialization. Call identify() and loadFlags() to refresh flags.");
+        }
+        mixpanel.getFlags().loadFlags();
+        result.success(null);
+    }
+
+    private com.mixpanel.android.mpmetrics.MixpanelFlagVariant mapToFlagVariant(Map<String, Object> map) {
+        if (map == null) {
+            return new com.mixpanel.android.mpmetrics.MixpanelFlagVariant("", null);
+        }
+        String key = (String) map.get("key");
+        Object value = map.get("value");
+        return new com.mixpanel.android.mpmetrics.MixpanelFlagVariant(key != null ? key : "", value);
+    }
+
+    private Map<String, Object> flagVariantToMap(com.mixpanel.android.mpmetrics.MixpanelFlagVariant variant) {
+        Map<String, Object> map = new HashMap<>();
+        map.put("key", variant.key);
+        map.put("value", variant.value);
+        map.put("experimentId", variant.experimentID);
+        map.put("isExperimentActive", variant.isExperimentActive);
+        map.put("isQaTester", variant.isQATester);
+        return map;
     }
 
     @Override
