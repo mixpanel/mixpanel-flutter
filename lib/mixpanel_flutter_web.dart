@@ -66,7 +66,7 @@ JSAny? safeJsify(dynamic value) {
 
 /// A web implementation of the MixpanelFlutter plugin.
 class MixpanelFlutterPlugin {
-  static Map<String, String> _mixpanelProperties = {
+  static final Map<String, String> _mixpanelProperties = {
     '\$lib_version': '1.3.1',
     'mp_lib': 'flutter',
   };

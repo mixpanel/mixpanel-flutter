@@ -123,11 +123,12 @@ class FeatureFlagsConfig {
 
 /// The primary class for integrating Mixpanel with your app.
 class Mixpanel {
+  // ignore: prefer_const_declarations
   static final MethodChannel _channel = kIsWeb
       ? const MethodChannel('mixpanel_flutter')
       : const MethodChannel(
           'mixpanel_flutter', StandardMethodCodec(MixpanelMessageCodec()));
-  static Map<String, String> _mixpanelProperties = {
+  static final Map<String, String> _mixpanelProperties = {
     '\$lib_version': '2.4.4',
     'mp_lib': 'flutter',
   };
@@ -138,8 +139,8 @@ class Mixpanel {
 
   Mixpanel(String token)
       : _token = token,
-        _people = new People(token),
-        _featureFlags = new FeatureFlags(token);
+        _people = People(token),
+        _featureFlags = FeatureFlags(token);
 
   ///
   ///  Initializes an instance of the API with the given project token.
@@ -332,12 +333,12 @@ class Mixpanel {
   ///
   /// return an instance of People that you can use to update records in Mixpanel People Analytics
   People getPeople() {
-    return this._people;
+    return _people;
   }
 
   /// Returns a FeatureFlags object that can be used to access feature flag values and metadata.
   FeatureFlags getFeatureFlags() {
-    return this._featureFlags;
+    return _featureFlags;
   }
 
   ///  Track an event with specific groups.
@@ -389,7 +390,7 @@ class Mixpanel {
   /// return an instance of MixpanelGroup that you can use to update
   ///     records in Mixpanel Group Analytics
   MixpanelGroup getGroup(String groupKey, dynamic groupID) {
-    return new MixpanelGroup(this._token, groupKey, _MixpanelHelper.ensureSerializableValue(groupID));
+    return MixpanelGroup(_token, groupKey, _MixpanelHelper.ensureSerializableValue(groupID));
   }
 
   /// Add a group to this user's membership for a particular group key
@@ -579,6 +580,7 @@ class Mixpanel {
 /// persist across stops and starts of your application, until you make another
 /// call to identify using a different id.
 class People {
+  // ignore: prefer_const_declarations
   static final MethodChannel _channel = kIsWeb
       ? const MethodChannel('mixpanel_flutter')
       : const MethodChannel(
@@ -599,7 +601,7 @@ class People {
     if (_MixpanelHelper.isValidString(prop)) {
       Map<String, dynamic> properties = {prop: to};
       _channel.invokeMethod<void>('set',
-          <String, dynamic>{'token': this._token, 'properties': _MixpanelHelper.ensureSerializableProperties(properties)});
+          <String, dynamic>{'token': _token, 'properties': _MixpanelHelper.ensureSerializableProperties(properties)});
     } else {
       developer.log('`people set` failed: prop cannot be blank',
           name: 'Mixpanel');
@@ -614,7 +616,7 @@ class People {
     if (_MixpanelHelper.isValidString(prop)) {
       Map<String, dynamic> properties = {prop: to};
       _channel.invokeMethod<void>('setOnce',
-          <String, dynamic>{'token': this._token, 'properties': _MixpanelHelper.ensureSerializableProperties(properties)});
+          <String, dynamic>{'token': _token, 'properties': _MixpanelHelper.ensureSerializableProperties(properties)});
     } else {
       developer.log('`people setOnce` failed: prop cannot be blank',
           name: 'Mixpanel');
@@ -631,7 +633,7 @@ class People {
     Map<String, dynamic> properties = {prop: by};
     if (_MixpanelHelper.isValidString(prop)) {
       _channel.invokeMethod<void>('increment',
-          <String, dynamic>{'token': this._token, 'properties': _MixpanelHelper.ensureSerializableProperties(properties)});
+          <String, dynamic>{'token': _token, 'properties': _MixpanelHelper.ensureSerializableProperties(properties)});
     } else {
       developer.log('`people increment` failed: prop cannot be blank',
           name: 'Mixpanel');
@@ -648,10 +650,10 @@ class People {
       if (kIsWeb || Platform.isIOS) {
         Map<String, dynamic> properties = {name: value};
         _channel.invokeMethod<void>('append',
-            <String, dynamic>{'token': this._token, 'properties': _MixpanelHelper.ensureSerializableProperties(properties)});
+            <String, dynamic>{'token': _token, 'properties': _MixpanelHelper.ensureSerializableProperties(properties)});
       } else {
         _channel.invokeMethod<void>('append', <String, dynamic>{
-          'token': this._token,
+          'token': _token,
           'name': name,
           'value': _MixpanelHelper.ensureSerializableValue(value)
         });
@@ -673,10 +675,10 @@ class People {
       if (kIsWeb || Platform.isIOS) {
         Map<String, dynamic> properties = {name: value};
         _channel.invokeMethod<void>('union',
-            <String, dynamic>{'token': this._token, 'properties': _MixpanelHelper.ensureSerializableProperties(properties)});
+            <String, dynamic>{'token': _token, 'properties': _MixpanelHelper.ensureSerializableProperties(properties)});
       } else {
         _channel.invokeMethod<void>('union', <String, dynamic>{
-          'token': this._token,
+          'token': _token,
           'name': name,
           'value': _MixpanelHelper.ensureSerializableValue(value)
         });
@@ -698,10 +700,10 @@ class People {
       if (kIsWeb || Platform.isIOS) {
         Map<String, dynamic> properties = {name: value};
         _channel.invokeMethod<void>('remove',
-            <String, dynamic>{'token': this._token, 'properties': _MixpanelHelper.ensureSerializableProperties(properties)});
+            <String, dynamic>{'token': _token, 'properties': _MixpanelHelper.ensureSerializableProperties(properties)});
       } else {
         _channel.invokeMethod<void>('remove', <String, dynamic>{
-          'token': this._token,
+          'token': _token,
           'name': name,
           'value': _MixpanelHelper.ensureSerializableValue(value)
         });
@@ -718,7 +720,7 @@ class People {
   void unset(String name) {
     if (_MixpanelHelper.isValidString(name)) {
       _channel.invokeMethod<void>(
-          'unset', <String, dynamic>{'token': this._token, 'name': name});
+          'unset', <String, dynamic>{'token': _token, 'name': name});
     } else {
       developer.log('`people unset` failed: name cannot be blank',
           name: 'Mixpanel');
@@ -733,7 +735,7 @@ class People {
     // ignore: unnecessary_null_comparison
     if (amount != null) {
       _channel.invokeMethod<void>('trackCharge', <String, dynamic>{
-        'token': this._token,
+        'token': _token,
         'amount': amount,
         'properties': _MixpanelHelper.ensureSerializableProperties(properties)
       });
@@ -746,7 +748,7 @@ class People {
   /// Permanently clear the whole transaction history for the identified people profile.
   void clearCharges() {
     _channel.invokeMethod<void>(
-        'clearCharges', <String, dynamic>{'token': this._token});
+        'clearCharges', <String, dynamic>{'token': _token});
   }
 
   /// Permanently deletes the identified user's record from People Analytics.
@@ -755,7 +757,7 @@ class People {
   /// to People Analytics using the same distinct id will create and store new values.
   void deleteUser() {
     _channel.invokeMethod<void>(
-        'deleteUser', <String, dynamic>{'token': this._token});
+        'deleteUser', <String, dynamic>{'token': _token});
   }
 }
 
@@ -763,6 +765,7 @@ class People {
 ///
 /// The MixpanelGroup object is used to update properties in a group's Group Analytics record.
 class MixpanelGroup {
+  // ignore: prefer_const_declarations
   static final MethodChannel _channel = kIsWeb
       ? const MethodChannel('mixpanel_flutter')
       : const MethodChannel(
@@ -788,9 +791,9 @@ class MixpanelGroup {
       Map<String, dynamic> properties = {prop: to};
 
       _channel.invokeMethod<void>('groupSetProperties', <String, dynamic>{
-        'token': this._token,
-        'groupKey': this._groupKey,
-        'groupID': this._groupID,
+        'token': _token,
+        'groupKey': _groupKey,
+        'groupID': _groupID,
         'properties': _MixpanelHelper.ensureSerializableProperties(properties)
       });
     } else {
@@ -808,9 +811,9 @@ class MixpanelGroup {
       Map<String, dynamic> properties = {prop: to};
 
       _channel.invokeMethod<void>('groupSetPropertyOnce', <String, dynamic>{
-        'token': this._token,
-        'groupKey': this._groupKey,
-        'groupID': this._groupID,
+        'token': _token,
+        'groupKey': _groupKey,
+        'groupID': _groupID,
         'properties': _MixpanelHelper.ensureSerializableProperties(properties)
       });
     } else {
@@ -825,9 +828,9 @@ class MixpanelGroup {
   void unset(String prop) {
     if (_MixpanelHelper.isValidString(prop)) {
       _channel.invokeMethod<void>('groupUnsetProperty', <String, dynamic>{
-        'token': this._token,
-        'groupKey': this._groupKey,
-        'groupID': this._groupID,
+        'token': _token,
+        'groupKey': _groupKey,
+        'groupID': _groupID,
         'propertyName': prop
       });
     } else {
@@ -845,9 +848,9 @@ class MixpanelGroup {
   void remove(String name, dynamic value) {
     if (_MixpanelHelper.isValidString(name)) {
       _channel.invokeMethod<void>('groupRemovePropertyValue', <String, dynamic>{
-        'token': this._token,
-        'groupKey': this._groupKey,
-        'groupID': this._groupID,
+        'token': _token,
+        'groupKey': _groupKey,
+        'groupID': _groupID,
         'name': name,
         'value': _MixpanelHelper.ensureSerializableValue(value)
       });
@@ -876,9 +879,9 @@ class MixpanelGroup {
       return;
     }
     _channel.invokeMethod<void>('groupUnionProperty', <String, dynamic>{
-      'token': this._token,
-      'groupKey': this._groupKey,
-      'groupID': this._groupID,
+      'token': _token,
+      'groupKey': _groupKey,
+      'groupID': _groupID,
       'name': name,
       'value': _MixpanelHelper.ensureSerializableValue(value)
     });
@@ -890,14 +893,13 @@ class MixpanelGroup {
 /// The FeatureFlags object is used to access feature flag values and metadata.
 /// Feature flags allow you to control feature rollout and run experiments.
 class FeatureFlags {
+  // ignore: prefer_const_declarations
   static final MethodChannel _channel = kIsWeb
       ? const MethodChannel('mixpanel_flutter')
       : const MethodChannel(
           'mixpanel_flutter', StandardMethodCodec(MixpanelMessageCodec()));
 
-  final String _token;
-
-  FeatureFlags(String token) : _token = token;
+  FeatureFlags(String token);
 
   /// Check if feature flags have been loaded and are ready to use.
   ///

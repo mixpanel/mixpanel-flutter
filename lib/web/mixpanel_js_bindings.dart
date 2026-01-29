@@ -1,5 +1,7 @@
 import 'dart:js_interop';
 
+// ignore_for_file: non_constant_identifier_names
+
 @JS('mixpanel')
 @staticInterop
 class Mixpanel {}
