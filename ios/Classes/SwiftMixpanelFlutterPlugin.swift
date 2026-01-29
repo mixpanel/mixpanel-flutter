@@ -176,7 +176,10 @@ public class SwiftMixpanelFlutterPlugin: NSObject, FlutterPlugin {
     
     private func handleInitialize(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
         let arguments = call.arguments as? [String: Any] ?? [String: Any]()
-        let token = arguments["token"] as? String
+        guard let token = arguments["token"] as? String, !token.isEmpty else {
+            result(FlutterError(code: "INVALID_TOKEN", message: "Token is required and cannot be empty", details: nil))
+            return
+        }
         let optOutTrackingDefault = arguments["optOutTrackingDefault"] as? Bool
         mixpanelProperties = arguments["mixpanelProperties"] as? [String: String]
         let superProperties = arguments["superProperties"] as? [String: Any]
@@ -194,9 +197,9 @@ public class SwiftMixpanelFlutterPlugin: NSObject, FlutterPlugin {
         }
 
         let options = MixpanelOptions(
-            token: token!,
+            token: token,
             flushInterval: defaultFlushInterval,
-            instanceName: token!,
+            instanceName: token,
             trackAutomaticEvents: trackAutomaticEvents,
             optOutTrackingByDefault: optOutTrackingDefault ?? false,
             superProperties: MixpanelTypeHandler.mixpanelProperties(properties: superProperties, mixpanelProperties: mixpanelProperties),
@@ -717,13 +720,13 @@ public class SwiftMixpanelFlutterPlugin: NSObject, FlutterPlugin {
         return MixpanelFlagVariant(key: key, value: value)
     }
 
-    private func flagVariantToMap(_ variant: MixpanelFlagVariant) -> [String: Any?] {
+    private func flagVariantToMap(_ variant: MixpanelFlagVariant) -> [String: Any] {
         return [
             "key": variant.key,
-            "value": variant.value,
-            "experimentId": variant.experimentID,
-            "isExperimentActive": variant.isExperimentActive,
-            "isQaTester": variant.isQATester
+            "value": variant.value ?? NSNull(),
+            "experimentId": variant.experimentID ?? NSNull(),
+            "isExperimentActive": variant.isExperimentActive ?? NSNull(),
+            "isQaTester": variant.isQATester ?? NSNull()
         ]
     }
 

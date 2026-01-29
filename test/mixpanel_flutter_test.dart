@@ -886,7 +886,7 @@ void main() {
         methodCall,
         isMethodCall(
           'areFlagsReady',
-          arguments: null,
+          arguments: <String, dynamic>{'token': 'test token'},
         ),
       );
     });
@@ -905,6 +905,7 @@ void main() {
         isMethodCall(
           'getVariant',
           arguments: <String, dynamic>{
+            'token': 'test token',
             'flagName': 'test_flag',
             'fallback': {
               'key': 'test_flag',
@@ -928,6 +929,7 @@ void main() {
         isMethodCall(
           'getVariantSync',
           arguments: <String, dynamic>{
+            'token': 'test token',
             'flagName': 'test_flag',
             'fallback': {
               'key': 'test_flag',
@@ -950,6 +952,7 @@ void main() {
         isMethodCall(
           'getVariantValue',
           arguments: <String, dynamic>{
+            'token': 'test token',
             'flagName': 'test_flag',
             'fallbackValue': 'fallback',
           },
@@ -966,6 +969,7 @@ void main() {
         isMethodCall(
           'getVariantValueSync',
           arguments: <String, dynamic>{
+            'token': 'test token',
             'flagName': 'test_flag',
             'fallbackValue': 'fallback',
           },
@@ -982,6 +986,7 @@ void main() {
         isMethodCall(
           'isEnabled',
           arguments: <String, dynamic>{
+            'token': 'test token',
             'flagName': 'test_flag',
             'fallbackValue': false,
           },
@@ -998,6 +1003,7 @@ void main() {
         isMethodCall(
           'isEnabledSync',
           arguments: <String, dynamic>{
+            'token': 'test token',
             'flagName': 'test_flag',
             'fallbackValue': false,
           },
@@ -1013,6 +1019,7 @@ void main() {
         isMethodCall(
           'updateFlagsContext',
           arguments: <String, dynamic>{
+            'token': 'test token',
             'context': {'user_tier': 'premium'},
             'options': null,
           },
@@ -1031,6 +1038,7 @@ void main() {
         isMethodCall(
           'updateFlagsContext',
           arguments: <String, dynamic>{
+            'token': 'test token',
             'context': {'user_tier': 'premium'},
             'options': {'refetch': true},
           },
@@ -1105,6 +1113,69 @@ void main() {
             'config': null,
             'featureFlags': {
               'enabled': true,
+              'context': {'user_tier': 'premium'},
+            },
+          },
+        ),
+      );
+    });
+
+    test('check initialize with featureFlags enabled but no context', () async {
+      _mixpanel = await Mixpanel.init(
+        "test token",
+        optOutTrackingDefault: false,
+        trackAutomaticEvents: true,
+        featureFlags: FeatureFlagsConfig(enabled: true),
+      );
+      expect(
+        methodCall,
+        isMethodCall(
+          'initialize',
+          arguments: <String, dynamic>{
+            'token': "test token",
+            'optOutTrackingDefault': false,
+            'trackAutomaticEvents': true,
+            'mixpanelProperties': {
+              '\$lib_version': '2.4.4',
+              'mp_lib': 'flutter',
+            },
+            'superProperties': null,
+            'config': null,
+            'featureFlags': {
+              'enabled': true,
+              'context': <String, dynamic>{},
+            },
+          },
+        ),
+      );
+    });
+
+    test('check initialize with featureFlags disabled', () async {
+      _mixpanel = await Mixpanel.init(
+        "test token",
+        optOutTrackingDefault: false,
+        trackAutomaticEvents: true,
+        featureFlags: FeatureFlagsConfig(
+          enabled: false,
+          context: {'user_tier': 'premium'},
+        ),
+      );
+      expect(
+        methodCall,
+        isMethodCall(
+          'initialize',
+          arguments: <String, dynamic>{
+            'token': "test token",
+            'optOutTrackingDefault': false,
+            'trackAutomaticEvents': true,
+            'mixpanelProperties': {
+              '\$lib_version': '2.4.4',
+              'mp_lib': 'flutter',
+            },
+            'superProperties': null,
+            'config': null,
+            'featureFlags': {
+              'enabled': false,
               'context': {'user_tier': 'premium'},
             },
           },

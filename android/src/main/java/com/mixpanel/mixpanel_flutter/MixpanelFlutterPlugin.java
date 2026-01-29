@@ -249,13 +249,14 @@ public class MixpanelFlutterPlugin implements FlutterPlugin, MethodCallHandler {
             if (enabledValue instanceof Boolean) {
                 featureFlagsEnabled = (Boolean) enabledValue;
             }
-
             Object contextValue = featureFlagsMap.get("context");
             if (contextValue instanceof Map) {
-                @SuppressWarnings("unchecked")
-                Map<String, Object> contextMap = (Map<String, Object>) contextValue;
-                if (contextMap != null) {
+                try {
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> contextMap = (Map<String, Object>) contextValue;
                     featureFlagsContext = new JSONObject(contextMap);
+                } catch (Exception e) {
+                    android.util.Log.w("Mixpanel", "Failed to parse feature flags context: " + e.getMessage());
                 }
             }
         }
@@ -734,7 +735,12 @@ public class MixpanelFlutterPlugin implements FlutterPlugin, MethodCallHandler {
         // Note: The Android SDK does not support updating context after initialization.
         // Context must be set via MixpanelOptions during getInstance().
         // Calling loadFlags() to refresh flags with the current user identity.
-        android.util.Log.i("Mixpanel", "updateFlagsContext: Android SDK does not support updating context after initialization. Call identify() and loadFlags() to refresh flags.");
+        Map<String, Object> contextMap = call.<HashMap<String, Object>>argument("context");
+        if (contextMap != null && !contextMap.isEmpty()) {
+            android.util.Log.i("Mixpanel", "updateFlagsContext: Received context with keys " + contextMap.keySet() + ", but Android SDK does not support updating context after initialization. Context will be ignored. Call identify() and loadFlags() to refresh flags.");
+        } else {
+            android.util.Log.i("Mixpanel", "updateFlagsContext: Android SDK does not support updating context after initialization. Call identify() and loadFlags() to refresh flags.");
+        }
         mixpanel.getFlags().loadFlags();
         result.success(null);
     }

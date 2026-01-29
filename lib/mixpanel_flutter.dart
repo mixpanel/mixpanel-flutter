@@ -899,13 +899,16 @@ class FeatureFlags {
       : const MethodChannel(
           'mixpanel_flutter', StandardMethodCodec(MixpanelMessageCodec()));
 
-  FeatureFlags(String token);
+  final String _token;
+
+  FeatureFlags(String token) : _token = token;
 
   /// Check if feature flags have been loaded and are ready to use.
   ///
   /// Returns true if flags are loaded and ready, false otherwise.
   Future<bool> areFlagsReady() async {
-    final result = await _channel.invokeMethod<bool>('areFlagsReady');
+    final result = await _channel.invokeMethod<bool>(
+        'areFlagsReady', <String, dynamic>{'token': _token});
     return result ?? false;
   }
 
@@ -923,6 +926,7 @@ class FeatureFlags {
       return fallback;
     }
     final result = await _channel.invokeMethod<Map>('getVariant', <String, dynamic>{
+      'token': _token,
       'flagName': flagName,
       'fallback': fallback.toMap(),
     });
@@ -954,6 +958,7 @@ class FeatureFlags {
       return fallback;
     }
     final result = await _channel.invokeMethod<Map>('getVariantSync', <String, dynamic>{
+      'token': _token,
       'flagName': flagName,
       'fallback': fallback.toMap(),
     });
@@ -976,6 +981,7 @@ class FeatureFlags {
       return fallbackValue;
     }
     final result = await _channel.invokeMethod<dynamic>('getVariantValue', <String, dynamic>{
+      'token': _token,
       'flagName': flagName,
       'fallbackValue': _MixpanelHelper.ensureSerializableValue(fallbackValue),
     });
@@ -1003,6 +1009,7 @@ class FeatureFlags {
       return fallbackValue;
     }
     final result = await _channel.invokeMethod<dynamic>('getVariantValueSync', <String, dynamic>{
+      'token': _token,
       'flagName': flagName,
       'fallbackValue': _MixpanelHelper.ensureSerializableValue(fallbackValue),
     });
@@ -1026,6 +1033,7 @@ class FeatureFlags {
       return fallbackValue;
     }
     final result = await _channel.invokeMethod<bool>('isEnabled', <String, dynamic>{
+      'token': _token,
       'flagName': flagName,
       'fallbackValue': fallbackValue,
     });
@@ -1054,6 +1062,7 @@ class FeatureFlags {
       return fallbackValue;
     }
     final result = await _channel.invokeMethod<bool>('isEnabledSync', <String, dynamic>{
+      'token': _token,
       'flagName': flagName,
       'fallbackValue': fallbackValue,
     });
@@ -1079,6 +1088,7 @@ class FeatureFlags {
   Future<void> updateContext(Map<String, dynamic> context,
       {Map<String, dynamic>? options}) async {
     await _channel.invokeMethod<void>('updateFlagsContext', <String, dynamic>{
+      'token': _token,
       'context': _MixpanelHelper.ensureSerializableProperties(context),
       'options': _MixpanelHelper.ensureSerializableProperties(options),
     });

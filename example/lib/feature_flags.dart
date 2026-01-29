@@ -14,7 +14,7 @@ class _FeatureFlagsScreenState extends State<FeatureFlagsScreen> {
   late final FeatureFlags _flags;
 
   @override
-  initState() {
+  void initState() {
     super.initState();
     _initMixpanel();
   }
