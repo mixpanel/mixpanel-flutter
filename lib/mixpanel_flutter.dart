@@ -1060,13 +1060,22 @@ class FeatureFlags {
     return result ?? fallbackValue;
   }
 
-  /// Update the context used for feature flag evaluation and refetch flags.
+  /// Update the context used for feature flag evaluation.
   ///
-  /// * [context] A Map of context properties to use for flag evaluation
+  /// * [context] A Map of context properties to use for flag evaluation.
   /// * [options] Reserved for future use. Currently not implemented by the
   ///   native SDKs and will be ignored.
   ///
-  /// After calling this, flags will be refetched with the new context.
+  /// Platform behavior:
+  /// - Web: the context is forwarded to the underlying Mixpanel SDK, which may
+  ///   use it for subsequent feature flag evaluation and refetching.
+  /// - Mobile (iOS/Android): the current native implementations treat
+  ///   `updateFlagsContext` as unsupported / a no-op (iOS logs a warning;
+  ///   Android does not apply the passed context). On these platforms, calling
+  ///   this method will not change how flags are evaluated.
+  ///
+  /// Do not rely on this method changing feature flag behavior on platforms
+  /// where the underlying SDK does not yet support updating the flags context.
   Future<void> updateContext(Map<String, dynamic> context,
       {Map<String, dynamic>? options}) async {
     await _channel.invokeMethod<void>('updateFlagsContext', <String, dynamic>{
