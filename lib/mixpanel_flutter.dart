@@ -936,38 +936,6 @@ class FeatureFlags {
     return fallback;
   }
 
-  /// Get the full variant for a feature flag from the local cache.
-  ///
-  /// This method returns immediately with the cached value and does not trigger
-  /// a network request. Use this when you need fast access to flag values that
-  /// have already been fetched. The method returns a Future for API consistency,
-  /// but it resolves synchronously with the cached data.
-  ///
-  /// If flags haven't been loaded yet or the specific flag is not found,
-  /// the fallback will be returned.
-  ///
-  /// * [flagName] The name of the feature flag
-  /// * [fallback] A fallback variant to use if the flag is not found or not ready
-  ///
-  /// Returns the MixpanelFlagVariant for the flag, or the fallback if not available.
-  Future<MixpanelFlagVariant> getVariantSync(
-      String flagName, MixpanelFlagVariant fallback) async {
-    if (!_MixpanelHelper.isValidString(flagName)) {
-      developer.log('`getVariantSync` failed: flagName cannot be blank',
-          name: 'Mixpanel');
-      return fallback;
-    }
-    final result = await _channel.invokeMethod<Map>('getVariantSync', <String, dynamic>{
-      'token': _token,
-      'flagName': flagName,
-      'fallback': fallback.toMap(),
-    });
-    if (result != null) {
-      return MixpanelFlagVariant.fromMap(result);
-    }
-    return fallback;
-  }
-
   /// Get just the value of a feature flag.
   ///
   /// * [flagName] The name of the feature flag
@@ -981,34 +949,6 @@ class FeatureFlags {
       return fallbackValue;
     }
     final result = await _channel.invokeMethod<dynamic>('getVariantValue', <String, dynamic>{
-      'token': _token,
-      'flagName': flagName,
-      'fallbackValue': _MixpanelHelper.ensureSerializableValue(fallbackValue),
-    });
-    return result ?? fallbackValue;
-  }
-
-  /// Get just the value of a feature flag from the local cache.
-  ///
-  /// This method returns immediately with the cached value and does not trigger
-  /// a network request. Use this when you need fast access to flag values that
-  /// have already been fetched. The method returns a Future for API consistency,
-  /// but it resolves synchronously with the cached data.
-  ///
-  /// If flags haven't been loaded yet or the specific flag is not found,
-  /// the fallback value will be returned.
-  ///
-  /// * [flagName] The name of the feature flag
-  /// * [fallbackValue] A fallback value to use if the flag is not found or not ready
-  ///
-  /// Returns the value of the flag, or the fallback value if not available.
-  Future<dynamic> getVariantValueSync(String flagName, dynamic fallbackValue) async {
-    if (!_MixpanelHelper.isValidString(flagName)) {
-      developer.log('`getVariantValueSync` failed: flagName cannot be blank',
-          name: 'Mixpanel');
-      return fallbackValue;
-    }
-    final result = await _channel.invokeMethod<dynamic>('getVariantValueSync', <String, dynamic>{
       'token': _token,
       'flagName': flagName,
       'fallbackValue': _MixpanelHelper.ensureSerializableValue(fallbackValue),
@@ -1033,35 +973,6 @@ class FeatureFlags {
       return fallbackValue;
     }
     final result = await _channel.invokeMethod<bool>('isEnabled', <String, dynamic>{
-      'token': _token,
-      'flagName': flagName,
-      'fallbackValue': fallbackValue,
-    });
-    return result ?? fallbackValue;
-  }
-
-  /// Check if a boolean feature flag is enabled from the local cache.
-  ///
-  /// This method returns immediately with the cached value and does not trigger
-  /// a network request. Use this when you need fast access to flag values that
-  /// have already been fetched. The method returns a Future for API consistency,
-  /// but it resolves synchronously with the cached data.
-  ///
-  /// This method is designed for feature flags that have boolean values.
-  /// If the flag's value is not a boolean type, the fallback value will be returned.
-  ///
-  /// * [flagName] The name of the feature flag
-  /// * [fallbackValue] A fallback value to use if the flag is not found, not ready,
-  ///   or has a non-boolean value
-  ///
-  /// Returns true if the flag is enabled, the fallback value otherwise.
-  Future<bool> isEnabledSync(String flagName, bool fallbackValue) async {
-    if (!_MixpanelHelper.isValidString(flagName)) {
-      developer.log('`isEnabledSync` failed: flagName cannot be blank',
-          name: 'Mixpanel');
-      return fallbackValue;
-    }
-    final result = await _channel.invokeMethod<bool>('isEnabledSync', <String, dynamic>{
       'token': _token,
       'flagName': flagName,
       'fallbackValue': fallbackValue,

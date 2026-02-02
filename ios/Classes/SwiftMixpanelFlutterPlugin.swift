@@ -149,20 +149,11 @@ public class SwiftMixpanelFlutterPlugin: NSObject, FlutterPlugin {
         case "getVariant":
             handleGetVariant(call, result: result)
             break
-        case "getVariantSync":
-            handleGetVariantSync(call, result: result)
-            break
         case "getVariantValue":
             handleGetVariantValue(call, result: result)
             break
-        case "getVariantValueSync":
-            handleGetVariantValueSync(call, result: result)
-            break
         case "isEnabled":
             handleIsEnabled(call, result: result)
-            break
-        case "isEnabledSync":
-            handleIsEnabledSync(call, result: result)
             break
         case "updateFlagsContext":
             handleUpdateFlagsContext(call, result: result)
@@ -603,22 +594,6 @@ public class SwiftMixpanelFlutterPlugin: NSObject, FlutterPlugin {
         }
     }
 
-    private func handleGetVariantSync(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
-        let arguments = call.arguments as? [String: Any] ?? [String: Any]()
-        guard let flagName = arguments["flagName"] as? String, !flagName.isEmpty else {
-            NSLog("[Mixpanel] getVariantSync called with missing or empty flagName, returning nil")
-            result(nil)
-            return
-        }
-        let fallbackMap = arguments["fallback"] as? [String: Any]
-        let fallback = mapToFlagVariant(fallbackMap)
-        if instance == nil {
-            NSLog("[Mixpanel] getVariantSync called before Mixpanel was initialized, returning fallback")
-        }
-        let variant = instance?.flags.getVariantSync(flagName, fallback: fallback) ?? fallback
-        result(flagVariantToMap(variant))
-    }
-
     private func handleGetVariantValue(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
         let arguments = call.arguments as? [String: Any] ?? [String: Any]()
         guard let flagName = arguments["flagName"] as? String, !flagName.isEmpty else {
@@ -636,22 +611,6 @@ public class SwiftMixpanelFlutterPlugin: NSObject, FlutterPlugin {
         inst.flags.getVariant(flagName, fallback: fallback) { variant in
             result(variant.value)
         }
-    }
-
-    private func handleGetVariantValueSync(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
-        let arguments = call.arguments as? [String: Any] ?? [String: Any]()
-        guard let flagName = arguments["flagName"] as? String, !flagName.isEmpty else {
-            NSLog("[Mixpanel] getVariantValueSync called with missing or empty flagName, returning nil")
-            result(nil)
-            return
-        }
-        let fallbackValue = arguments["fallbackValue"]
-        let fallback = MixpanelFlagVariant(key: flagName, value: fallbackValue)
-        if instance == nil {
-            NSLog("[Mixpanel] getVariantValueSync called before Mixpanel was initialized, returning fallback")
-        }
-        let variant = instance?.flags.getVariantSync(flagName, fallback: fallback) ?? fallback
-        result(variant.value)
     }
 
     private func handleIsEnabled(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
@@ -677,29 +636,6 @@ public class SwiftMixpanelFlutterPlugin: NSObject, FlutterPlugin {
                 }
                 result(fallbackValue)
             }
-        }
-    }
-
-    private func handleIsEnabledSync(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
-        let arguments = call.arguments as? [String: Any] ?? [String: Any]()
-        guard let flagName = arguments["flagName"] as? String, !flagName.isEmpty else {
-            NSLog("[Mixpanel] isEnabledSync called with missing or empty flagName, returning false")
-            result(false)
-            return
-        }
-        let fallbackValue = arguments["fallbackValue"] as? Bool ?? false
-        let fallback = MixpanelFlagVariant(key: flagName, value: fallbackValue)
-        if instance == nil {
-            NSLog("[Mixpanel] isEnabledSync called before Mixpanel was initialized, returning fallback")
-        }
-        let variant = instance?.flags.getVariantSync(flagName, fallback: fallback) ?? fallback
-        if let boolValue = variant.value as? Bool {
-            result(boolValue)
-        } else {
-            if variant.value != nil {
-                NSLog("[Mixpanel] isEnabledSync flag '\(flagName)' has non-boolean value, returning fallback")
-            }
-            result(fallbackValue)
         }
     }
 

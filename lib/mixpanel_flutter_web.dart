@@ -192,16 +192,10 @@ class MixpanelFlutterPlugin {
         return handleAreFlagsReady();
       case "getVariant":
         return handleGetVariant(call);
-      case "getVariantSync":
-        return handleGetVariantSync(call);
       case "getVariantValue":
         return handleGetVariantValue(call);
-      case "getVariantValueSync":
-        return handleGetVariantValueSync(call);
       case "isEnabled":
         return handleIsEnabled(call);
-      case "isEnabledSync":
-        return handleIsEnabledSync(call);
       case "updateFlagsContext":
         handleUpdateFlagsContext(call);
         break;
@@ -492,25 +486,6 @@ class MixpanelFlutterPlugin {
     }
   }
 
-  Map<String, dynamic> handleGetVariantSync(MethodCall call) {
-    Map<Object?, Object?> args = call.arguments as Map<Object?, Object?>;
-    String flagName = args['flagName'] as String;
-    Map<Object?, Object?> fallbackMap = args['fallback'] as Map<Object?, Object?>? ?? {};
-
-    JSAny? fallbackJs = safeJsify({
-      'key': fallbackMap['key'],
-      'value': fallbackMap['value'],
-    });
-
-    try {
-      JSAny? jsResult = flags_get_variant_sync(flagName, fallbackJs);
-      return _jsVariantToMap(jsResult, fallbackMap);
-    } catch (e) {
-      debugPrint('[Mixpanel] getVariantSync failed with error: $e, returning fallback');
-      return _jsVariantToMap(null, fallbackMap);
-    }
-  }
-
   Future<dynamic> handleGetVariantValue(MethodCall call) async {
     Map<Object?, Object?> args = call.arguments as Map<Object?, Object?>;
     String flagName = args['flagName'] as String;
@@ -528,26 +503,6 @@ class MixpanelFlutterPlugin {
       return variant['value'] ?? fallbackValue;
     } catch (e) {
       debugPrint('[Mixpanel] getVariantValue failed with error: $e, returning fallback');
-      return fallbackValue;
-    }
-  }
-
-  dynamic handleGetVariantValueSync(MethodCall call) {
-    Map<Object?, Object?> args = call.arguments as Map<Object?, Object?>;
-    String flagName = args['flagName'] as String;
-    dynamic fallbackValue = args['fallbackValue'];
-
-    JSAny? fallbackJs = safeJsify({
-      'key': flagName,
-      'value': fallbackValue,
-    });
-
-    try {
-      JSAny? jsResult = flags_get_variant_sync(flagName, fallbackJs);
-      Map<String, dynamic> variant = _jsVariantToMap(jsResult, {'key': flagName, 'value': fallbackValue});
-      return variant['value'] ?? fallbackValue;
-    } catch (e) {
-      debugPrint('[Mixpanel] getVariantValueSync failed with error: $e, returning fallback');
       return fallbackValue;
     }
   }
@@ -576,33 +531,6 @@ class MixpanelFlutterPlugin {
       return fallbackValue;
     } catch (e) {
       debugPrint('[Mixpanel] isEnabled failed with error: $e, returning fallback');
-      return fallbackValue;
-    }
-  }
-
-  bool handleIsEnabledSync(MethodCall call) {
-    Map<Object?, Object?> args = call.arguments as Map<Object?, Object?>;
-    String flagName = args['flagName'] as String;
-    bool fallbackValue = args['fallbackValue'] as bool? ?? false;
-
-    JSAny? fallbackJs = safeJsify({
-      'key': flagName,
-      'value': fallbackValue,
-    });
-
-    try {
-      JSAny? jsResult = flags_get_variant_sync(flagName, fallbackJs);
-      Map<String, dynamic> variant = _jsVariantToMap(jsResult, {'key': flagName, 'value': fallbackValue});
-      dynamic value = variant['value'];
-      if (value is bool) {
-        return value;
-      }
-      if (value != null) {
-        debugPrint('[Mixpanel] isEnabledSync flag \'$flagName\' has non-boolean value, returning fallback');
-      }
-      return fallbackValue;
-    } catch (e) {
-      debugPrint('[Mixpanel] isEnabledSync failed with error: $e, returning fallback');
       return fallbackValue;
     }
   }

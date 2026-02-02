@@ -183,20 +183,11 @@ public class MixpanelFlutterPlugin implements FlutterPlugin, MethodCallHandler {
             case "getVariant":
                 handleGetVariant(call, result);
                 break;
-            case "getVariantSync":
-                handleGetVariantSync(call, result);
-                break;
             case "getVariantValue":
                 handleGetVariantValue(call, result);
                 break;
-            case "getVariantValueSync":
-                handleGetVariantValueSync(call, result);
-                break;
             case "isEnabled":
                 handleIsEnabled(call, result);
-                break;
-            case "isEnabledSync":
-                handleIsEnabledSync(call, result);
                 break;
             case "updateFlagsContext":
                 handleUpdateFlagsContext(call, result);
@@ -614,24 +605,6 @@ public class MixpanelFlutterPlugin implements FlutterPlugin, MethodCallHandler {
         });
     }
 
-    private void handleGetVariantSync(MethodCall call, Result result) {
-        String flagName = call.argument("flagName");
-        Map<String, Object> fallbackMap = call.<HashMap<String, Object>>argument("fallback");
-        com.mixpanel.android.mpmetrics.MixpanelFlagVariant fallback = mapToFlagVariant(fallbackMap);
-        if (mixpanel == null) {
-            android.util.Log.w("Mixpanel", "getVariantSync called before Mixpanel was initialized, returning fallback");
-            result.success(flagVariantToMap(fallback));
-            return;
-        }
-        if (flagName == null || flagName.isEmpty()) {
-            android.util.Log.w("Mixpanel", "getVariantSync called with empty flagName, returning fallback");
-            result.success(flagVariantToMap(fallback));
-            return;
-        }
-        com.mixpanel.android.mpmetrics.MixpanelFlagVariant variant = mixpanel.getFlags().getVariantSync(flagName, fallback);
-        result.success(flagVariantToMap(variant));
-    }
-
     private void handleGetVariantValue(MethodCall call, Result result) {
         String flagName = call.argument("flagName");
         Object fallbackValue = call.argument("fallbackValue");
@@ -648,26 +621,6 @@ public class MixpanelFlutterPlugin implements FlutterPlugin, MethodCallHandler {
         mixpanel.getFlags().getVariant(flagName, new com.mixpanel.android.mpmetrics.MixpanelFlagVariant(flagName, fallbackValue), variant -> {
             result.success(variant.value);
         });
-    }
-
-    private void handleGetVariantValueSync(MethodCall call, Result result) {
-        String flagName = call.argument("flagName");
-        Object fallbackValue = call.argument("fallbackValue");
-        if (mixpanel == null) {
-            android.util.Log.w("Mixpanel", "getVariantValueSync called before Mixpanel was initialized, returning fallback");
-            result.success(fallbackValue);
-            return;
-        }
-        if (flagName == null || flagName.isEmpty()) {
-            android.util.Log.w("Mixpanel", "getVariantValueSync called with empty flagName, returning fallback");
-            result.success(fallbackValue);
-            return;
-        }
-        com.mixpanel.android.mpmetrics.MixpanelFlagVariant variant = mixpanel.getFlags().getVariantSync(
-            flagName,
-            new com.mixpanel.android.mpmetrics.MixpanelFlagVariant(flagName, fallbackValue)
-        );
-        result.success(variant.value);
     }
 
     private void handleIsEnabled(MethodCall call, Result result) {
@@ -695,35 +648,6 @@ public class MixpanelFlutterPlugin implements FlutterPlugin, MethodCallHandler {
                 result.success(safeFallback);
             }
         });
-    }
-
-    private void handleIsEnabledSync(MethodCall call, Result result) {
-        String flagName = call.argument("flagName");
-        Boolean fallbackValue = call.argument("fallbackValue");
-        boolean safeFallback = fallbackValue != null ? fallbackValue : false;
-        if (mixpanel == null) {
-            android.util.Log.w("Mixpanel", "isEnabledSync called before Mixpanel was initialized, returning fallback");
-            result.success(safeFallback);
-            return;
-        }
-        if (flagName == null || flagName.isEmpty()) {
-            android.util.Log.w("Mixpanel", "isEnabledSync called with empty flagName, returning fallback");
-            result.success(safeFallback);
-            return;
-        }
-        com.mixpanel.android.mpmetrics.MixpanelFlagVariant variant = mixpanel.getFlags().getVariantSync(
-            flagName,
-            new com.mixpanel.android.mpmetrics.MixpanelFlagVariant(flagName, safeFallback)
-        );
-        Object value = variant.value;
-        if (value instanceof Boolean) {
-            result.success(value);
-        } else {
-            if (value != null) {
-                android.util.Log.w("Mixpanel", "isEnabledSync flag '" + flagName + "' has non-boolean value of type " + value.getClass().getSimpleName() + ", returning fallback");
-            }
-            result.success(safeFallback);
-        }
     }
 
     private void handleUpdateFlagsContext(MethodCall call, Result result) {

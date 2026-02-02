@@ -850,7 +850,7 @@ void main() {
         if (m.method == 'areFlagsReady') {
           return true;
         }
-        if (m.method == 'getVariant' || m.method == 'getVariantSync') {
+        if (m.method == 'getVariant') {
           return {
             'key': 'test_flag',
             'value': 'variant_a',
@@ -859,10 +859,10 @@ void main() {
             'isQaTester': false,
           };
         }
-        if (m.method == 'getVariantValue' || m.method == 'getVariantValueSync') {
+        if (m.method == 'getVariantValue') {
           return 'variant_value';
         }
-        if (m.method == 'isEnabled' || m.method == 'isEnabledSync') {
+        if (m.method == 'isEnabled') {
           return true;
         }
         return null;
@@ -919,30 +919,6 @@ void main() {
       );
     });
 
-    test('check getVariantSync call', () async {
-      final flags = _mixpanel.getFeatureFlags();
-      final fallback = MixpanelFlagVariant.fallback('test_flag', 'default');
-      final result = await flags.getVariantSync('test_flag', fallback);
-      expect(result.value, 'variant_a');
-      expect(
-        methodCall,
-        isMethodCall(
-          'getVariantSync',
-          arguments: <String, dynamic>{
-            'token': 'test token',
-            'flagName': 'test_flag',
-            'fallback': {
-              'key': 'test_flag',
-              'value': 'default',
-              'experimentId': null,
-              'isExperimentActive': null,
-              'isQaTester': null,
-            },
-          },
-        ),
-      );
-    });
-
     test('check getVariantValue call', () async {
       final flags = _mixpanel.getFeatureFlags();
       final result = await flags.getVariantValue('test_flag', 'fallback');
@@ -960,23 +936,6 @@ void main() {
       );
     });
 
-    test('check getVariantValueSync call', () async {
-      final flags = _mixpanel.getFeatureFlags();
-      final result = await flags.getVariantValueSync('test_flag', 'fallback');
-      expect(result, 'variant_value');
-      expect(
-        methodCall,
-        isMethodCall(
-          'getVariantValueSync',
-          arguments: <String, dynamic>{
-            'token': 'test token',
-            'flagName': 'test_flag',
-            'fallbackValue': 'fallback',
-          },
-        ),
-      );
-    });
-
     test('check isEnabled call', () async {
       final flags = _mixpanel.getFeatureFlags();
       final result = await flags.isEnabled('test_flag', false);
@@ -985,23 +944,6 @@ void main() {
         methodCall,
         isMethodCall(
           'isEnabled',
-          arguments: <String, dynamic>{
-            'token': 'test token',
-            'flagName': 'test_flag',
-            'fallbackValue': false,
-          },
-        ),
-      );
-    });
-
-    test('check isEnabledSync call', () async {
-      final flags = _mixpanel.getFeatureFlags();
-      final result = await flags.isEnabledSync('test_flag', false);
-      expect(result, true);
-      expect(
-        methodCall,
-        isMethodCall(
-          'isEnabledSync',
           arguments: <String, dynamic>{
             'token': 'test token',
             'flagName': 'test_flag',
@@ -1057,34 +999,17 @@ void main() {
       expect(variantResult.key, '');
       expect(variantResult.value, 'default');
 
-      // getVariantSync with empty flagName
-      methodCall = null;
-      await flags.getVariantSync('', fallback);
-      expect(methodCall, isNull);
-
       // getVariantValue with empty flagName
       methodCall = null;
       final valueResult = await flags.getVariantValue('', 'fallback');
       expect(methodCall, isNull);
       expect(valueResult, 'fallback');
 
-      // getVariantValueSync with empty flagName
-      methodCall = null;
-      final valueSyncResult = await flags.getVariantValueSync('', 'fallback');
-      expect(methodCall, isNull);
-      expect(valueSyncResult, 'fallback');
-
       // isEnabled with empty flagName
       methodCall = null;
       final enabledResult = await flags.isEnabled('', false);
       expect(methodCall, isNull);
       expect(enabledResult, false);
-
-      // isEnabledSync with empty flagName
-      methodCall = null;
-      final enabledSyncResult = await flags.isEnabledSync('', true);
-      expect(methodCall, isNull);
-      expect(enabledSyncResult, true);
     });
 
     test('check initialize with featureFlags config', () async {
@@ -1343,33 +1268,6 @@ void main() {
       expect(variant.key, 'list_flag');
       expect(variant.value, listValue);
       expect(variant.value is List, true);
-    });
-
-    test('getVariantSync returns all fields correctly', () async {
-      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(channel, (MethodCall m) async {
-        methodCall = m;
-        if (m.method == 'getVariantSync') {
-          return {
-            'key': 'full_flag',
-            'value': 'variant_b',
-            'experimentId': 'exp_456',
-            'isExperimentActive': false,
-            'isQaTester': true,
-          };
-        }
-        return null;
-      });
-
-      final flags = _mixpanel.getFeatureFlags();
-      final fallback = MixpanelFlagVariant.fallback('full_flag', 'default');
-      final result = await flags.getVariantSync('full_flag', fallback);
-
-      expect(result.key, 'full_flag');
-      expect(result.value, 'variant_b');
-      expect(result.experimentId, 'exp_456');
-      expect(result.isExperimentActive, false);
-      expect(result.isQaTester, true);
     });
 
     test('MixpanelFlagVariant equality', () {
