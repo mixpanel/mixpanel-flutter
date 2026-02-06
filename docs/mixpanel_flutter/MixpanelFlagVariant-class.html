@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1, user-scalable=no">
+  <meta name="description" content="API docs for the MixpanelFlagVariant class from the mixpanel_flutter library, for the Dart programming language.">
+  <title>MixpanelFlagVariant class - mixpanel_flutter library - Dart API</title>
+
+
+  
+  <link rel="preconnect" href="https://fonts.gstatic.com">
+  <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:ital,wght@0,300;0,400;0,500;0,700;1,400&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet">
+  
+  <link rel="stylesheet" href="../static-assets/github.css?v1">
+  <link rel="stylesheet" href="../static-assets/styles.css?v1">
+  <link rel="icon" href="../static-assets/favicon.png?v1">
+  
+</head>
+
+<body data-base-href="../" data-using-base-href="false" class="light-theme">
+<div id="overlay-under-drawer"></div>
+<header id="title">
+  <span id="sidenav-left-toggle" class="material-symbols-outlined" role="button" tabindex="0">menu</span>
+  <ol class="breadcrumbs gt-separated dark hidden-xs">
+    <li><a href="../index.html">mixpanel_flutter</a></li>
+    <li><a href="../mixpanel_flutter/">mixpanel_flutter.dart</a></li>
+    <li class="self-crumb">MixpanelFlagVariant class</li>
+  </ol>
+  <div class="self-name">MixpanelFlagVariant</div>
+  <form class="search navbar-right" role="search">
+    <input type="text" id="search-box" autocomplete="off" disabled class="form-control typeahead" placeholder="Loading search...">
+  </form>
+  <button class="toggle" id="theme-button" title="Toggle between light and dark mode" aria-label="Light and dark mode toggle">
+    <span id="dark-theme-button" class="material-symbols-outlined" aria-hidden="true">
+      dark_mode
+    </span>
+    <span id="light-theme-button" class="material-symbols-outlined" aria-hidden="true">
+      light_mode
+    </span>
+  </button>
+</header>
+<main>
+<div
+    id="dartdoc-main-content"
+    class="main-content"
+    data-above-sidebar="mixpanel_flutter&#47;mixpanel_flutter-library-sidebar.html"
+    data-below-sidebar="mixpanel_flutter&#47;MixpanelFlagVariant-class-sidebar.html">
+    <div>
+<h1><span class="kind-class">MixpanelFlagVariant</span> class 
+ 
+</h1></div>
+
+    
+<section class="desc markdown">
+  <p>Represents a feature flag variant with metadata.</p>
+<p>Contains the flag's key, value, and optional experiment-related metadata.</p>
+</section>
+
+
+
+    
+  <section class="summary offset-anchor" id="constructors">
+    <h2>Constructors</h2>
+    <dl class="constructor-summary-list">
+        <dt id="MixpanelFlagVariant.new" class="callable">
+          <span class="name"><a href="../mixpanel_flutter/MixpanelFlagVariant/MixpanelFlagVariant.html">MixpanelFlagVariant</a></span><span class="signature">({<span class="parameter" id="-param-key"><span>required</span> <span class="type-annotation"><a href="https://api.flutter.dev/flutter/dart-core/String-class.html">String</a></span> <span class="parameter-name">key</span>, </span><span class="parameter" id="-param-value"><span>required</span> <span class="type-annotation">dynamic</span> <span class="parameter-name">value</span>, </span><span class="parameter" id="-param-experimentId"><span class="type-annotation"><a href="https://api.flutter.dev/flutter/dart-core/String-class.html">String</a>?</span> <span class="parameter-name">experimentId</span>, </span><span class="parameter" id="-param-isExperimentActive"><span class="type-annotation"><a href="https://api.flutter.dev/flutter/dart-core/bool-class.html">bool</a>?</span> <span class="parameter-name">isExperimentActive</span>, </span><span class="parameter" id="-param-isQaTester"><span class="type-annotation"><a href="https://api.flutter.dev/flutter/dart-core/bool-class.html">bool</a>?</span> <span class="parameter-name">isQaTester</span></span>})</span>
+        </dt>
+        <dd>
+          
+        </dd>
+        <dt id="MixpanelFlagVariant.fallback" class="callable">
+          <span class="name"><a href="../mixpanel_flutter/MixpanelFlagVariant/MixpanelFlagVariant.fallback.html">MixpanelFlagVariant.fallback</a></span><span class="signature">(<span class="parameter" id="fallback-param-key"><span class="type-annotation"><a href="https://api.flutter.dev/flutter/dart-core/String-class.html">String</a></span> <span class="parameter-name">key</span>, </span><span class="parameter" id="fallback-param-value"><span class="type-annotation">dynamic</span> <span class="parameter-name">value</span></span>)</span>
+        </dt>
+        <dd>
+          Creates a fallback MixpanelFlagVariant with the given key and value.
+            <div class="constructor-modifier features">factory</div>
+        </dd>
+        <dt id="MixpanelFlagVariant.fromMap" class="callable">
+          <span class="name"><a href="../mixpanel_flutter/MixpanelFlagVariant/MixpanelFlagVariant.fromMap.html">MixpanelFlagVariant.fromMap</a></span><span class="signature">(<span class="parameter" id="fromMap-param-map"><span class="type-annotation"><a href="https://api.flutter.dev/flutter/dart-core/Map-class.html">Map</a></span> <span class="parameter-name">map</span></span>)</span>
+        </dt>
+        <dd>
+          Creates a MixpanelFlagVariant from a Map (used for platform channel deserialization).
+            <div class="constructor-modifier features">factory</div>
+        </dd>
+    </dl>
+  </section>
+    
+  <section
+      class="summary offset-anchor"
+      id="instance-properties">
+    <h2>Properties</h2>
+    <dl class="properties">
+        <dt id="experimentId" class="property">
+  <span class="name"><a href="../mixpanel_flutter/MixpanelFlagVariant/experimentId.html">experimentId</a></span>
+  <span class="signature">&#8594; <a href="https://api.flutter.dev/flutter/dart-core/String-class.html">String</a>?</span>
+  
+
+</dt>
+<dd>
+  The experiment ID if this flag is part of an experiment.
+  <div class="features"><span class="feature">final</span></div>
+
+</dd>
+
+        <dt id="hashCode" class="property">
+  <span class="name"><a href="../mixpanel_flutter/MixpanelFlagVariant/hashCode.html">hashCode</a></span>
+  <span class="signature">&#8594; <a href="https://api.flutter.dev/flutter/dart-core/int-class.html">int</a></span>
+  
+
+</dt>
+<dd>
+  The hash code for this object.
+  <div class="features"><span class="feature">no setter</span><span class="feature">override</span></div>
+
+</dd>
+
+        <dt id="isExperimentActive" class="property">
+  <span class="name"><a href="../mixpanel_flutter/MixpanelFlagVariant/isExperimentActive.html">isExperimentActive</a></span>
+  <span class="signature">&#8594; <a href="https://api.flutter.dev/flutter/dart-core/bool-class.html">bool</a>?</span>
+  
+
+</dt>
+<dd>
+  Whether the experiment is currently active.
+  <div class="features"><span class="feature">final</span></div>
+
+</dd>
+
+        <dt id="isQaTester" class="property">
+  <span class="name"><a href="../mixpanel_flutter/MixpanelFlagVariant/isQaTester.html">isQaTester</a></span>
+  <span class="signature">&#8594; <a href="https://api.flutter.dev/flutter/dart-core/bool-class.html">bool</a>?</span>
+  
+
+</dt>
+<dd>
+  Whether the current user is a QA tester.
+  <div class="features"><span class="feature">final</span></div>
+
+</dd>
+
+        <dt id="key" class="property">
+  <span class="name"><a href="../mixpanel_flutter/MixpanelFlagVariant/key.html">key</a></span>
+  <span class="signature">&#8594; <a href="https://api.flutter.dev/flutter/dart-core/String-class.html">String</a></span>
+  
+
+</dt>
+<dd>
+  The key/name of the feature flag.
+  <div class="features"><span class="feature">final</span></div>
+
+</dd>
+
+        <dt id="runtimeType" class="property inherited">
+  <span class="name"><a href="https://api.flutter.dev/flutter/dart-core/Object/runtimeType.html">runtimeType</a></span>
+  <span class="signature">&#8594; <a href="https://api.flutter.dev/flutter/dart-core/Type-class.html">Type</a></span>
+  
+
+</dt>
+<dd class="inherited">
+  A representation of the runtime type of the object.
+  <div class="features"><span class="feature">no setter</span><span class="feature">inherited</span></div>
+
+</dd>
+
+        <dt id="value" class="property">
+  <span class="name"><a href="../mixpanel_flutter/MixpanelFlagVariant/value.html">value</a></span>
+  <span class="signature">&#8594; dynamic</span>
+  
+
+</dt>
+<dd>
+  The value of the feature flag variant.
+Can be any type: bool, String, int, double, Map, List, etc.
+  <div class="features"><span class="feature">final</span></div>
+
+</dd>
+
+    </dl>
+  </section>
+
+    
+  <section
+      class="summary offset-anchor"
+      id="instance-methods">
+    <h2>Methods</h2>
+    <dl class="callables">
+        <dt id="noSuchMethod" class="callable inherited">
+  <span class="name"><a href="https://api.flutter.dev/flutter/dart-core/Object/noSuchMethod.html">noSuchMethod</a></span><span class="signature">(<wbr><span class="parameter" id="noSuchMethod-param-invocation"><span class="type-annotation"><a href="https://api.flutter.dev/flutter/dart-core/Invocation-class.html">Invocation</a></span> <span class="parameter-name">invocation</span></span>)
+    <span class="returntype parameter">&#8594; dynamic</span>
+  </span>
+  
+
+</dt>
+<dd class="inherited">
+  Invoked when a nonexistent method or property is accessed.
+  <div class="features"><span class="feature">inherited</span></div>
+
+</dd>
+
+        <dt id="toMap" class="callable">
+  <span class="name"><a href="../mixpanel_flutter/MixpanelFlagVariant/toMap.html">toMap</a></span><span class="signature">(<wbr>)
+    <span class="returntype parameter">&#8594; <a href="https://api.flutter.dev/flutter/dart-core/Map-class.html">Map</a><span class="signature">&lt;<wbr><span class="type-parameter"><a href="https://api.flutter.dev/flutter/dart-core/String-class.html">String</a></span>, <span class="type-parameter">dynamic</span>&gt;</span></span>
+  </span>
+  
+
+</dt>
+<dd>
+  Converts this variant to a Map for serialization.
+  
+
+</dd>
+
+        <dt id="toString" class="callable">
+  <span class="name"><a href="../mixpanel_flutter/MixpanelFlagVariant/toString.html">toString</a></span><span class="signature">(<wbr>)
+    <span class="returntype parameter">&#8594; <a href="https://api.flutter.dev/flutter/dart-core/String-class.html">String</a></span>
+  </span>
+  
+
+</dt>
+<dd>
+  A string representation of this object.
+  <div class="features"><span class="feature">override</span></div>
+
+</dd>
+
+    </dl>
+  </section>
+    
+  <section
+      class="summary offset-anchor"
+      id="operators">
+    <h2>Operators</h2>
+    <dl class="callables">
+        <dt id="operator ==" class="callable">
+  <span class="name"><a href="../mixpanel_flutter/MixpanelFlagVariant/operator_equals.html">operator ==</a></span><span class="signature">(<wbr><span class="parameter" id="==-param-other"><span class="type-annotation"><a href="https://api.flutter.dev/flutter/dart-core/Object-class.html">Object</a></span> <span class="parameter-name">other</span></span>)
+    <span class="returntype parameter">&#8594; <a href="https://api.flutter.dev/flutter/dart-core/bool-class.html">bool</a></span>
+  </span>
+  
+
+</dt>
+<dd>
+  The equality operator.
+  <div class="features"><span class="feature">override</span></div>
+
+</dd>
+
+    </dl>
+  </section>
+    
+    
+    
+
+  </div> <!-- /.main-content -->
+  <div id="dartdoc-sidebar-left" class="sidebar sidebar-offcanvas-left">
+    <!-- The search input and breadcrumbs below are only responsively visible at low resolutions. -->
+<header id="header-search-sidebar" class="hidden-l">
+  <form class="search-sidebar" role="search">
+    <input type="text" id="search-sidebar" autocomplete="off" disabled class="form-control typeahead" placeholder="Loading search...">
+  </form>
+</header>
+<ol class="breadcrumbs gt-separated dark hidden-l" id="sidebar-nav">
+    <li><a href="../index.html">mixpanel_flutter</a></li>
+    <li><a href="../mixpanel_flutter/">mixpanel_flutter</a></li>
+    <li class="self-crumb">MixpanelFlagVariant class</li>
+</ol>
+
+    <h5>mixpanel_flutter library</h5>
+    <div id="dartdoc-sidebar-left-content"></div>
+  </div>
+  <div id="dartdoc-sidebar-right" class="sidebar sidebar-offcanvas-right">
+  </div><!--/.sidebar-offcanvas-->
+</main>
+<footer>
+  <span class="no-break">
+    mixpanel_flutter
+      2.5.0
+  </span>
+  
+</footer>
+
+
+<script src="../static-assets/highlight.pack.js?v1"></script>
+<script src="../static-assets/docs.dart.js"></script>
+
+</body>
+</html>
+

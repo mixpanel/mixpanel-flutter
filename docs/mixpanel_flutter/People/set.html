@@ -11,26 +11,21 @@
   
   <link rel="preconnect" href="https://fonts.gstatic.com">
   <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:ital,wght@0,300;0,400;0,500;0,700;1,400&display=swap" rel="stylesheet">
-  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet">
   
   <link rel="stylesheet" href="../../static-assets/github.css?v1">
   <link rel="stylesheet" href="../../static-assets/styles.css?v1">
   <link rel="icon" href="../../static-assets/favicon.png?v1">
-
   
 </head>
 
-
-<body data-base-href="../../"
-      data-using-base-href="false">
-
+<body data-base-href="../../" data-using-base-href="false" class="light-theme">
 <div id="overlay-under-drawer"></div>
-
 <header id="title">
-  <button id="sidenav-left-toggle" type="button">&nbsp;</button>
+  <span id="sidenav-left-toggle" class="material-symbols-outlined" role="button" tabindex="0">menu</span>
   <ol class="breadcrumbs gt-separated dark hidden-xs">
     <li><a href="../../index.html">mixpanel_flutter</a></li>
-    <li><a href="../../mixpanel_flutter/mixpanel_flutter-library.html">mixpanel_flutter</a></li>
+    <li><a href="../../mixpanel_flutter/">mixpanel_flutter.dart</a></li>
     <li><a href="../../mixpanel_flutter/People-class.html">People</a></li>
     <li class="self-crumb">set method</li>
   </ol>
@@ -38,22 +33,29 @@
   <form class="search navbar-right" role="search">
     <input type="text" id="search-box" autocomplete="off" disabled class="form-control typeahead" placeholder="Loading search...">
   </form>
+  <button class="toggle" id="theme-button" title="Toggle between light and dark mode" aria-label="Light and dark mode toggle">
+    <span id="dark-theme-button" class="material-symbols-outlined" aria-hidden="true">
+      dark_mode
+    </span>
+    <span id="light-theme-button" class="material-symbols-outlined" aria-hidden="true">
+      light_mode
+    </span>
+  </button>
 </header>
-
 <main>
-
-
-  <div id="dartdoc-main-content" class="main-content">
-      <div>
+<div
+    id="dartdoc-main-content"
+    class="main-content"
+    data-above-sidebar="mixpanel_flutter&#47;People-class-sidebar.html"
+    data-below-sidebar="">
+    <div>
 <h1><span class="kind-method">set</span> method 
-    <a href="https://dart.dev/null-safety" class="feature feature-null-safety" title="Supports the null safety language feature.">Null safety</a>
 </h1></div>
 
     <section class="multi-line-signature">
       
-
 <span class="returntype">void</span>
-<span class="name ">set</span>(<wbr><ol class="parameter-list"><li><span class="parameter" id="set-param-prop"><span class="type-annotation"><a href="https://api.flutter.dev/flutter/dart-core/String-class.html">String</a></span> <span class="parameter-name">prop</span>, </span></li>
+<span class="name ">set</span>(<wbr><ol class="parameter-list single-line"> <li><span class="parameter" id="set-param-prop"><span class="type-annotation"><a href="https://api.flutter.dev/flutter/dart-core/String-class.html">String</a></span> <span class="parameter-name">prop</span>, </span></li>
 <li><span class="parameter" id="set-param-to"><span class="type-annotation">dynamic</span> <span class="parameter-name">to</span></span></li>
 </ol>)
 
@@ -79,7 +81,7 @@ possibly overwriting an existing property with the same name.</p>
   if (_MixpanelHelper.isValidString(prop)) {
     Map&lt;String, dynamic&gt; properties = {prop: to};
     _channel.invokeMethod&lt;void&gt;(&#39;set&#39;,
-        &lt;String, dynamic&gt;{&#39;token&#39;: this._token, &#39;properties&#39;: properties});
+        &lt;String, dynamic&gt;{&#39;token&#39;: _token, &#39;properties&#39;: _MixpanelHelper.ensureSerializableProperties(properties)});
   } else {
     developer.log(&#39;`people set` failed: prop cannot be blank&#39;,
         name: &#39;Mixpanel&#39;);
@@ -89,81 +91,38 @@ possibly overwriting an existing property with the same name.</p>
 
 
   </div> <!-- /.main-content -->
-
   <div id="dartdoc-sidebar-left" class="sidebar sidebar-offcanvas-left">
-    <header id="header-search-sidebar" class="hidden-l">
+    <!-- The search input and breadcrumbs below are only responsively visible at low resolutions. -->
+<header id="header-search-sidebar" class="hidden-l">
   <form class="search-sidebar" role="search">
     <input type="text" id="search-sidebar" autocomplete="off" disabled class="form-control typeahead" placeholder="Loading search...">
   </form>
 </header>
-
 <ol class="breadcrumbs gt-separated dark hidden-l" id="sidebar-nav">
-  <li><a href="../../index.html">mixpanel_flutter</a></li>
-  <li><a href="../../mixpanel_flutter/mixpanel_flutter-library.html">mixpanel_flutter</a></li>
-  <li><a href="../../mixpanel_flutter/People-class.html">People</a></li>
-  <li class="self-crumb">set method</li>
+    <li><a href="../../index.html">mixpanel_flutter</a></li>
+    <li><a href="../../mixpanel_flutter/">mixpanel_flutter</a></li>
+    <li><a href="../../mixpanel_flutter/People-class.html">People</a></li>
+    <li class="self-crumb">set method</li>
 </ol>
-
 
     <h5>People class</h5>
-    <ol>
-
-    <li class="section-title"><a href="../../mixpanel_flutter/People-class.html#constructors">Constructors</a></li>
-    <li><a href="../../mixpanel_flutter/People/People.html">People</a></li>
-
-
-    <li class="section-title inherited">
-      <a href="../../mixpanel_flutter/People-class.html#instance-properties">Properties</a>
-    </li>
-    <li class="inherited"><a href="https://api.flutter.dev/flutter/dart-core/Object/hashCode.html">hashCode</a></li>
-    <li class="inherited"><a href="https://api.flutter.dev/flutter/dart-core/Object/runtimeType.html">runtimeType</a></li>
-
-    <li class="section-title"><a href="../../mixpanel_flutter/People-class.html#instance-methods">Methods</a></li>
-    <li><a href="../../mixpanel_flutter/People/append.html">append</a></li>
-    <li><a href="../../mixpanel_flutter/People/clearCharges.html">clearCharges</a></li>
-    <li><a href="../../mixpanel_flutter/People/deleteUser.html">deleteUser</a></li>
-    <li><a href="../../mixpanel_flutter/People/increment.html">increment</a></li>
-    <li class="inherited"><a href="https://api.flutter.dev/flutter/dart-core/Object/noSuchMethod.html">noSuchMethod</a></li>
-    <li><a href="../../mixpanel_flutter/People/remove.html">remove</a></li>
-    <li><a href="../../mixpanel_flutter/People/set.html">set</a></li>
-    <li><a href="../../mixpanel_flutter/People/setOnce.html">setOnce</a></li>
-    <li class="inherited"><a href="https://api.flutter.dev/flutter/dart-core/Object/toString.html">toString</a></li>
-    <li><a href="../../mixpanel_flutter/People/trackCharge.html">trackCharge</a></li>
-    <li><a href="../../mixpanel_flutter/People/union.html">union</a></li>
-    <li><a href="../../mixpanel_flutter/People/unset.html">unset</a></li>
-
-    <li class="section-title inherited"><a href="../../mixpanel_flutter/People-class.html#operators">Operators</a></li>
-    <li class="inherited"><a href="https://api.flutter.dev/flutter/dart-core/Object/operator_equals.html">operator ==</a></li>
-
-
-
-
-</ol>
-
+    <div id="dartdoc-sidebar-left-content"></div>
   </div><!--/.sidebar-offcanvas-->
-
   <div id="dartdoc-sidebar-right" class="sidebar sidebar-offcanvas-right">
-  </div><!--/.sidebar-offcanvas-->
-
+</div><!--/.sidebar-offcanvas-->
 </main>
-
 <footer>
   <span class="no-break">
     mixpanel_flutter
-      1.3.1
+      2.5.0
   </span>
-
   
 </footer>
 
 
-
 <script src="../../static-assets/highlight.pack.js?v1"></script>
-<script src="../../static-assets/script.js?v1"></script>
-
-
+<script src="../../static-assets/docs.dart.js"></script>
 
 </body>
-
 </html>
 

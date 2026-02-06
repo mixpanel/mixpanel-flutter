@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1, user-scalable=no">
+  <meta name="description" content="API docs for the safeJsify function from the mixpanel_flutter_web library, for the Dart programming language.">
+  <title>safeJsify function - mixpanel_flutter_web library - Dart API</title>
+
+
+  
+  <link rel="preconnect" href="https://fonts.gstatic.com">
+  <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:ital,wght@0,300;0,400;0,500;0,700;1,400&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet">
+  
+  <link rel="stylesheet" href="../static-assets/github.css?v1">
+  <link rel="stylesheet" href="../static-assets/styles.css?v1">
+  <link rel="icon" href="../static-assets/favicon.png?v1">
+  
+</head>
+
+<body data-base-href="../" data-using-base-href="false" class="light-theme">
+<div id="overlay-under-drawer"></div>
+<header id="title">
+  <span id="sidenav-left-toggle" class="material-symbols-outlined" role="button" tabindex="0">menu</span>
+  <ol class="breadcrumbs gt-separated dark hidden-xs">
+    <li><a href="../index.html">mixpanel_flutter</a></li>
+    <li><a href="../mixpanel_flutter_web/">mixpanel_flutter_web.dart</a></li>
+    <li class="self-crumb">safeJsify function</li>
+  </ol>
+  <div class="self-name">safeJsify</div>
+  <form class="search navbar-right" role="search">
+    <input type="text" id="search-box" autocomplete="off" disabled class="form-control typeahead" placeholder="Loading search...">
+  </form>
+  <button class="toggle" id="theme-button" title="Toggle between light and dark mode" aria-label="Light and dark mode toggle">
+    <span id="dark-theme-button" class="material-symbols-outlined" aria-hidden="true">
+      dark_mode
+    </span>
+    <span id="light-theme-button" class="material-symbols-outlined" aria-hidden="true">
+      light_mode
+    </span>
+  </button>
+</header>
+<main>
+  <div
+      id="dartdoc-main-content"
+      class="main-content"
+      data-above-sidebar="mixpanel_flutter_web&#47;mixpanel_flutter_web-library-sidebar.html"
+      data-below-sidebar="">
+      <div>
+<h1><span class="kind-function">safeJsify</span> function 
+ 
+</h1></div>
+
+    <section class="multi-line-signature">
+        
+<span class="returntype"><a href="https://api.flutter.dev/flutter/dart-js_interop/JSAny-extension-type.html">JSAny</a>?</span>
+<span class="name ">safeJsify</span>(<wbr><ol class="parameter-list single-line"> <li><span class="parameter" id="safeJsify-param-value"><span class="type-annotation">dynamic</span> <span class="parameter-name">value</span></span></li>
+</ol>)
+
+        
+
+    </section>
+    
+<section class="desc markdown">
+  <p>Safely converts Dart values to JavaScript-compatible types for web interop.</p>
+<p>This function handles the conversion of various Dart types to their JavaScript
+equivalents using the appropriate JS interop methods.</p>
+<p><strong>Accepted input types:</strong></p>
+<ul>
+<li><code>JSAny</code> - Returned as-is to avoid double conversion</li>
+<li><code>Map</code> - Converted using <code>.jsify()</code> to a JavaScript object</li>
+<li><code>List</code> - Converted using <code>.jsify()</code> to a JavaScript array</li>
+<li><code>DateTime</code> - Converted using <code>.jsify()</code> to a JavaScript Date object</li>
+<li><code>bool</code> - Converted using <code>.toJS</code> to a JavaScript boolean</li>
+<li><code>num</code> (int/double) - Converted using <code>.toJS</code> to a JavaScript number</li>
+<li><code>String</code> - Converted using <code>.toJS</code> to a JavaScript string</li>
+<li>Any other type - Logs a warning and returns null to prevent JS interop issues</li>
+</ul>
+<p><strong>Return value:</strong>
+Returns a <code>JSAny?</code> which represents the JavaScript-compatible value.
+The return type is nullable to handle cases where the input cannot be
+converted or is already null.</p>
+<p><strong>Null handling:</strong></p>
+<ul>
+<li>If the input value is <code>null</code>, it is explicitly checked and returned immediately</li>
+<li>The function is null-safe and will not throw on null inputs</li>
+</ul>
+<p><strong>Example usage:</strong></p>
+<pre class="language-dart"><code class="language-dart">Convert a Map to JavaScript object
+var jsObj = safeJsify({'key': 'value', 'count': 42});
+
+Convert a List to JavaScript array
+var jsArray = safeJsify([1, 2, 3, 'four']);
+
+Handles null gracefully
+var jsNull = safeJsify(null); // Returns null
+</code></pre>
+</section>
+
+
+    
+<section class="summary source-code" id="source">
+  <h2><span>Implementation</span></h2>
+  <pre class="language-dart"><code class="language-dart">JSAny? safeJsify(dynamic value) {
+  if (value == null) {
+    return null;
+  } else if (value is Map) {
+    return value.jsify();
+  } else if (value is List) {
+    return value.jsify();
+  } else if (value is DateTime) {
+    return value.jsify();
+  } else if (value is bool) {
+    return value.toJS;
+  } else if (value is num) {
+    return value.toJS;
+  } else if (value is String) {
+    return value.toJS;
+  } else {
+    debugPrint(
+        &#39;[Mixpanel] Warning: Unsupported type for JS conversion: ${value.runtimeType}. &#39;
+        &#39;Value will be ignored. Supported types are: Map, List, DateTime, bool, num, String, JSAny, and null.&#39;);
+    return null;
+  }
+}</code></pre>
+</section>
+
+
+  </div> <!-- /.main-content -->
+  <div id="dartdoc-sidebar-left" class="sidebar sidebar-offcanvas-left">
+    <!-- The search input and breadcrumbs below are only responsively visible at low resolutions. -->
+<header id="header-search-sidebar" class="hidden-l">
+  <form class="search-sidebar" role="search">
+    <input type="text" id="search-sidebar" autocomplete="off" disabled class="form-control typeahead" placeholder="Loading search...">
+  </form>
+</header>
+<ol class="breadcrumbs gt-separated dark hidden-l" id="sidebar-nav">
+    <li><a href="../index.html">mixpanel_flutter</a></li>
+    <li><a href="../mixpanel_flutter_web/">mixpanel_flutter_web</a></li>
+    <li class="self-crumb">safeJsify function</li>
+</ol>
+
+    <h5>mixpanel_flutter_web library</h5>
+    <div id="dartdoc-sidebar-left-content"></div>
+  </div><!--/.sidebar-offcanvas-left-->
+  <div id="dartdoc-sidebar-right" class="sidebar sidebar-offcanvas-right">
+  </div><!--/.sidebar-offcanvas-->
+</main>
+<footer>
+  <span class="no-break">
+    mixpanel_flutter
+      2.5.0
+  </span>
+  
+</footer>
+
+
+<script src="../static-assets/highlight.pack.js?v1"></script>
+<script src="../static-assets/docs.dart.js"></script>
+
+</body>
+</html>
+

@@ -4,7 +4,6 @@
   <meta charset="utf-8">
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1, user-scalable=no">
-  <meta name="generator" content="made with love by dartdoc 1.0.0">
   <meta name="description" content="mixpanel_flutter API docs, for the Dart programming language.">
   <title>mixpanel_flutter - Dart API docs</title>
 
@@ -12,23 +11,18 @@
   
   <link rel="preconnect" href="https://fonts.gstatic.com">
   <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:ital,wght@0,300;0,400;0,500;0,700;1,400&display=swap" rel="stylesheet">
-  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet">
   
   <link rel="stylesheet" href="static-assets/github.css?v1">
   <link rel="stylesheet" href="static-assets/styles.css?v1">
   <link rel="icon" href="static-assets/favicon.png?v1">
-
   
 </head>
 
-
-<body data-base-href=""
-      data-using-base-href="false">
-
+<body data-base-href="" data-using-base-href="false" class="light-theme">
 <div id="overlay-under-drawer"></div>
-
 <header id="title">
-  <button id="sidenav-left-toggle" type="button">&nbsp;</button>
+  <span id="sidenav-left-toggle" class="material-symbols-outlined" role="button" tabindex="0">menu</span>
   <ol class="breadcrumbs gt-separated dark hidden-xs">
     <li><a href="https://mixpanel.com">mixpanel_flutter package</a></li>
   </ol>
@@ -36,18 +30,24 @@
   <form class="search navbar-right" role="search">
     <input type="text" id="search-box" autocomplete="off" disabled class="form-control typeahead" placeholder="Loading search...">
   </form>
+  <button class="toggle" id="theme-button" title="Toggle between light and dark mode" aria-label="Light and dark mode toggle">
+    <span id="dark-theme-button" class="material-symbols-outlined" aria-hidden="true">
+      dark_mode
+    </span>
+    <span id="light-theme-button" class="material-symbols-outlined" aria-hidden="true">
+      light_mode
+    </span>
+  </button>
 </header>
-
 <main>
-
-
   <div id="dartdoc-main-content" class="main-content">
       
 <section class="desc markdown">
   <div align="center" style="text-align: center">
-  <img src="https://github.com/mixpanel/mixpanel-android/blob/assets/mixpanel.png?raw=true" alt="Mixpanel Flutter SDK" height="150">
+  <img src="https://user-images.githubusercontent.com/71290498/231855731-2d3774c3-dc41-4595-abfb-9c49f5f84103.png" alt="Mixpanel Flutter SDK" height="150">
 </div>
-<h1 id="table-of-contents">Table of Contents</h1><!-- MarkdownTOC -->
+<h1 id="table-of-contents">Table of Contents</h1>
+<!-- MarkdownTOC -->
 <ul>
 <li><a href="#introduction">Introduction</a></li>
 <li><a href="#quick-start-guide">Quick Start Guide</a>
@@ -59,7 +59,8 @@
 </ul>
 </li>
 <li><a href="#i-want-to-know-more">I want to know more!</a></li>
-</ul><!-- /MarkdownTOC -->
+</ul>
+<!-- /MarkdownTOC -->
 <h1 id="introduction">Introduction</h1>
 <p>Welcome to the official Mixpanel Flutter SDK.
 The Mixpanel Flutter SDK is an open-source project, and we'd love to see your contributions!
@@ -73,11 +74,11 @@ We'd also love for you to come and work with us! Check out <strong><a href="http
 </ul>
 <h3 id="steps">Steps</h3>
 <ol>
-<li>Depend on it  <br>
+<li>Depend on it <br>
 Add this to your package's pubspec.yaml file:</li>
 </ol>
 <pre class="language-dart"><code>   dependencies:
-      mixpanel_flutter: ^1.0.0 # set this to your desired version
+      mixpanel_flutter: ^1.x.x # set this to your desired version
 </code></pre>
 <ol start="2">
 <li>Install it <br>
@@ -91,8 +92,12 @@ Now in your Dart code, you can use:</li>
 </ol>
 <pre class="language-dart"><code>import 'package:mixpanel_flutter/mixpanel_flutter.dart';
 </code></pre>
+<h4 id="flutter-web-support">Flutter Web Support</h4>
+<p>Please add the following snippet to your <code>web/index.html</code> inside <code>&lt;head&gt;&lt;/head&gt;</code> in your Flutter project.</p>
+<pre class="language-dart"><code>&lt;script src="./assets/packages/mixpanel_flutter/assets/mixpanel.js"&gt;&lt;/script&gt;
+</code></pre>
 <h2 id="2-initialize-mixpanel">2. Initialize Mixpanel</h2>
-<p>To start tracking with the SDK you must first initialize with your project token. To initialize the SDK, first add <code>import 'package:mixpanel_flutter/mixpanel_flutter.dart';</code> and call <code>Mixpanel.init(token);</code> with your project token as it's argument. You can find your token in <a href="https://mixpanel.com/settings/project">project settings</a>.</p>
+<p>To start tracking with the SDK you must first initialize with your project token. To initialize the SDK, first add <code>import 'package:mixpanel_flutter/mixpanel_flutter.dart';</code> and call <code>Mixpanel.init(token, trackAutomaticEvents);</code> with your project token and automatic events setting as it's arguments. You can find your token in <a href="https://mixpanel.com/settings/project">project settings</a>.</p>
 <pre class="language-dart"><code class="language-dart">import 'package:mixpanel_flutter/mixpanel_flutter.dart';
 ...
 class _YourClassState extends State&lt;YourClass&gt; {
@@ -105,7 +110,7 @@ class _YourClassState extends State&lt;YourClass&gt; {
   }
 
   Future&lt;void&gt; initMixpanel() async {
-    mixpanel = await Mixpanel.init("Your Mixpanel Token", optOutTrackingDefault: false);
+    mixpanel = await Mixpanel.init("Your Mixpanel Token", trackAutomaticEvents: false);
   }
 ...
 </code></pre>
@@ -118,32 +123,34 @@ mixpanel.track('Sent Message');
 // Track with event-name and property
 mixpanel.track('Plan Selected', properties: {'Plan': 'Premium'});
 </code></pre>
-<p>You're done! You've successfully integrated the Mixpanel Flutter SDK into your app. To stay up to speed on important SDK releases and updates, star or watch our repository on <a href="https://github.com/mixpanel/mixpanel-flutter">Github</a>.</p>
+<p>You're done! You've successfully integrated the Mixpanel Flutter SDK into your app. To stay up to speed on important SDK releases and updates, star or watch our repository on <a href="https://github.com/mixpanel/mixpanel-flutter">GitHub</a>.</p>
 <h2 id="4-check-for-success">4. Check for Success</h2>
-<p><a href="http://mixpanel.com/report/live">Open up Live View in Mixpanel</a>  to view incoming events.
+<p><a href="https://mixpanel.com/report/events">Open up Events in Mixpanel</a> to view incoming events.
 Once data hits our API, it generally takes ~60 seconds for it to be processed, stored, and queryable in your project.</p>
+<p>👋 👋 Tell us about the Mixpanel developer experience! <a href="https://www.mixpanel.com/devnps">https://www.mixpanel.com/devnps</a> 👍 👎</p>
 <h1 id="faq">FAQ</h1>
 <p><strong>I want to stop tracking an event/event property in Mixpanel. Is that possible?</strong></p>
-<p>Yes, in Lexicon, you can intercept and drop incoming events or properties. Mixpanel won’t store any new data for the event or property you select to drop.  <a href="https://help.mixpanel.com/hc/en-us/articles/360001307806#dropping-events-and-properties">See this article for more information</a>.</p>
+<p>Yes, in Lexicon, you can intercept and drop incoming events or properties. Mixpanel won’t store any new data for the event or property you select to drop. <a href="https://help.mixpanel.com/hc/en-us/articles/360001307806#dropping-events-and-properties">See this article for more information</a>.</p>
 <p><strong>I have a test user I would like to opt out of tracking. How do I do that?</strong></p>
-<p>Mixpanel’s client-side tracking library contains the  <a href="https://mixpanel.github.io/mixpanel-flutter/mixpanel_flutter/Mixpanel/optOutTracking.html">optOutTracking()</a>  method, which will set the user’s local opt-out state to “true” and will prevent data from being sent from a user’s device. More detailed instructions can be found in the section,  <a href="https://developer.mixpanel.com/docs/flutter#opting-users-out-of-tracking">Opting users out of tracking</a>.</p>
+<p>Mixpanel’s client-side tracking library contains the <a href="https://mixpanel.github.io/mixpanel-flutter/mixpanel_flutter/Mixpanel/optOutTracking.html">optOutTracking()</a> method, which will set the user’s local opt-out state to “true” and will prevent data from being sent from a user’s device. More detailed instructions can be found in the section, <a href="https://developer.mixpanel.com/docs/flutter#opting-users-out-of-tracking">Opting users out of tracking</a>.</p>
 <p><strong>Why aren't my events showing up?</strong></p>
-<p>To preserve battery life and customer bandwidth, the Mixpanel library doesn't send the events you record immediately. Instead, it sends batches to the Mixpanel servers every 60 seconds while your application is running, as well as when the application transitions to the background. You can call  <a href="https://mixpanel.github.io/mixpanel-flutter/mixpanel_flutter/Mixpanel/flush.html">flush()</a>  manually if you want to force a flush at a particular moment.</p>
+<p>First, make sure your test device has internet access. To preserve battery life and customer bandwidth, the Mixpanel library doesn't send the events you record immediately. Instead, it sends batches to the Mixpanel servers every 60 seconds while your application is running, as well as when the application transitions to the background. You can call <a href="https://mixpanel.github.io/mixpanel-flutter/mixpanel_flutter/Mixpanel/flush.html">flush()</a> manually if you want to force a flush at a particular moment.</p>
 <pre class="language-dart"><code>mixpanel.flush();
 </code></pre>
-<p>If your events are still not showing up after 60 seconds, check if you have opted out of tracking. You can also enable Mixpanel debugging and logging, it allows you to see the debug output from the Mixpanel library. To enable it, call  <a href="https://mixpanel.github.io/mixpanel-flutter/mixpanel_flutter/Mixpanel/setLoggingEnabled.html">setLoggingEnabled</a>  to true, then run your iOS project with Xcode or android project with Android Studio. The logs should be available in the console.</p>
+<p>If your events are still not showing up after 60 seconds, check if you have opted out of tracking. You can also enable Mixpanel debugging and logging, it allows you to see the debug output from the Mixpanel library. To enable it, call <a href="https://mixpanel.github.io/mixpanel-flutter/mixpanel_flutter/Mixpanel/setLoggingEnabled.html">setLoggingEnabled</a> to true, then run your iOS project with Xcode or android project with Android Studio. The logs should be available in the console.</p>
 <pre class="language-dart"><code>mixpanel.setLoggingEnabled(true);
 </code></pre>
 <p><strong>Starting with iOS 14.5, do I need to request the user’s permission through the AppTrackingTransparency framework to use Mixpanel?</strong></p>
 <p>No, Mixpanel does not use IDFA so it does not require user permission through the AppTrackingTransparency(ATT) framework.</p>
 <p><strong>If I use Mixpanel, how do I answer app privacy questions for the App Store?</strong></p>
-<p>Please refer to our  <a href="https://mixpanel.com/legal/app-store-privacy-details/">Apple App Developer Privacy Guidance</a></p>
+<p>Please refer to our <a href="https://mixpanel.com/legal/app-store-privacy-details/">Apple App Developer Privacy Guidance</a></p>
 <h1 id="i-want-to-know-more">I want to know more!</h1>
 <p>No worries, here are some links that you will find useful:</p>
 <ul>
 <li><strong><a href="https://github.com/mixpanel/mixpanel-flutter/tree/main/example">Sample app</a></strong></li>
 <li><strong><a href="https://developer.mixpanel.com/docs/flutter">Full API Reference</a></strong></li>
 </ul>
+<p><a href="https://deepwiki.com/mixpanel/mixpanel-flutter"><img src="https://deepwiki.com/badge.svg" alt="Ask DeepWiki"></a></p>
 <p>Have any questions? Reach out to Mixpanel <a href="https://help.mixpanel.com/hc/en-us/requests/new">Support</a> to speak to someone smart, quickly.</p>
 </section>
 
@@ -151,60 +158,73 @@ Once data hits our API, it generally takes ~60 seconds for it to be processed, s
       <section class="summary">
           <h2>Libraries</h2>
         <dl>
-          <dt id="mixpanel_flutter">
-  <span class="name"><a href="mixpanel_flutter/mixpanel_flutter-library.html">mixpanel_flutter</a></span> 
+          <dt id="mixpanel_message_codec">
+  <span class="name"><a href="codec_mixpanel_message_codec/">codec/mixpanel_message_codec</a></span> 
 
 </dt>
-<dd> 
+<dd>
+</dd>
+
+          <dt id="mixpanel_flutter">
+  <span class="name"><a href="mixpanel_flutter/">mixpanel_flutter</a></span> 
+
+</dt>
+<dd>
+</dd>
+
+          <dt id="mixpanel_flutter_web">
+  <span class="name"><a href="mixpanel_flutter_web/">mixpanel_flutter_web</a></span> 
+
+</dt>
+<dd>
+</dd>
+
+          <dt id="mixpanel_js_bindings">
+  <span class="name"><a href="web_mixpanel_js_bindings/">web/mixpanel_js_bindings</a></span> 
+
+</dt>
+<dd>
 </dd>
 
         </dl>
       </section>
-
   </div> <!-- /.main-content -->
-
   <div id="dartdoc-sidebar-left" class="sidebar sidebar-offcanvas-left">
-    <header id="header-search-sidebar" class="hidden-l">
+    <!-- The search input and breadcrumbs below are only responsively visible at low resolutions. -->
+<header id="header-search-sidebar" class="hidden-l">
   <form class="search-sidebar" role="search">
     <input type="text" id="search-sidebar" autocomplete="off" disabled class="form-control typeahead" placeholder="Loading search...">
   </form>
 </header>
-
 <ol class="breadcrumbs gt-separated dark hidden-l" id="sidebar-nav">
-  <li><a href="https://mixpanel.com">mixpanel_flutter package</a></li>
+    <li><a href="https://mixpanel.com">mixpanel_flutter package</a></li>
 </ol>
-
 
     <h5 class="hidden-xs"><span class="package-name">mixpanel_flutter</span> <span class="package-kind">package</span></h5>
     <ol>
       <li class="section-title">Libraries</li>
-      <li><a href="mixpanel_flutter/mixpanel_flutter-library.html">mixpanel_flutter</a></li>
+      <li><a href="codec_mixpanel_message_codec/">codec/mixpanel_message_codec</a></li>
+      <li><a href="mixpanel_flutter/">mixpanel_flutter</a></li>
+      <li><a href="mixpanel_flutter_web/">mixpanel_flutter_web</a></li>
+      <li><a href="web_mixpanel_js_bindings/">web/mixpanel_js_bindings</a></li>
 </ol>
 
   </div>
-
   <div id="dartdoc-sidebar-right" class="sidebar sidebar-offcanvas-right">
   </div>
-
 </main>
-
 <footer>
   <span class="no-break">
     mixpanel_flutter
-      1.3.1
+      2.5.0
   </span>
-
   
 </footer>
 
 
-
 <script src="static-assets/highlight.pack.js?v1"></script>
-<script src="static-assets/script.js?v1"></script>
-
-
+<script src="static-assets/docs.dart.js"></script>
 
 </body>
-
 </html>
 
