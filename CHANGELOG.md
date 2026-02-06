@@ -1,5 +1,13 @@
 #
 
+## [v2.5.0](https://github.com/mixpanel/mixpanel-flutter/tree/v2.5.0) (2026-02-06)
+
+### Enhancements
+
+- Feature Flags Support [\#209](https://github.com/mixpanel/mixpanel-flutter/pull/209)
+
+#
+
 ## [v2.4.4](https://github.com/mixpanel/mixpanel-flutter/tree/v2.4.4) (2025-06-03)
 
 ### Fixes
@@ -315,6 +323,8 @@ Please add the following snippet to your web/index.html inside <head></head> in 
     Report issues or give us any feedback is appreciated!
 * [integration guide](https://developer.mixpanel.com/docs/flutter)
 * [full API reference](https://mixpanel.github.io/mixpanel-flutter)
+
+
 
 
 
