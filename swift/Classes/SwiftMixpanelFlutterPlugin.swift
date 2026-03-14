@@ -168,6 +168,9 @@ public class SwiftMixpanelFlutterPlugin: NSObject, FlutterPlugin {
         case "updateFlagsContext":
             handleUpdateFlagsContext(call, result: result)
             break
+        case "loadFlags":
+            handleLoadFlags(call, result: result)
+            break
         default:
             result(FlutterMethodNotImplemented)
         }
@@ -644,8 +647,31 @@ public class SwiftMixpanelFlutterPlugin: NSObject, FlutterPlugin {
     }
 
     private func handleUpdateFlagsContext(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
-        NSLog("[Mixpanel] updateFlagsContext is not supported on this platform. Feature flags context must be set during initialization.")
-        result(nil)
+        guard let instance = instance else {
+            NSLog("[Mixpanel] updateFlagsContext called before Mixpanel was initialized")
+            result(nil)
+            return
+        }
+        let args = call.arguments as? [String: Any] ?? [:]
+        let context = args["context"] as? [String: Any] ?? [:]
+        instance.flags.setContext(context) {
+            result(nil)
+        }
+    }
+
+    private func handleLoadFlags(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+        guard let instance = instance else {
+            NSLog("[Mixpanel] loadFlags called before Mixpanel was initialized")
+            result(FlutterError(code: "LOAD_FLAGS_FAILED", message: "loadFlags called before Mixpanel was initialized", details: nil))
+            return
+        }
+        instance.flags.loadFlags { success in
+            if success {
+                result(nil)
+            } else {
+                result(FlutterError(code: "LOAD_FLAGS_FAILED", message: "Failed to load feature flags", details: nil))
+            }
+        }
     }
 
     private func mapToFlagVariant(_ map: [String: Any]?) -> MixpanelFlagVariant {

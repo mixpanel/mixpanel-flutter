@@ -199,6 +199,10 @@ class MixpanelFlutterPlugin {
       case "updateFlagsContext":
         handleUpdateFlagsContext(call);
         break;
+      case 'loadFlags':
+        debugPrint(
+          '[Mixpanel] loadFlags() is not supported on web. Use updateContext() to refresh flags.');
+        return null;
       default:
         throw PlatformException(
           code: 'Unimplemented',

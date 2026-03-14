@@ -985,6 +985,20 @@ void main() {
       );
     });
 
+    test('check loadFlags call', () async {
+      final flags = _mixpanel.getFeatureFlags();
+      await flags.loadFlags();
+      expect(
+        methodCall,
+        isMethodCall(
+          'loadFlags',
+          arguments: <String, dynamic>{
+            'token': 'test token',
+          },
+        ),
+      );
+    });
+
     test('feature flags methods with empty flagName are not called', () async {
       final flags = _mixpanel.getFeatureFlags();
       methodCall = null;

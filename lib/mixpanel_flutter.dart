@@ -1004,6 +1004,13 @@ class FeatureFlags {
       'options': _MixpanelHelper.ensureSerializableProperties(options),
     });
   }
+
+  /// Manually triggers a fresh fetch of feature flag variant assignments
+  /// from Mixpanel servers.
+  Future<void> loadFlags() async {
+    await _channel.invokeMethod<void>(
+        'loadFlags', <String, dynamic>{'token': _token});
+  }
 }
 
 class _MixpanelHelper {
