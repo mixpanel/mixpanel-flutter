@@ -9,6 +9,7 @@ public class SwiftMixpanelFlutterPlugin: NSObject, FlutterPlugin {
     var mixpanelProperties: [String: String]?
     let defaultFlushInterval = 60.0
     var trackAutomaticEvents: Bool?
+    var serverURL: String?
     
     public static func register(with registrar: FlutterPluginRegistrar) {
         let readWriter = MixpanelReaderWriter()
@@ -176,6 +177,9 @@ public class SwiftMixpanelFlutterPlugin: NSObject, FlutterPlugin {
         var instance = Mixpanel.getInstance(name: token)
         if instance == nil {
             instance = Mixpanel.initialize(token: token, trackAutomaticEvents: trackAutomaticEvents!, instanceName: token)
+            if let serverURL = self.serverURL {
+                instance?.serverURL = serverURL
+            }
         }
         
         return instance
@@ -184,6 +188,7 @@ public class SwiftMixpanelFlutterPlugin: NSObject, FlutterPlugin {
     private func handleSetServerURL(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
         let arguments = call.arguments as? [String: Any] ?? [String: Any]()
         let serverURL = arguments["serverURL"] as! String
+        self.serverURL = serverURL
         instance?.serverURL = serverURL
         result(nil)
     }
