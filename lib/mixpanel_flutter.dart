@@ -1007,6 +1007,15 @@ class FeatureFlags {
 
   /// Manually triggers a fresh fetch of feature flag variant assignments
   /// from Mixpanel servers.
+  ///
+  /// The returned [Future] completes when flags have been fetched and applied.
+  ///
+  /// Throws [PlatformException] if the fetch fails (e.g., network error).
+  /// This is intentional — unlike other SDK methods that fail silently,
+  /// `loadFlags` propagates errors so developers can implement kill-switch
+  /// scenarios and respond to flag loading failures.
+  ///
+  /// Not supported on web — logs a warning and completes immediately.
   Future<void> loadFlags() async {
     await _channel.invokeMethod<void>(
         'loadFlags', <String, dynamic>{'token': _token});

@@ -712,29 +712,29 @@ void main() {
     test('methods with empty string parameters are not called', () async {
       // Test that methods validate string parameters and don't invoke channel
       // when strings are empty (testing isValidString indirectly)
-      
+
       // Reset method call tracking
       methodCall = null;
-      
+
       // Try various methods with empty strings
       await _mixpanel.unregisterSuperProperty('');
       expect(methodCall, isNull); // Should not have called the method
-      
+
       _mixpanel.timeEvent('');
       expect(methodCall, isNull);
-      
+
       _mixpanel.eventElapsedTime('');
       expect(methodCall, isNull);
-      
+
       _mixpanel.setGroup('', 'groupId');
       expect(methodCall, isNull);
-      
+
       _mixpanel.addGroup('', 'groupId');
       expect(methodCall, isNull);
-      
+
       _mixpanel.removeGroup('', 'groupId');
       expect(methodCall, isNull);
-      
+
       _mixpanel.deleteGroup('', 'groupId');
       expect(methodCall, isNull);
     });
@@ -744,27 +744,27 @@ void main() {
       methodCall = null;
       _mixpanel.getPeople().set('', 'value');
       expect(methodCall, isNull);
-      
+
       methodCall = null;
       _mixpanel.getPeople().setOnce('', 'value');
       expect(methodCall, isNull);
-      
+
       methodCall = null;
       _mixpanel.getPeople().increment('', 1);
       expect(methodCall, isNull);
-      
+
       methodCall = null;
       _mixpanel.getPeople().append('', 'value');
       expect(methodCall, isNull);
-      
+
       methodCall = null;
       _mixpanel.getPeople().union('', ['value']);
       expect(methodCall, isNull);
-      
+
       methodCall = null;
       _mixpanel.getPeople().remove('', 'value');
       expect(methodCall, isNull);
-      
+
       methodCall = null;
       _mixpanel.getPeople().unset('');
       expect(methodCall, isNull);
@@ -772,23 +772,23 @@ void main() {
 
     test('Group methods with empty string parameters are not called', () {
       final group = _mixpanel.getGroup('company_id', 12345);
-      
+
       methodCall = null;
       group.set('', 'value');
       expect(methodCall, isNull);
-      
+
       methodCall = null;
       group.setOnce('', 'value');
       expect(methodCall, isNull);
-      
+
       methodCall = null;
       group.unset('');
       expect(methodCall, isNull);
-      
+
       methodCall = null;
       group.remove('', 'value');
       expect(methodCall, isNull);
-      
+
       methodCall = null;
       group.union('', ['value']);
       expect(methodCall, isNull);
@@ -799,27 +799,27 @@ void main() {
       methodCall = null;
       _mixpanel.track('');
       expect(methodCall, isNull);
-      
+
       // Test identify with empty distinctId
       methodCall = null;
       _mixpanel.identify('');
       expect(methodCall, isNull);
-      
+
       // Test alias with empty alias
       methodCall = null;
       _mixpanel.alias('', 'distinctId');
       expect(methodCall, isNull);
-      
+
       // Test alias with empty distinctId
       methodCall = null;
       _mixpanel.alias('alias', '');
       expect(methodCall, isNull);
-      
+
       // Test setServerURL with empty URL
       methodCall = null;
       _mixpanel.setServerURL('');
       expect(methodCall, isNull);
-      
+
       // Test trackWithGroups with empty event name
       methodCall = null;
       _mixpanel.trackWithGroups('', {'key': 'value'}, {'group': 'id'});
@@ -996,6 +996,36 @@ void main() {
             'token': 'test token',
           },
         ),
+      );
+    });
+
+    test('loadFlags completes successfully when native returns success', () async {
+      // The default mock handler returns null (success) for loadFlags
+      final flags = _mixpanel.getFeatureFlags();
+      // Should complete without throwing
+      await expectLater(flags.loadFlags(), completes);
+    });
+
+    test('loadFlags throws PlatformException when native returns error', () async {
+      // Override handler to return a FlutterError for loadFlags
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (MethodCall m) async {
+        methodCall = m;
+        if (m.method == 'loadFlags') {
+          throw PlatformException(
+            code: 'LOAD_FLAGS_FAILED',
+            message: 'Failed to load feature flags',
+          );
+        }
+        return null;
+      });
+
+      final flags = _mixpanel.getFeatureFlags();
+      expect(
+        () => flags.loadFlags(),
+        throwsA(isA<PlatformException>().having(
+          (e) => e.code, 'code', 'LOAD_FLAGS_FAILED',
+        )),
       );
     });
 

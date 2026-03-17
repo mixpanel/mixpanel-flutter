@@ -678,8 +678,13 @@ public class MixpanelFlutterPlugin implements FlutterPlugin, MethodCallHandler {
             result.success(null);
             return;
         }
-        mixpanel.getFlags().loadFlags();
-        result.success(null);
+        mixpanel.getFlags().loadFlags(success -> {
+            if (success) {
+                result.success(null);
+            } else {
+                result.error("LOAD_FLAGS_FAILED", "Failed to load feature flags", null);
+            }
+        });
     }
 
     private com.mixpanel.android.mpmetrics.MixpanelFlagVariant mapToFlagVariant(Map<String, Object> map) {
