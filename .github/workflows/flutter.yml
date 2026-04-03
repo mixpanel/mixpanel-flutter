@@ -19,7 +19,7 @@ jobs:
           java-version: "12.x"
       - uses: subosito/flutter-action@4389e6cbc6cb8a4b18c628ff96ff90be0e926aa8  # v1
         with:
-          flutter-version: "3.16.0"
+          flutter-version: "3.41.0"
       - run: flutter pub get
       - run: flutter test
       - run: flutter analyze --no-pub --no-current-package --no-fatal-infos lib
@@ -34,7 +34,7 @@ jobs:
           distribution: 'temurin'
       - uses: subosito/flutter-action@4389e6cbc6cb8a4b18c628ff96ff90be0e926aa8  # v1
         with:
-          flutter-version: "3.16.0"
+          flutter-version: "3.41.0"
       - name: Test Android integration
         working-directory: example
         run: flutter build apk
@@ -49,7 +49,7 @@ jobs:
           distribution: 'temurin'
       - uses: subosito/flutter-action@4389e6cbc6cb8a4b18c628ff96ff90be0e926aa8  # v1
         with:
-          flutter-version: "3.16.0"
+          flutter-version: "3.41.0"
       - name: Clean
         working-directory: example
         run: flutter clean
@@ -69,7 +69,7 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
       - uses: subosito/flutter-action@4389e6cbc6cb8a4b18c628ff96ff90be0e926aa8  # v1
         with:
-          flutter-version: "3.16.0"
+          flutter-version: "3.41.0"
       - name: Clean
         working-directory: example
         run: flutter clean
