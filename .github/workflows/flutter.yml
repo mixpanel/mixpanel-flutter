@@ -13,11 +13,8 @@ jobs:
   test-main-code:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@ee0669bd1cc54295c223e0bb666b733df41de1c5  # v2
-      - uses: actions/setup-java@b6e674f4b717d7b0ae3baee0fbe79f498905dfde  # v1
-        with:
-          java-version: "12.x"
-      - uses: subosito/flutter-action@4389e6cbc6cb8a4b18c628ff96ff90be0e926aa8  # v1
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+      - uses: ./.github/actions/setup-flutter
         with:
           flutter-version: "3.41.0"
       - run: flutter pub get
@@ -32,7 +29,7 @@ jobs:
         with:
           java-version: "17"
           distribution: 'temurin'
-      - uses: subosito/flutter-action@4389e6cbc6cb8a4b18c628ff96ff90be0e926aa8  # v1
+      - uses: ./.github/actions/setup-flutter
         with:
           flutter-version: "3.41.0"
       - name: Test Android integration
@@ -47,7 +44,7 @@ jobs:
         with:
           java-version: "17"
           distribution: 'temurin'
-      - uses: subosito/flutter-action@4389e6cbc6cb8a4b18c628ff96ff90be0e926aa8  # v1
+      - uses: ./.github/actions/setup-flutter
         with:
           flutter-version: "3.41.0"
       - name: Clean
@@ -67,7 +64,7 @@ jobs:
     runs-on: macos-26
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
-      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2  # v2.23.0
+      - uses: ./.github/actions/setup-flutter
         with:
           flutter-version: "3.41.0"
       - name: Clean

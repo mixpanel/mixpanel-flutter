@@ -1,0 +1,61 @@
+# Inlined from subosito/flutter-action@fd55f4c5af5b953cc57a2be44cb082c8f6635e8e (v2.21.0)
+# to avoid its unpinned transitive use of actions/cache@v4
+name: Set up Flutter
+description: Setup Flutter SDK with optional caching (all action refs pinned to SHA)
+
+inputs:
+  channel:
+    description: The Flutter build release channel
+    required: false
+    default: stable
+  flutter-version:
+    description: The Flutter version to make available on the path
+    required: false
+    default: ""
+  cache:
+    description: Cache the Flutter SDK and pub dependencies
+    required: false
+    default: "true"
+
+runs:
+  using: composite
+  steps:
+    - name: Download flutter-action setup script
+      shell: bash
+      run: |
+        curl -sSL -o "$RUNNER_TEMP/flutter-setup.sh" \
+          "https://raw.githubusercontent.com/subosito/flutter-action/fd55f4c5af5b953cc57a2be44cb082c8f6635e8e/setup.sh"
+        chmod +x "$RUNNER_TEMP/flutter-setup.sh"
+
+    - name: Resolve Flutter version and cache keys
+      id: flutter-action
+      shell: bash
+      run: |
+        "$RUNNER_TEMP/flutter-setup.sh" -p \
+          -n '${{ inputs.flutter-version }}' \
+          -a '${{ runner.arch }}' \
+          ${{ inputs.channel }}
+
+    - name: Cache Flutter SDK
+      if: ${{ inputs.cache == 'true' }}
+      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4
+      with:
+        path: ${{ steps.flutter-action.outputs.CACHE-PATH }}
+        key: ${{ steps.flutter-action.outputs.CACHE-KEY }}
+
+    - name: Cache pub dependencies
+      if: ${{ inputs.cache == 'true' }}
+      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4
+      with:
+        path: ${{ steps.flutter-action.outputs.PUB-CACHE-PATH }}
+        key: ${{ steps.flutter-action.outputs.PUB-CACHE-KEY }}-${{ hashFiles('**/pubspec.lock') }}
+
+    - name: Install Flutter SDK
+      shell: bash
+      run: |
+        "$RUNNER_TEMP/flutter-setup.sh" \
+          -n '${{ steps.flutter-action.outputs.VERSION }}' \
+          -a '${{ steps.flutter-action.outputs.ARCHITECTURE }}' \
+          -c '${{ steps.flutter-action.outputs.CACHE-PATH }}' \
+          -d '${{ steps.flutter-action.outputs.PUB-CACHE-PATH }}' \
+          ${{ steps.flutter-action.outputs.CHANNEL }}
