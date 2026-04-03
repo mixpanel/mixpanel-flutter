@@ -521,8 +521,7 @@ void main() {
           'append',
           arguments: <String, dynamic>{
             'token': 'test token',
-            'name': 'a',
-            'value': 1.2,
+            'properties': {'a': 1.2},
           },
         ),
       );
@@ -536,8 +535,7 @@ void main() {
           'union',
           arguments: <String, dynamic>{
             'token': 'test token',
-            'name': 'a',
-            'value': ['goodbye', 'hi'],
+            'properties': {'a': ['goodbye', 'hi']},
           },
         ),
       );
@@ -551,8 +549,7 @@ void main() {
           'remove',
           arguments: <String, dynamic>{
             'token': 'test token',
-            'name': 'c',
-            'value': 5,
+            'properties': {'c': 5},
           },
         ),
       );

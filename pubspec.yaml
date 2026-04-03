@@ -32,6 +32,8 @@ flutter:
         pluginClass: MixpanelFlutterPlugin
       ios:
         pluginClass: MixpanelFlutterPlugin
+      macos:
+        pluginClass: MixpanelFlutterPlugin
       web:
         pluginClass: MixpanelFlutterPlugin
         fileName: mixpanel_flutter_web.dart

@@ -1,0 +1,40 @@
+PODS:
+  - FlutterMacOS (1.0.0)
+  - json-enum (1.2.3)
+  - jsonlogic (1.2.4):
+    - json-enum (~> 1.2.3)
+  - Mixpanel-swift (6.1.0):
+    - jsonlogic (~> 1.2.0)
+    - Mixpanel-swift/Complete (= 6.1.0)
+  - Mixpanel-swift/Complete (6.1.0):
+    - jsonlogic (~> 1.2.0)
+  - mixpanel_flutter (2.5.0):
+    - FlutterMacOS
+    - Mixpanel-swift (~> 6.0)
+
+DEPENDENCIES:
+  - FlutterMacOS (from `Flutter/ephemeral`)
+  - mixpanel_flutter (from `Flutter/ephemeral/.symlinks/plugins/mixpanel_flutter/macos`)
+
+SPEC REPOS:
+  trunk:
+    - json-enum
+    - jsonlogic
+    - Mixpanel-swift
+
+EXTERNAL SOURCES:
+  FlutterMacOS:
+    :path: Flutter/ephemeral
+  mixpanel_flutter:
+    :path: Flutter/ephemeral/.symlinks/plugins/mixpanel_flutter/macos
+
+SPEC CHECKSUMS:
+  FlutterMacOS: d0db08ddef1a9af05a5ec4b724367152bb0500b1
+  json-enum: 57ad746d2f0d7852796e9aa50267bd84a778222e
+  jsonlogic: 006f892470384401b8ca5b5d8d4cdadb3a0d5c9b
+  Mixpanel-swift: 62deaa6f31669ae980c4a1470795213d8ffcd709
+  mixpanel_flutter: b7c3b47d578d50eee92f70a786a5c3dae33a3af0
+
+PODFILE CHECKSUM: 54d867c82ac51cbd61b565781b9fada492027009
+
+COCOAPODS: 1.16.2

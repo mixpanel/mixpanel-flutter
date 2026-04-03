@@ -647,7 +647,7 @@ class People {
   ///  * [value] the new value that will appear at the end of the property's list
   void append(String name, dynamic value) {
     if (_MixpanelHelper.isValidString(name)) {
-      if (kIsWeb || Platform.isIOS) {
+      if (kIsWeb || Platform.isIOS || Platform.isMacOS) {
         Map<String, dynamic> properties = {name: value};
         _channel.invokeMethod<void>('append',
             <String, dynamic>{'token': _token, 'properties': _MixpanelHelper.ensureSerializableProperties(properties)});
@@ -672,7 +672,7 @@ class People {
   /// * [value] an array of values to add to the property value if not already present
   void union(String name, List<dynamic> value) {
     if (_MixpanelHelper.isValidString(name)) {
-      if (kIsWeb || Platform.isIOS) {
+      if (kIsWeb || Platform.isIOS || Platform.isMacOS) {
         Map<String, dynamic> properties = {name: value};
         _channel.invokeMethod<void>('union',
             <String, dynamic>{'token': _token, 'properties': _MixpanelHelper.ensureSerializableProperties(properties)});
@@ -697,7 +697,7 @@ class People {
   /// * [value] the value that will be removed from the property's list
   void remove(String name, dynamic value) {
     if (_MixpanelHelper.isValidString(name)) {
-      if (kIsWeb || Platform.isIOS) {
+      if (kIsWeb || Platform.isIOS || Platform.isMacOS) {
         Map<String, dynamic> properties = {name: value};
         _channel.invokeMethod<void>('remove',
             <String, dynamic>{'token': _token, 'properties': _MixpanelHelper.ensureSerializableProperties(properties)});

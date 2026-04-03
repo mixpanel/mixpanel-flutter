@@ -59,3 +59,23 @@ jobs:
       - name: Test iOS integration
         working-directory: example
         run: flutter build ios --debug --simulator --no-codesign
+
+  test-macos-integration:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+      - uses: subosito/flutter-action@4389e6cbc6cb8a4b18c628ff96ff90be0e926aa8  # v1
+        with:
+          flutter-version: "3.16.0"
+      - name: Clean
+        working-directory: example
+        run: flutter clean
+      - name: Flutter pub get
+        working-directory: example
+        run: flutter pub get
+      - name: CocoaPods update
+        working-directory: example/macos
+        run: pod repo update
+      - name: Test macOS integration
+        working-directory: example
+        run: flutter build macos --debug

@@ -27,7 +27,7 @@ The Mixpanel Flutter SDK implements a federated plugin architecture that provide
 │  - Type conversion  │ - Type handler│  - safeJsify()      │
 ├─────────────────────┼───────────────┼──────────────────────┤
 │ Mixpanel Android    │ Mixpanel-swift│  Mixpanel JS        │
-│    SDK v8.0.3       │   SDK v5.0.0  │   (CDN loaded)      │
+│    SDK v8.0.3       │   SDK v6.1.0  │   (CDN loaded)      │
 └─────────────────────┴───────────────┴──────────────────────┘
                               ↓
                     Mixpanel Analytics Servers
