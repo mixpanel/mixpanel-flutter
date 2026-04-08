@@ -659,17 +659,13 @@ public class MixpanelFlutterPlugin implements FlutterPlugin, MethodCallHandler {
             result.success(null);
             return;
         }
-        // Note: The Android SDK does not support updating context after initialization.
-        // Context must be set via MixpanelOptions during getInstance().
-        // Calling loadFlags() to refresh flags with the current user identity.
         Map<String, Object> contextMap = call.<HashMap<String, Object>>argument("context");
-        if (contextMap != null && !contextMap.isEmpty()) {
-            android.util.Log.i("Mixpanel", "updateFlagsContext: Received context with keys " + contextMap.keySet() + ", but Android SDK does not support updating context after initialization. Context will be ignored. Call identify() and loadFlags() to refresh flags.");
-        } else {
-            android.util.Log.i("Mixpanel", "updateFlagsContext: Android SDK does not support updating context after initialization. Call identify() and loadFlags() to refresh flags.");
+        if (contextMap == null) {
+            contextMap = new HashMap<>();
         }
-        mixpanel.getFlags().loadFlags();
-        result.success(null);
+        mixpanel.getFlags().setContext(contextMap, success -> {
+            result.success(null);
+        });
     }
 
     private void handleLoadFlags(MethodCall call, Result result) {

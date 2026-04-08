@@ -123,4 +123,7 @@ external JSPromise flags_get_variant(String name, JSAny? fallback);
 external JSAny? flags_get_variant_sync(String name, JSAny? fallback);
 
 @JS('mixpanel.flags.update_context')
-external void flags_update_context(JSAny? context);
+external JSPromise flags_update_context(JSAny? context);
+
+@JS('mixpanel.flags.load_flags')
+external JSPromise flags_load_flags();
