@@ -202,19 +202,6 @@ public class SwiftMixpanelFlutterPlugin: NSObject, FlutterPlugin {
         result(nil)
     }
     
-    private func getMixpanelInstance(_ token: String) -> MixpanelInstance? {
-        if token.isEmpty {
-            return nil
-        }
-        
-        var instance = Mixpanel.getInstance(name: token)
-        if instance == nil {
-            instance = Mixpanel.initialize(token: token, trackAutomaticEvents: trackAutomaticEvents!, instanceName: token)
-        }
-        
-        return instance
-    }
-    
     private func handleSetServerURL(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
         let arguments = call.arguments as? [String: Any] ?? [String: Any]()
         let serverURL = arguments["serverURL"] as! String
@@ -442,7 +429,7 @@ public class SwiftMixpanelFlutterPlugin: NSObject, FlutterPlugin {
     }
     
     func mixpanelGroup(_ token: String, groupKey: String, groupID: Any) -> Group? {
-        guard let instance = getMixpanelInstance(token) else {
+        guard let instance = self.instance else {
             return nil
         }
         guard let mixpanelTypeGroupID = MixpanelTypeHandler.mixpanelTypeValue(groupID) else {
