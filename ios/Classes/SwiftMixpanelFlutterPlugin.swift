@@ -8,7 +8,6 @@ public class SwiftMixpanelFlutterPlugin: NSObject, FlutterPlugin {
     var token: String?
     var mixpanelProperties: [String: String]?
     let defaultFlushInterval = 60.0
-    var trackAutomaticEvents: Bool?
     
     public static func register(with registrar: FlutterPluginRegistrar) {
         let readWriter = MixpanelReaderWriter()
@@ -176,7 +175,6 @@ public class SwiftMixpanelFlutterPlugin: NSObject, FlutterPlugin {
         let superProperties = arguments["superProperties"] as? [String: Any]
         self.token = token
         let trackAutomaticEvents = arguments["trackAutomaticEvents"] as! Bool
-        self.trackAutomaticEvents = trackAutomaticEvents
 
         // Check for feature flags configuration
         var featureFlagsEnabled = false
@@ -200,19 +198,6 @@ public class SwiftMixpanelFlutterPlugin: NSObject, FlutterPlugin {
         instance = Mixpanel.initialize(options: options)
 
         result(nil)
-    }
-    
-    private func getMixpanelInstance(_ token: String) -> MixpanelInstance? {
-        if token.isEmpty {
-            return nil
-        }
-        
-        var instance = Mixpanel.getInstance(name: token)
-        if instance == nil {
-            instance = Mixpanel.initialize(token: token, trackAutomaticEvents: trackAutomaticEvents!, instanceName: token)
-        }
-        
-        return instance
     }
     
     private func handleSetServerURL(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
@@ -442,7 +427,15 @@ public class SwiftMixpanelFlutterPlugin: NSObject, FlutterPlugin {
     }
     
     func mixpanelGroup(_ token: String, groupKey: String, groupID: Any) -> Group? {
-        guard let instance = getMixpanelInstance(token) else {
+        guard let currentToken = self.token else {
+            NSLog("Mixpanel: `mixpanelGroup` failed: token not initialized")
+            return nil
+        }
+        guard currentToken == token else {
+            NSLog("Mixpanel: `mixpanelGroup` failed: token mismatch")
+            return nil
+        }
+        guard let instance = self.instance else {
             return nil
         }
         guard let mixpanelTypeGroupID = MixpanelTypeHandler.mixpanelTypeValue(groupID) else {
