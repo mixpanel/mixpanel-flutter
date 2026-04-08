@@ -985,6 +985,33 @@ void main() {
       );
     });
 
+    test('updateContext completes successfully when native returns success', () async {
+      final flags = _mixpanel.getFeatureFlags();
+      await expectLater(flags.updateContext({'user_tier': 'premium'}), completes);
+    });
+
+    test('updateContext throws PlatformException when native returns error', () async {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (MethodCall m) async {
+        methodCall = m;
+        if (m.method == 'updateFlagsContext') {
+          throw PlatformException(
+            code: 'UPDATE_CONTEXT_FAILED',
+            message: 'Failed to update feature flags context',
+          );
+        }
+        return null;
+      });
+
+      final flags = _mixpanel.getFeatureFlags();
+      expect(
+        () async => await flags.updateContext({'user_tier': 'premium'}),
+        throwsA(isA<PlatformException>().having(
+          (e) => e.code, 'code', 'UPDATE_CONTEXT_FAILED',
+        )),
+      );
+    });
+
     test('check loadFlags call', () async {
       final flags = _mixpanel.getFeatureFlags();
       await flags.loadFlags();
@@ -1022,7 +1049,7 @@ void main() {
 
       final flags = _mixpanel.getFeatureFlags();
       expect(
-        () => flags.loadFlags(),
+        () async => await flags.loadFlags(),
         throwsA(isA<PlatformException>().having(
           (e) => e.code, 'code', 'LOAD_FLAGS_FAILED',
         )),

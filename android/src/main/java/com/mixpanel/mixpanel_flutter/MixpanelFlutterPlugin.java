@@ -671,7 +671,7 @@ public class MixpanelFlutterPlugin implements FlutterPlugin, MethodCallHandler {
     private void handleLoadFlags(MethodCall call, Result result) {
         if (mixpanel == null) {
             android.util.Log.w("Mixpanel", "loadFlags called before Mixpanel was initialized");
-            result.success(null);
+            result.error("LOAD_FLAGS_FAILED", "loadFlags called before Mixpanel was initialized", null);
             return;
         }
         mixpanel.getFlags().loadFlags(success -> {
