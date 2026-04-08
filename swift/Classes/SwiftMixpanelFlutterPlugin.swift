@@ -1,6 +1,14 @@
+#if os(iOS)
 import Flutter
 import UIKit
+#elseif os(macOS)
+import FlutterMacOS
+#endif
 import Mixpanel
+
+#if os(macOS)
+public typealias MixpanelFlutterPlugin = SwiftMixpanelFlutterPlugin
+#endif
 
 public class SwiftMixpanelFlutterPlugin: NSObject, FlutterPlugin {
     
@@ -12,7 +20,11 @@ public class SwiftMixpanelFlutterPlugin: NSObject, FlutterPlugin {
     public static func register(with registrar: FlutterPluginRegistrar) {
         let readWriter = MixpanelReaderWriter()
         let codec = FlutterStandardMethodCodec(readerWriter: readWriter)
+        #if os(iOS)
         let channel = FlutterMethodChannel(name: "mixpanel_flutter", binaryMessenger: registrar.messenger(), codec: codec)
+        #elseif os(macOS)
+        let channel = FlutterMethodChannel(name: "mixpanel_flutter", binaryMessenger: registrar.messenger, codec: codec)
+        #endif
         let instance = SwiftMixpanelFlutterPlugin()
         registrar.addMethodCallDelegate(instance, channel: channel)
     }
@@ -633,10 +645,7 @@ public class SwiftMixpanelFlutterPlugin: NSObject, FlutterPlugin {
     }
 
     private func handleUpdateFlagsContext(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
-        // Note: The iOS SDK does not support updating feature flags context after initialization.
-        // Context must be set during Mixpanel.initialize() via MixpanelOptions.
-        // This method is a no-op on iOS but we log a warning to inform developers.
-        NSLog("[Mixpanel] updateFlagsContext is not supported on iOS. Feature flags context must be set during initialization.")
+        NSLog("[Mixpanel] updateFlagsContext is not supported on this platform. Feature flags context must be set during initialization.")
         result(nil)
     }
 
