@@ -1,0 +1,1 @@
+../../swift/Classes/SwiftMixpanelFlutterPlugin.swift
