@@ -427,8 +427,12 @@ public class SwiftMixpanelFlutterPlugin: NSObject, FlutterPlugin {
     }
     
     func mixpanelGroup(_ token: String, groupKey: String, groupID: Any) -> Group? {
-        guard let currentToken = self.token, currentToken == token else {
-            NSLog("Mixpanel: `mixpanelGroup` failed: token mismatch or token not initialized")
+        guard let currentToken = self.token else {
+            NSLog("Mixpanel: `mixpanelGroup` failed: token not initialized")
+            return nil
+        }
+        guard currentToken == token else {
+            NSLog("Mixpanel: `mixpanelGroup` failed: token mismatch")
             return nil
         }
         guard let instance = self.instance else {
