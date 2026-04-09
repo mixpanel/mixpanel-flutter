@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1, user-scalable=no">
-  <meta name="description" content="API docs for the hasOptedOutTracking method from the Mixpanel class, for the Dart programming language.">
-  <title>hasOptedOutTracking method - Mixpanel class - mixpanel_flutter library - Dart API</title>
+  <meta name="description" content="API docs for the flags_load_flags function from the mixpanel_js_bindings library, for the Dart programming language.">
+  <title>flags_load_flags function - mixpanel_js_bindings library - Dart API</title>
 
 
   
@@ -13,23 +13,22 @@
   <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:ital,wght@0,300;0,400;0,500;0,700;1,400&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet">
   
-  <link rel="stylesheet" href="../../static-assets/github.css?v1">
-  <link rel="stylesheet" href="../../static-assets/styles.css?v1">
-  <link rel="icon" href="../../static-assets/favicon.png?v1">
+  <link rel="stylesheet" href="../static-assets/github.css?v1">
+  <link rel="stylesheet" href="../static-assets/styles.css?v1">
+  <link rel="icon" href="../static-assets/favicon.png?v1">
   
 </head>
 
-<body data-base-href="../../" data-using-base-href="false" class="light-theme">
+<body data-base-href="../" data-using-base-href="false" class="light-theme">
 <div id="overlay-under-drawer"></div>
 <header id="title">
   <span id="sidenav-left-toggle" class="material-symbols-outlined" role="button" tabindex="0">menu</span>
   <ol class="breadcrumbs gt-separated dark hidden-xs">
-    <li><a href="../../index.html">mixpanel_flutter</a></li>
-    <li><a href="../../mixpanel_flutter/">mixpanel_flutter.dart</a></li>
-    <li><a href="../../mixpanel_flutter/Mixpanel-class.html">Mixpanel</a></li>
-    <li class="self-crumb">hasOptedOutTracking method</li>
+    <li><a href="../index.html">mixpanel_flutter</a></li>
+    <li><a href="../web_mixpanel_js_bindings/">web&#47;mixpanel_js_bindings.dart</a></li>
+    <li class="self-crumb">flags_load_flags function</li>
   </ol>
-  <div class="self-name">hasOptedOutTracking</div>
+  <div class="self-name">flags_load_flags</div>
   <form class="search navbar-right" role="search">
     <input type="text" id="search-box" autocomplete="off" disabled class="form-control typeahead" placeholder="Loading search...">
   </form>
@@ -43,36 +42,37 @@
   </button>
 </header>
 <main>
-<div
-    id="dartdoc-main-content"
-    class="main-content"
-    data-above-sidebar="mixpanel_flutter&#47;Mixpanel-class-sidebar.html"
-    data-below-sidebar="">
-    <div>
-<h1><span class="kind-method">hasOptedOutTracking</span> method 
+  <div
+      id="dartdoc-main-content"
+      class="main-content"
+      data-above-sidebar="web_mixpanel_js_bindings&#47;web_mixpanel_js_bindings-library-sidebar.html"
+      data-below-sidebar="">
+      <div>
+<h1><span class="kind-function">flags_load_flags</span> function 
+ 
 </h1></div>
 
     <section class="multi-line-signature">
-      
-<span class="returntype"><a href="https://api.flutter.dev/flutter/dart-core/Future-class.html">Future</a><span class="signature">&lt;<wbr><span class="type-parameter"><a href="https://api.flutter.dev/flutter/dart-core/bool-class.html">bool</a>?</span>&gt;</span></span>
-<span class="name ">hasOptedOutTracking</span>(<wbr>)
+        
+  <div>
+    <ol class="annotation-list">
+        <li>@<a href="https://api.flutter.dev/flutter/dart-js_interop/JS/JS.html">JS</a>(&#39;mixpanel.flags.load_flags&#39;)</li>
+    </ol>
+  </div>
+<span class="returntype"><a href="https://api.flutter.dev/flutter/dart-js_interop/JSPromise-extension-type.html">JSPromise</a><span class="signature">&lt;<wbr><span class="type-parameter"><a href="https://api.flutter.dev/flutter/dart-js_interop/JSAny-extension-type.html">JSAny</a>?</span>&gt;</span></span>
+<span class="name ">flags_load_flags</span>(<wbr>)
 
-      
+        
 
     </section>
     
-<section class="desc markdown">
-  <p>Will return true if the user has opted out from tracking.
-return true if user has opted out from tracking. Defaults to false.</p>
-</section>
 
 
     
 <section class="summary source-code" id="source">
   <h2><span>Implementation</span></h2>
-  <pre class="language-dart"><code class="language-dart">Future&lt;bool?&gt; hasOptedOutTracking() async {
-  return await _channel.invokeMethod&lt;bool&gt;(&#39;hasOptedOutTracking&#39;);
-}</code></pre>
+  <pre class="language-dart"><code class="language-dart">@JS(&#39;mixpanel.flags.load_flags&#39;)
+external JSPromise flags_load_flags();</code></pre>
 </section>
 
 
@@ -85,17 +85,16 @@ return true if user has opted out from tracking. Defaults to false.</p>
   </form>
 </header>
 <ol class="breadcrumbs gt-separated dark hidden-l" id="sidebar-nav">
-    <li><a href="../../index.html">mixpanel_flutter</a></li>
-    <li><a href="../../mixpanel_flutter/">mixpanel_flutter</a></li>
-    <li><a href="../../mixpanel_flutter/Mixpanel-class.html">Mixpanel</a></li>
-    <li class="self-crumb">hasOptedOutTracking method</li>
+    <li><a href="../index.html">mixpanel_flutter</a></li>
+    <li><a href="../web_mixpanel_js_bindings/">mixpanel_js_bindings</a></li>
+    <li class="self-crumb">flags_load_flags function</li>
 </ol>
 
-    <h5>Mixpanel class</h5>
+    <h5>mixpanel_js_bindings library</h5>
     <div id="dartdoc-sidebar-left-content"></div>
-  </div><!--/.sidebar-offcanvas-->
+  </div><!--/.sidebar-offcanvas-left-->
   <div id="dartdoc-sidebar-right" class="sidebar sidebar-offcanvas-right">
-</div><!--/.sidebar-offcanvas-->
+  </div><!--/.sidebar-offcanvas-->
 </main>
 <footer>
   <span class="no-break">
@@ -106,8 +105,8 @@ return true if user has opted out from tracking. Defaults to false.</p>
 </footer>
 
 
-<script src="../../static-assets/highlight.pack.js?v1"></script>
-<script src="../../static-assets/docs.dart.js"></script>
+<script src="../static-assets/highlight.pack.js?v1"></script>
+<script src="../static-assets/docs.dart.js"></script>
 
 </body>
 </html>

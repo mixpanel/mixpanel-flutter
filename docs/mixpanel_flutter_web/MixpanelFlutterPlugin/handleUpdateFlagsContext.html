@@ -54,7 +54,7 @@
 
     <section class="multi-line-signature">
       
-<span class="returntype">void</span>
+<span class="returntype"><a href="https://api.flutter.dev/flutter/dart-core/Future-class.html">Future</a><span class="signature">&lt;<wbr><span class="type-parameter">void</span>&gt;</span></span>
 <span class="name ">handleUpdateFlagsContext</span>(<wbr><ol class="parameter-list single-line"> <li><span class="parameter" id="handleUpdateFlagsContext-param-call"><span class="type-annotation"><a href="https://api.flutter.dev/flutter/services/MethodCall-class.html">MethodCall</a></span> <span class="parameter-name">call</span></span></li>
 </ol>)
 
@@ -67,10 +67,10 @@
     
 <section class="summary source-code" id="source">
   <h2><span>Implementation</span></h2>
-  <pre class="language-dart"><code class="language-dart">void handleUpdateFlagsContext(MethodCall call) {
+  <pre class="language-dart"><code class="language-dart">Future&lt;void&gt; handleUpdateFlagsContext(MethodCall call) async {
   Map&lt;Object?, Object?&gt; args = call.arguments as Map&lt;Object?, Object?&gt;;
   dynamic context = args[&#39;context&#39;];
-  flags_update_context(safeJsify(context ?? {}));
+  await flags_update_context(safeJsify(context ?? {})).toDart;
 }</code></pre>
 </section>
 
@@ -99,7 +99,7 @@
 <footer>
   <span class="no-break">
     mixpanel_flutter
-      2.5.0
+      2.6.0
   </span>
   
 </footer>
