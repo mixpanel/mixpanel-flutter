@@ -72,7 +72,7 @@ android/
     └── MixpanelFlutterHelper.java  # Validation helpers
 
 ios/
-├── mixpanel_flutter.podspec        # iOS package (Mixpanel-swift 5.1.0)
+├── mixpanel_flutter.podspec        # iOS package (Mixpanel-swift 6.1.0)
 └── Classes/
     ├── SwiftMixpanelFlutterPlugin.swift # iOS platform channel
     └── MixpanelTypeHandler.swift        # Type serialization
@@ -214,7 +214,7 @@ When adding a new SDK method:
 
 **Production**:
 - Mixpanel Android SDK 8.2.0 (in `android/build.gradle`)
-- Mixpanel-swift 5.1.0 (in `ios/mixpanel_flutter.podspec`)
+- Mixpanel-swift 6.1.0 (in `ios/mixpanel_flutter.podspec` and `macos/mixpanel_flutter.podspec`)
 - Mixpanel JS (loaded from CDN in web/index.html)
 
 **Dev**:

@@ -75,7 +75,7 @@ mixpanel-flutter/
 
 - **ios/mixpanel_flutter.podspec**: iOS pod configuration
   - iOS deployment target: 12.0
-  - Mixpanel-swift dependency: ~> 5.1.0
+  - Mixpanel-swift dependency: 6.1.0
   - Swift version: 5.0
 
 - **analysis_options.yaml**: Dart static analysis rules
