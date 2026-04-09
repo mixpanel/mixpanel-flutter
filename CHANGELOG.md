@@ -1,13 +1,16 @@
 #
 
-## Unreleased
+## [v2.6.0](https://github.com/mixpanel/mixpanel-flutter/tree/v2.6.0) (2026-04-09)
 
 ### Enhancements
 
+- Add OSX desktop support [\#220](https://github.com/mixpanel/mixpanel-flutter/pull/220)
 - Update Mixpanel Android SDK to 8.5.0
 - Update Mixpanel Swift SDK to 6.2.0
-- `updateContext()` now calls `setContext` on iOS and Android instead of being a no-op
-- `loadFlags()` now supported on web via `mixpanel.flags.load_flags()`
+- `updateContext()` now calls `setContext` on iOS and Android instead of being a no-op [\#210](https://github.com/mixpanel/mixpanel-flutter/pull/210)
+- `loadFlags()` now supported on web via `mixpanel.flags.load_flags()` [\#210](https://github.com/mixpanel/mixpanel-flutter/pull/210)
+- Refactor Mixpanel instance management in iOS Flutter plugin [\#221](https://github.com/mixpanel/mixpanel-flutter/pull/221)
+
 
 #
 
