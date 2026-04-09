@@ -16,7 +16,6 @@ def bump_version():
     subprocess.call('git add test/mixpanel_flutter_test.dart', shell=True)
     subprocess.call('git add ios/mixpanel_flutter.podspec', shell=True)
     subprocess.call('git commit -m "Version {}"'.format(args.new), shell=True)
-    subprocess.call('git push', shell=True)
 
 def replace_version(file_name, old_version, new_version):
     with open(file_name) as f:
@@ -28,11 +27,11 @@ def replace_version(file_name, old_version, new_version):
         f.write(file_str)
 
 def generate_docs():
+    subprocess.call('flutter pub get', shell=True)
     subprocess.call('flutter analyze --no-pub --no-current-package lib', shell=True)
     subprocess.call('dartdoc --output docs', shell=True)
     subprocess.call('git add docs', shell=True)
     subprocess.call('git commit -m "Update docs"', shell=True)
-    subprocess.call('git push', shell=True)
 
 def add_tag():
     subprocess.call('git tag -a v{} -m "version {}"'.format(args.new, args.new), shell=True)
@@ -48,13 +47,24 @@ def clean_up():
     subprocess.call('cd example', shell=True)
     subprocess.call('flutter clean', shell=True)
 
-def main():
+def create_release_pr():
+    branch = 'release/{}'.format(args.new)
+    subprocess.call('git checkout -b {}'.format(branch), shell=True)
     bump_version()
     generate_docs()
-    add_tag()
+    subprocess.call('git push -u origin {}'.format(branch), shell=True)
+    subprocess.call('gh pr create --title "Release {}" --body "Version bump to {}"'.format(args.new, args.new), shell=True)
+
+def main():
+    create_release_pr()
     publish_dry_run()
     clean_up()
-    print("Congratulations! " + args.new + " is now ready to be released!")
+    print("")
+    print("Release {} PR created.".format(args.new))
+    print("After the PR is merged, tag the release:")
+    print("  git checkout main && git pull")
+    print("  git tag -a v{} -m \"version {}\"".format(args.new, args.new))
+    print("  git push origin --tags")
 
 if __name__ == '__main__':
     main()
