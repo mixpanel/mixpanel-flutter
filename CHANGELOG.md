@@ -1,6 +1,6 @@
 #
 
-## Unreleased
+## [v2.6.0](https://github.com/mixpanel/mixpanel-flutter/tree/v2.6.0) (2026-04-09)
 
 ### Enhancements
 
