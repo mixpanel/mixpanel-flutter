@@ -983,19 +983,13 @@ class FeatureFlags {
   /// Update the context used for feature flag evaluation.
   ///
   /// * [context] A Map of context properties to use for flag evaluation.
+  ///   This entirely replaces any previously set custom context.
   /// * [options] Reserved for future use. Currently not implemented by the
   ///   native SDKs and will be ignored.
   ///
-  /// Platform behavior:
-  /// - Web: the context is forwarded to the underlying Mixpanel SDK, which may
-  ///   use it for subsequent feature flag evaluation and refetching.
-  /// - Mobile (iOS/Android): the current native implementations treat
-  ///   `updateFlagsContext` as unsupported / a no-op (iOS logs a warning;
-  ///   Android does not apply the passed context). On these platforms, calling
-  ///   this method will not change how flags are evaluated.
-  ///
-  /// Do not rely on this method changing feature flag behavior on platforms
-  /// where the underlying SDK does not yet support updating the flags context.
+  /// After setting the new context, the SDK automatically re-fetches flags
+  /// from Mixpanel servers. The returned [Future] completes when the
+  /// re-fetch is done.
   Future<void> updateContext(Map<String, dynamic> context,
       {Map<String, dynamic>? options}) async {
     await _channel.invokeMethod<void>('updateFlagsContext', <String, dynamic>{
@@ -1003,6 +997,20 @@ class FeatureFlags {
       'context': _MixpanelHelper.ensureSerializableProperties(context),
       'options': _MixpanelHelper.ensureSerializableProperties(options),
     });
+  }
+
+  /// Manually triggers a fresh fetch of feature flag variant assignments
+  /// from Mixpanel servers.
+  ///
+  /// The returned [Future] completes when flags have been fetched and applied.
+  ///
+  /// On mobile (iOS/Android), throws [PlatformException] if the fetch fails
+  /// (e.g., network error). This is intentional — unlike other SDK methods
+  /// that fail silently, `loadFlags` propagates errors so developers can
+  /// implement kill-switch scenarios and respond to flag loading failures.
+  Future<void> loadFlags() async {
+    await _channel.invokeMethod<void>(
+        'loadFlags', <String, dynamic>{'token': _token});
   }
 }
 

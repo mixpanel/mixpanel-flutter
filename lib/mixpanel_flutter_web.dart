@@ -197,8 +197,9 @@ class MixpanelFlutterPlugin {
       case "isEnabled":
         return handleIsEnabled(call);
       case "updateFlagsContext":
-        handleUpdateFlagsContext(call);
-        break;
+        return handleUpdateFlagsContext(call);
+      case 'loadFlags':
+        return handleLoadFlags();
       default:
         throw PlatformException(
           code: 'Unimplemented',
@@ -535,10 +536,14 @@ class MixpanelFlutterPlugin {
     }
   }
 
-  void handleUpdateFlagsContext(MethodCall call) {
+  Future<void> handleUpdateFlagsContext(MethodCall call) async {
     Map<Object?, Object?> args = call.arguments as Map<Object?, Object?>;
     dynamic context = args['context'];
-    flags_update_context(safeJsify(context ?? {}));
+    await flags_update_context(safeJsify(context ?? {})).toDart;
+  }
+
+  Future<void> handleLoadFlags() async {
+    await flags_load_flags().toDart;
   }
 
   Map<String, dynamic> _jsVariantToMap(JSAny? jsResult, Map<Object?, Object?> fallbackMap) {

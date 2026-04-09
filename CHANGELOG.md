@@ -1,5 +1,16 @@
 #
 
+## Unreleased
+
+### Enhancements
+
+- Update Mixpanel Android SDK to 8.5.0
+- Update Mixpanel Swift SDK to 6.2.0
+- `updateContext()` now calls `setContext` on iOS and Android instead of being a no-op
+- `loadFlags()` now supported on web via `mixpanel.flags.load_flags()`
+
+#
+
 ## [v2.5.0](https://github.com/mixpanel/mixpanel-flutter/tree/v2.5.0) (2026-02-06)
 
 ### Enhancements

@@ -3,14 +3,14 @@ PODS:
   - json-enum (1.2.3)
   - jsonlogic (1.2.4):
     - json-enum (~> 1.2.3)
-  - Mixpanel-swift (6.1.0):
+  - Mixpanel-swift (6.2.0):
     - jsonlogic (~> 1.2.0)
-    - Mixpanel-swift/Complete (= 6.1.0)
-  - Mixpanel-swift/Complete (6.1.0):
+    - Mixpanel-swift/Complete (= 6.2.0)
+  - Mixpanel-swift/Complete (6.2.0):
     - jsonlogic (~> 1.2.0)
   - mixpanel_flutter (2.5.0):
     - FlutterMacOS
-    - Mixpanel-swift (= 6.1.0)
+    - Mixpanel-swift (= 6.2.0)
 
 DEPENDENCIES:
   - FlutterMacOS (from `Flutter/ephemeral`)
@@ -32,8 +32,8 @@ SPEC CHECKSUMS:
   FlutterMacOS: d0db08ddef1a9af05a5ec4b724367152bb0500b1
   json-enum: 57ad746d2f0d7852796e9aa50267bd84a778222e
   jsonlogic: 006f892470384401b8ca5b5d8d4cdadb3a0d5c9b
-  Mixpanel-swift: 62deaa6f31669ae980c4a1470795213d8ffcd709
-  mixpanel_flutter: fd5d5cb3e60b82240d6df2df722bc31aba005cea
+  Mixpanel-swift: 9b4d920ceaf40f6145ca9fd84d4acca49df44a5e
+  mixpanel_flutter: c98ceffc38232cc29c09c3ded3d1cb32acc1955e
 
 PODFILE CHECKSUM: 54d867c82ac51cbd61b565781b9fada492027009
 

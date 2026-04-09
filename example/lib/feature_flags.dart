@@ -162,6 +162,20 @@ Actual:
             ),
           ),
           SizedBox(
+            height: 20,
+          ),
+          SizedBox(
+            width: MediaQuery.of(context).size.width * 0.65,
+            child: MixpanelButton(
+              text: 'Load Flags',
+              onPressed: () async {
+                await _flags.loadFlags();
+                _showAlert(context, "Load Flags",
+                    "Flags reload triggered successfully");
+              },
+            ),
+          ),
+          SizedBox(
             height: 40,
           ),
         ],
