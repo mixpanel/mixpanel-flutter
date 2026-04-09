@@ -183,8 +183,9 @@ Note: Check the "federated" architecture for a new way of doing this:
     case &quot;isEnabled&quot;:
       return handleIsEnabled(call);
     case &quot;updateFlagsContext&quot;:
-      handleUpdateFlagsContext(call);
-      break;
+      return handleUpdateFlagsContext(call);
+    case &#39;loadFlags&#39;:
+      return handleLoadFlags();
     default:
       throw PlatformException(
         code: &#39;Unimplemented&#39;,
@@ -220,7 +221,7 @@ Note: Check the "federated" architecture for a new way of doing this:
 <footer>
   <span class="no-break">
     mixpanel_flutter
-      2.5.0
+      2.6.0
   </span>
   
 </footer>

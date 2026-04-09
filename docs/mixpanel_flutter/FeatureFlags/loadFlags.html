@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1, user-scalable=no">
-  <meta name="description" content="API docs for the hasOptedOutTracking method from the Mixpanel class, for the Dart programming language.">
-  <title>hasOptedOutTracking method - Mixpanel class - mixpanel_flutter library - Dart API</title>
+  <meta name="description" content="API docs for the loadFlags method from the FeatureFlags class, for the Dart programming language.">
+  <title>loadFlags method - FeatureFlags class - mixpanel_flutter library - Dart API</title>
 
 
   
@@ -26,10 +26,10 @@
   <ol class="breadcrumbs gt-separated dark hidden-xs">
     <li><a href="../../index.html">mixpanel_flutter</a></li>
     <li><a href="../../mixpanel_flutter/">mixpanel_flutter.dart</a></li>
-    <li><a href="../../mixpanel_flutter/Mixpanel-class.html">Mixpanel</a></li>
-    <li class="self-crumb">hasOptedOutTracking method</li>
+    <li><a href="../../mixpanel_flutter/FeatureFlags-class.html">FeatureFlags</a></li>
+    <li class="self-crumb">loadFlags method</li>
   </ol>
-  <div class="self-name">hasOptedOutTracking</div>
+  <div class="self-name">loadFlags</div>
   <form class="search navbar-right" role="search">
     <input type="text" id="search-box" autocomplete="off" disabled class="form-control typeahead" placeholder="Loading search...">
   </form>
@@ -46,32 +46,38 @@
 <div
     id="dartdoc-main-content"
     class="main-content"
-    data-above-sidebar="mixpanel_flutter&#47;Mixpanel-class-sidebar.html"
+    data-above-sidebar="mixpanel_flutter&#47;FeatureFlags-class-sidebar.html"
     data-below-sidebar="">
     <div>
-<h1><span class="kind-method">hasOptedOutTracking</span> method 
+<h1><span class="kind-method">loadFlags</span> method 
 </h1></div>
 
     <section class="multi-line-signature">
       
-<span class="returntype"><a href="https://api.flutter.dev/flutter/dart-core/Future-class.html">Future</a><span class="signature">&lt;<wbr><span class="type-parameter"><a href="https://api.flutter.dev/flutter/dart-core/bool-class.html">bool</a>?</span>&gt;</span></span>
-<span class="name ">hasOptedOutTracking</span>(<wbr>)
+<span class="returntype"><a href="https://api.flutter.dev/flutter/dart-core/Future-class.html">Future</a><span class="signature">&lt;<wbr><span class="type-parameter">void</span>&gt;</span></span>
+<span class="name ">loadFlags</span>(<wbr>)
 
       
 
     </section>
     
 <section class="desc markdown">
-  <p>Will return true if the user has opted out from tracking.
-return true if user has opted out from tracking. Defaults to false.</p>
+  <p>Manually triggers a fresh fetch of feature flag variant assignments
+from Mixpanel servers.</p>
+<p>The returned <a href="https://api.flutter.dev/flutter/dart-core/Future-class.html">Future</a> completes when flags have been fetched and applied.</p>
+<p>On mobile (iOS/Android), throws <a href="https://api.flutter.dev/flutter/services/PlatformException-class.html">PlatformException</a> if the fetch fails
+(e.g., network error). This is intentional — unlike other SDK methods
+that fail silently, <code>loadFlags</code> propagates errors so developers can
+implement kill-switch scenarios and respond to flag loading failures.</p>
 </section>
 
 
     
 <section class="summary source-code" id="source">
   <h2><span>Implementation</span></h2>
-  <pre class="language-dart"><code class="language-dart">Future&lt;bool?&gt; hasOptedOutTracking() async {
-  return await _channel.invokeMethod&lt;bool&gt;(&#39;hasOptedOutTracking&#39;);
+  <pre class="language-dart"><code class="language-dart">Future&lt;void&gt; loadFlags() async {
+  await _channel.invokeMethod&lt;void&gt;(
+      &#39;loadFlags&#39;, &lt;String, dynamic&gt;{&#39;token&#39;: _token});
 }</code></pre>
 </section>
 
@@ -87,11 +93,11 @@ return true if user has opted out from tracking. Defaults to false.</p>
 <ol class="breadcrumbs gt-separated dark hidden-l" id="sidebar-nav">
     <li><a href="../../index.html">mixpanel_flutter</a></li>
     <li><a href="../../mixpanel_flutter/">mixpanel_flutter</a></li>
-    <li><a href="../../mixpanel_flutter/Mixpanel-class.html">Mixpanel</a></li>
-    <li class="self-crumb">hasOptedOutTracking method</li>
+    <li><a href="../../mixpanel_flutter/FeatureFlags-class.html">FeatureFlags</a></li>
+    <li class="self-crumb">loadFlags method</li>
 </ol>
 
-    <h5>Mixpanel class</h5>
+    <h5>FeatureFlags class</h5>
     <div id="dartdoc-sidebar-left-content"></div>
   </div><!--/.sidebar-offcanvas-->
   <div id="dartdoc-sidebar-right" class="sidebar sidebar-offcanvas-right">

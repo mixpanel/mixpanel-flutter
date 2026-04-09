@@ -66,21 +66,14 @@
 <section class="desc markdown">
   <p>Update the context used for feature flag evaluation.</p>
 <ul>
-<li><code>context</code> A Map of context properties to use for flag evaluation.</li>
+<li><code>context</code> A Map of context properties to use for flag evaluation.
+This entirely replaces any previously set custom context.</li>
 <li><code>options</code> Reserved for future use. Currently not implemented by the
 native SDKs and will be ignored.</li>
 </ul>
-<p>Platform behavior:</p>
-<ul>
-<li>Web: the context is forwarded to the underlying Mixpanel SDK, which may
-use it for subsequent feature flag evaluation and refetching.</li>
-<li>Mobile (iOS/Android): the current native implementations treat
-<code>updateFlagsContext</code> as unsupported / a no-op (iOS logs a warning;
-Android does not apply the passed context). On these platforms, calling
-this method will not change how flags are evaluated.</li>
-</ul>
-<p>Do not rely on this method changing feature flag behavior on platforms
-where the underlying SDK does not yet support updating the flags context.</p>
+<p>After setting the new context, the SDK automatically re-fetches flags
+from Mixpanel servers. The returned <a href="https://api.flutter.dev/flutter/dart-core/Future-class.html">Future</a> completes when the
+re-fetch is done.</p>
 </section>
 
 
@@ -122,7 +115,7 @@ where the underlying SDK does not yet support updating the flags context.</p>
 <footer>
   <span class="no-break">
     mixpanel_flutter
-      2.5.0
+      2.6.0
   </span>
   
 </footer>
