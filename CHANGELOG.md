@@ -1,5 +1,19 @@
 #
 
+## [v2.6.1](https://github.com/mixpanel/mixpanel-flutter/tree/v2.6.1) (2026-04-15)
+
+### Enhancements
+
+- Update Mixpanel Android SDK to 8.5.1
+
+### Fixes
+
+- Feature Flags will auto load on inititialization (within Android SDK)
+- Feature Flags first time event track fix (within Android SDK)
+- Feature Flags proper track() and getVariant() sequential ordering (within Android SDK)
+
+
+
 ## [v2.6.0](https://github.com/mixpanel/mixpanel-flutter/tree/v2.6.0) (2026-04-09)
 
 ### Enhancements
