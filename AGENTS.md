@@ -11,7 +11,7 @@ This is the official Mixpanel Flutter SDK - a Flutter plugin providing analytics
 ### Key Technologies
 - **Flutter/Dart**: Core SDK implementation
 - **Platform Channels**: Communication between Dart and native code
-- **Native SDKs**: Mixpanel-Android (v8.0.3), Mixpanel-Swift (6.1.0), Mixpanel-JS (CDN)
+- **Native SDKs**: Mixpanel-Android (v8.5.1), Mixpanel-Swift (6.1.0), Mixpanel-JS (CDN)
 - **Custom Serialization**: MixpanelMessageCodec for complex types
 - **Testing**: Flutter unit tests with mocked platform channels
 
