@@ -10,7 +10,7 @@ PODS:
   - Mixpanel-swift/Complete (6.3.0):
     - jsonlogic (~> 1.2.0)
     - MixpanelSwiftCommon (~> 1.0.0)
-  - mixpanel_flutter (2.5.0):
+  - mixpanel_flutter (2.6.2):
     - FlutterMacOS
     - Mixpanel-swift (= 6.3.0)
   - MixpanelSwiftCommon (1.0.0)

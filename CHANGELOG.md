@@ -1,5 +1,15 @@
 #
 
+## [v2.6.2](https://github.com/mixpanel/mixpanel-flutter/tree/v2.6.2) (2026-04-17)
+
+### Enhancements
+
+- Update Mixpanel Swift SDK to 6.3.0
+
+### Fixes
+
+- Feature Flags proper track() and getVariant() sequential ordering (within Swift SDK)
+
 ## [v2.6.1](https://github.com/mixpanel/mixpanel-flutter/tree/v2.6.1) (2026-04-15)
 
 ### Enhancements
