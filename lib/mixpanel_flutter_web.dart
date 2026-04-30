@@ -571,7 +571,10 @@ class MixpanelFlutterPlugin {
       debugPrint('[Mixpanel] getAllVariants: falling back to mixpanel.flags.flags internal map peek');
       final raw = flags_internal_map;
       debugPrint('[Mixpanel] getAllVariants: flags_internal_map is ${raw == null ? 'null' : 'present'}');
-      final converted = _convertJsFlagsMap(raw);
+      // mixpanel.flags.flags is a JS Map; dartify() treats JS Map/Set as opaque,
+      // so flatten to a plain object first via Object.fromEntries(Array.from(map)).
+      final plain = raw == null ? null : object_from_entries(array_from(raw));
+      final converted = _convertJsFlagsMap(plain);
       debugPrint('[Mixpanel] getAllVariants: fallback path returned ${converted.length} variants');
       return converted;
     } catch (e) {

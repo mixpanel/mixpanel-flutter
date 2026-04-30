@@ -136,3 +136,11 @@ external JSAny? get flags_internal_map;
 // mixpanel-js builds that don't yet expose it. Can be casted to a JSFunction and invoked after confirming it is one.
 @JS('mixpanel.flags.get_all_variants')
 external JSAny? get flags_get_all_variants;
+
+// JS built-ins used to convert a JS `Map` instance to a plain object so it
+// dartifies into a Dart Map. `dartify()` treats JS `Map`/`Set` as opaque.
+@JS('Object.fromEntries')
+external JSObject object_from_entries(JSAny entries);
+
+@JS('Array.from')
+external JSArray array_from(JSAny iterable);
