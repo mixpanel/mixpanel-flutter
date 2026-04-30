@@ -559,12 +559,21 @@ class MixpanelFlutterPlugin {
   Future<Map<String, Map<String, dynamic>>> handleGetAllVariants() async {
     try {
       final fn = flags_get_all_variants;
+      debugPrint('[Mixpanel] getAllVariants: flags_get_all_variants is ${fn == null ? 'null' : 'present, typeof=${fn.typeofEquals('function') ? 'function' : 'non-function'}'}');
       if (fn != null && fn.typeofEquals('function')) {
+        debugPrint('[Mixpanel] getAllVariants: using public mixpanel.flags.get_all_variants() path');
         final promise = (fn as JSFunction).callAsFunction() as JSPromise;
         final jsResult = await promise.toDart;
-        return _convertJsFlagsMap(jsResult);
+        final converted = _convertJsFlagsMap(jsResult);
+        debugPrint('[Mixpanel] getAllVariants: public path returned ${converted.length} variants');
+        return converted;
       }
-      return _convertJsFlagsMap(flags_internal_map);
+      debugPrint('[Mixpanel] getAllVariants: falling back to mixpanel.flags.flags internal map peek');
+      final raw = flags_internal_map;
+      debugPrint('[Mixpanel] getAllVariants: flags_internal_map is ${raw == null ? 'null' : 'present'}');
+      final converted = _convertJsFlagsMap(raw);
+      debugPrint('[Mixpanel] getAllVariants: fallback path returned ${converted.length} variants');
+      return converted;
     } catch (e) {
       debugPrint('[Mixpanel] getAllVariants failed with error: $e, returning empty map');
       return <String, Map<String, dynamic>>{};
