@@ -548,10 +548,7 @@ class MixpanelFlutterPlugin {
     await flags_load_flags().toDart;
   }
 
-  /// Reads the underlying `mixpanel.flags.flags` Map (the FeatureFlagManager's
-  /// loaded variants) and returns a Dart map with the wire-format variant
-  /// shape (camelCase keys) so the Dart side can hydrate `MixpanelFlagVariant`
-  /// via its existing `fromMap` constructor.
+  /// This is a short term work around to support exposing internally loaded flags from web. It reads the underlying `mixpanel.flags.flags` map representing the loaded flags and transforms it to a form dart can understand. 
   ///
   /// The bundled mixpanel-js stores variants with snake_case keys
   /// (`variant_key` is the variant identifier; the in-memory variant uses
