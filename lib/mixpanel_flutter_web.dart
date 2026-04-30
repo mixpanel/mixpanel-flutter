@@ -558,9 +558,10 @@ class MixpanelFlutterPlugin {
   /// so the same translation applies.
   Future<Map<String, Map<String, dynamic>>> handleGetAllVariants() async {
     try {
-      final ref = flags_get_all_variants_ref;
-      if (ref != null && ref.typeofEquals('function')) {
-        final jsResult = await flags_get_all_variants().toDart;
+      final fn = flags_get_all_variants;
+      if (fn != null && fn.typeofEquals('function')) {
+        final promise = (fn as JSFunction).callAsFunction() as JSPromise;
+        final jsResult = await promise.toDart;
         return _convertJsFlagsMap(jsResult);
       }
       return _convertJsFlagsMap(flags_internal_map);
