@@ -688,8 +688,8 @@ public class MixpanelFlutterPlugin implements FlutterPlugin, MethodCallHandler {
 
     private void handleGetAllVariants(MethodCall call, Result result) {
         if (mixpanel == null) {
-            android.util.Log.w("Mixpanel", "getAllVariants called before Mixpanel was initialized, returning empty map");
-            result.success(new HashMap<String, Map<String, Object>>());
+            android.util.Log.w("Mixpanel", "getAllVariants called before Mixpanel was initialized");
+            result.error("MIXPANEL_UNINITIALIZED", "getAllVariants called before Mixpanel was initialized", null);
             return;
         }
         mixpanel.getFlags().getAllVariants(variants -> {

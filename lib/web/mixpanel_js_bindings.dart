@@ -131,3 +131,13 @@ external JSPromise flags_load_flags();
 // Temporarily reference the internal map for web, until a method is exposed
 @JS('mixpanel.flags.flags')
 external JSAny? get flags_internal_map;
+
+// Detection-only handle to the public method; resolves to undefined (Dart null)
+// on mixpanel-js builds that don't yet expose it.
+@JS('mixpanel.flags.get_all_variants')
+external JSAny? get flags_get_all_variants_ref;
+
+// Callable binding to the public method. Only invoke after confirming
+// flags_get_all_variants_ref is a function.
+@JS('mixpanel.flags.get_all_variants')
+external JSPromise flags_get_all_variants();

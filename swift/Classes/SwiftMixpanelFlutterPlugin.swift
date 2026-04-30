@@ -679,8 +679,8 @@ public class SwiftMixpanelFlutterPlugin: NSObject, FlutterPlugin {
 
     private func handleGetAllVariants(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
         guard let instance = instance else {
-            NSLog("[Mixpanel] getAllVariants called before Mixpanel was initialized, returning empty map")
-            result([String: Any]())
+            NSLog("[Mixpanel] getAllVariants called before Mixpanel was initialized")
+            result(FlutterError(code: "MIXPANEL_UNINITIALIZED", message: "getAllVariants called before Mixpanel was initialized", details: nil))
             return
         }
         instance.flags.getAllVariants { variants in

@@ -548,36 +548,46 @@ class MixpanelFlutterPlugin {
     await flags_load_flags().toDart;
   }
 
-  /// This is a short term work around to support exposing internally loaded flags from web. It reads the underlying `mixpanel.flags.flags` map representing the loaded flags and transforms it to a form dart can understand. 
+  /// Returns all loaded feature flag variants in the camelCase wire shape that
+  /// the iOS/Android handlers produce (so the Dart wrapper stays platform-agnostic).
   ///
-  /// The bundled mixpanel-js stores variants with snake_case keys
-  /// (`variant_key` is the variant identifier; the in-memory variant uses
-  /// `key`/`value`/`experiment_id`/`is_experiment_active`/`is_qa_tester`).
-  /// We translate to the camelCase wire shape that the iOS/Android handlers
-  /// produce, so the Dart wrapper stays platform-agnostic.
+  /// Prefers the public `mixpanel.flags.get_all_variants()` method when the
+  /// bundled mixpanel-js exposes it; falls back to reading the internal
+  /// `mixpanel.flags.flags` Map. Both paths yield variants with snake_case keys
+  /// (`key` / `value` / `experiment_id` / `is_experiment_active` / `is_qa_tester`),
+  /// so the same translation applies.
   Future<Map<String, Map<String, dynamic>>> handleGetAllVariants() async {
-    final out = <String, Map<String, dynamic>>{};
     try {
-      final raw = flags_internal_map;
-      if (raw == null) return out;
-
-      final dartified = (raw as JSObject).dartify();
-      if (dartified is! Map) return out;
-
-      dartified.forEach((key, value) {
-        if (key is String && value is Map) {
-          out[key] = {
-            'key': value['key'] as String? ?? '',
-            'value': value['value'],
-            'experimentId': value['experiment_id'] as String?,
-            'isExperimentActive': value['is_experiment_active'] as bool?,
-            'isQaTester': value['is_qa_tester'] as bool?,
-          };
-        }
-      });
+      final ref = flags_get_all_variants_ref;
+      if (ref != null && ref.typeofEquals('function')) {
+        final jsResult = await flags_get_all_variants().toDart;
+        return _convertJsFlagsMap(jsResult);
+      }
+      return _convertJsFlagsMap(flags_internal_map);
     } catch (e) {
       debugPrint('[Mixpanel] getAllVariants failed with error: $e, returning empty map');
+      return <String, Map<String, dynamic>>{};
     }
+  }
+
+  Map<String, Map<String, dynamic>> _convertJsFlagsMap(JSAny? raw) {
+    final out = <String, Map<String, dynamic>>{};
+    if (raw == null) return out;
+
+    final dartified = (raw as JSObject).dartify();
+    if (dartified is! Map) return out;
+
+    dartified.forEach((key, value) {
+      if (key is String && value is Map) {
+        out[key] = {
+          'key': value['key'] as String? ?? '',
+          'value': value['value'],
+          'experimentId': value['experiment_id'] as String?,
+          'isExperimentActive': value['is_experiment_active'] as bool?,
+          'isQaTester': value['is_qa_tester'] as bool?,
+        };
+      }
+    });
     return out;
   }
 
