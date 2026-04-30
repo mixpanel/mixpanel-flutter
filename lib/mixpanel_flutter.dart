@@ -1012,6 +1012,24 @@ class FeatureFlags {
     await _channel.invokeMethod<void>(
         'loadFlags', <String, dynamic>{'token': _token});
   }
+
+  /// Asynchronously retrieves all loaded feature flag variants.
+  ///
+  /// If flags are not yet loaded, the underlying native SDK will trigger a fetch.
+  /// Returns an empty map if the fetch fails or no flags are loaded. Does NOT
+  /// trigger an exposure event for any flag.
+  Future<Map<String, MixpanelFlagVariant>> getAllVariants() async {
+    final result = await _channel.invokeMethod<Map>(
+        'getAllVariants', <String, dynamic>{'token': _token});
+    final variants = <String, MixpanelFlagVariant>{};
+    if (result == null) return variants;
+    result.forEach((key, value) {
+      if (key is String && value is Map) {
+        variants[key] = MixpanelFlagVariant.fromMap(value);
+      }
+    });
+    return variants;
+  }
 }
 
 class _MixpanelHelper {

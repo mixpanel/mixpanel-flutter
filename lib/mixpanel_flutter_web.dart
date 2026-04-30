@@ -200,6 +200,8 @@ class MixpanelFlutterPlugin {
         return handleUpdateFlagsContext(call);
       case 'loadFlags':
         return handleLoadFlags();
+      case 'getAllVariants':
+        return handleGetAllVariants();
       default:
         throw PlatformException(
           code: 'Unimplemented',
@@ -544,6 +546,42 @@ class MixpanelFlutterPlugin {
 
   Future<void> handleLoadFlags() async {
     await flags_load_flags().toDart;
+  }
+
+  /// Reads the underlying `mixpanel.flags.flags` Map (the FeatureFlagManager's
+  /// loaded variants) and returns a Dart map with the wire-format variant
+  /// shape (camelCase keys) so the Dart side can hydrate `MixpanelFlagVariant`
+  /// via its existing `fromMap` constructor.
+  ///
+  /// The bundled mixpanel-js stores variants with snake_case keys
+  /// (`variant_key` is the variant identifier; the in-memory variant uses
+  /// `key`/`value`/`experiment_id`/`is_experiment_active`/`is_qa_tester`).
+  /// We translate to the camelCase wire shape that the iOS/Android handlers
+  /// produce, so the Dart wrapper stays platform-agnostic.
+  Future<Map<String, Map<String, dynamic>>> handleGetAllVariants() async {
+    final out = <String, Map<String, dynamic>>{};
+    try {
+      final raw = flags_internal_map;
+      if (raw == null) return out;
+
+      final dartified = (raw as JSObject).dartify();
+      if (dartified is! Map) return out;
+
+      dartified.forEach((key, value) {
+        if (key is String && value is Map) {
+          out[key] = {
+            'key': value['key'] as String? ?? '',
+            'value': value['value'],
+            'experimentId': value['experiment_id'] as String?,
+            'isExperimentActive': value['is_experiment_active'] as bool?,
+            'isQaTester': value['is_qa_tester'] as bool?,
+          };
+        }
+      });
+    } catch (e) {
+      debugPrint('[Mixpanel] getAllVariants failed with error: $e, returning empty map');
+    }
+    return out;
   }
 
   Map<String, dynamic> _jsVariantToMap(JSAny? jsResult, Map<Object?, Object?> fallbackMap) {
