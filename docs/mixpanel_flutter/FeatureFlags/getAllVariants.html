@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1, user-scalable=no">
-  <meta name="description" content="API docs for the setFlushBatchSize method from the Mixpanel class, for the Dart programming language.">
-  <title>setFlushBatchSize method - Mixpanel class - mixpanel_flutter library - Dart API</title>
+  <meta name="description" content="API docs for the getAllVariants method from the FeatureFlags class, for the Dart programming language.">
+  <title>getAllVariants method - FeatureFlags class - mixpanel_flutter library - Dart API</title>
 
 
   
@@ -26,10 +26,10 @@
   <ol class="breadcrumbs gt-separated dark hidden-xs">
     <li><a href="../../index.html">mixpanel_flutter</a></li>
     <li><a href="../../mixpanel_flutter/">mixpanel_flutter.dart</a></li>
-    <li><a href="../../mixpanel_flutter/Mixpanel-class.html">Mixpanel</a></li>
-    <li class="self-crumb">setFlushBatchSize method</li>
+    <li><a href="../../mixpanel_flutter/FeatureFlags-class.html">FeatureFlags</a></li>
+    <li class="self-crumb">getAllVariants method</li>
   </ol>
-  <div class="self-name">setFlushBatchSize</div>
+  <div class="self-name">getAllVariants</div>
   <form class="search navbar-right" role="search">
     <input type="text" id="search-box" autocomplete="off" disabled class="form-control typeahead" placeholder="Loading search...">
   </form>
@@ -46,38 +46,45 @@
 <div
     id="dartdoc-main-content"
     class="main-content"
-    data-above-sidebar="mixpanel_flutter&#47;Mixpanel-class-sidebar.html"
+    data-above-sidebar="mixpanel_flutter&#47;FeatureFlags-class-sidebar.html"
     data-below-sidebar="">
     <div>
-<h1><span class="kind-method">setFlushBatchSize</span> method 
+<h1><span class="kind-method">getAllVariants</span> method 
 </h1></div>
 
     <section class="multi-line-signature">
       
-<span class="returntype">void</span>
-<span class="name ">setFlushBatchSize</span>(<wbr><ol class="parameter-list single-line"> <li><span class="parameter" id="setFlushBatchSize-param-flushBatchSize"><span class="type-annotation"><a href="https://api.flutter.dev/flutter/dart-core/int-class.html">int</a></span> <span class="parameter-name">flushBatchSize</span></span></li>
-</ol>)
+<span class="returntype"><a href="https://api.flutter.dev/flutter/dart-core/Future-class.html">Future</a><span class="signature">&lt;<wbr><span class="type-parameter"><a href="https://api.flutter.dev/flutter/dart-core/Map-class.html">Map</a><span class="signature">&lt;<wbr><span class="type-parameter"><a href="https://api.flutter.dev/flutter/dart-core/String-class.html">String</a></span>, <span class="type-parameter"><a href="../../mixpanel_flutter/MixpanelFlagVariant-class.html">MixpanelFlagVariant</a></span>&gt;</span></span>&gt;</span></span>
+<span class="name ">getAllVariants</span>(<wbr>)
 
       
 
     </section>
     
 <section class="desc markdown">
-  <p>Set the number of events sent in a single network request to the Mixpanel server.
-By configuring this value, you can optimize network usage and manage the frequency of communication between the client
-and the server. The maximum size is 50; any value over 50 will default to 50.</p>
-<ul>
-<li><code>flushBatchSize</code> an int representing the number of events sent in a single network request.</li>
-</ul>
+  <p>Asynchronously retrieves all loaded feature flag variants.</p>
+<p>If flags are not yet loaded, the underlying native SDK will trigger a fetch.
+Returns an empty map when no flags are loaded. Does NOT trigger an
+exposure event for any flag.</p>
+<p>On mobile (iOS/Android), throws <a href="https://api.flutter.dev/flutter/services/PlatformException-class.html">PlatformException</a> with code
+<code>MIXPANEL_UNINITIALIZED</code> if called before <a href="../../mixpanel_flutter/Mixpanel/init.html">Mixpanel.init</a>.</p>
 </section>
 
 
     
 <section class="summary source-code" id="source">
   <h2><span>Implementation</span></h2>
-  <pre class="language-dart"><code class="language-dart">void setFlushBatchSize(int flushBatchSize) {
-  _channel.invokeMethod&lt;void&gt;(&#39;setFlushBatchSize&#39;,
-      &lt;String, dynamic&gt;{&#39;flushBatchSize&#39;: flushBatchSize});
+  <pre class="language-dart"><code class="language-dart">Future&lt;Map&lt;String, MixpanelFlagVariant&gt;&gt; getAllVariants() async {
+  final result = await _channel.invokeMethod&lt;Map&gt;(
+      &#39;getAllVariants&#39;, &lt;String, dynamic&gt;{&#39;token&#39;: _token});
+  final variants = &lt;String, MixpanelFlagVariant&gt;{};
+  if (result == null) return variants;
+  result.forEach((key, value) {
+    if (key is String &amp;&amp; value is Map) {
+      variants[key] = MixpanelFlagVariant.fromMap(value);
+    }
+  });
+  return variants;
 }</code></pre>
 </section>
 
@@ -93,11 +100,11 @@ and the server. The maximum size is 50; any value over 50 will default to 50.</p
 <ol class="breadcrumbs gt-separated dark hidden-l" id="sidebar-nav">
     <li><a href="../../index.html">mixpanel_flutter</a></li>
     <li><a href="../../mixpanel_flutter/">mixpanel_flutter</a></li>
-    <li><a href="../../mixpanel_flutter/Mixpanel-class.html">Mixpanel</a></li>
-    <li class="self-crumb">setFlushBatchSize method</li>
+    <li><a href="../../mixpanel_flutter/FeatureFlags-class.html">FeatureFlags</a></li>
+    <li class="self-crumb">getAllVariants method</li>
 </ol>
 
-    <h5>Mixpanel class</h5>
+    <h5>FeatureFlags class</h5>
     <div id="dartdoc-sidebar-left-content"></div>
   </div><!--/.sidebar-offcanvas-->
   <div id="dartdoc-sidebar-right" class="sidebar sidebar-offcanvas-right">

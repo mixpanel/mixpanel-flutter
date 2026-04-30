@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1, user-scalable=no">
-  <meta name="description" content="API docs for the setFlushBatchSize method from the Mixpanel class, for the Dart programming language.">
-  <title>setFlushBatchSize method - Mixpanel class - mixpanel_flutter library - Dart API</title>
+  <meta name="description" content="API docs for the handleGetAllVariants method from the MixpanelFlutterPlugin class, for the Dart programming language.">
+  <title>handleGetAllVariants method - MixpanelFlutterPlugin class - mixpanel_flutter_web library - Dart API</title>
 
 
   
@@ -25,11 +25,11 @@
   <span id="sidenav-left-toggle" class="material-symbols-outlined" role="button" tabindex="0">menu</span>
   <ol class="breadcrumbs gt-separated dark hidden-xs">
     <li><a href="../../index.html">mixpanel_flutter</a></li>
-    <li><a href="../../mixpanel_flutter/">mixpanel_flutter.dart</a></li>
-    <li><a href="../../mixpanel_flutter/Mixpanel-class.html">Mixpanel</a></li>
-    <li class="self-crumb">setFlushBatchSize method</li>
+    <li><a href="../../mixpanel_flutter_web/">mixpanel_flutter_web.dart</a></li>
+    <li><a href="../../mixpanel_flutter_web/MixpanelFlutterPlugin-class.html">MixpanelFlutterPlugin</a></li>
+    <li class="self-crumb">handleGetAllVariants method</li>
   </ol>
-  <div class="self-name">setFlushBatchSize</div>
+  <div class="self-name">handleGetAllVariants</div>
   <form class="search navbar-right" role="search">
     <input type="text" id="search-box" autocomplete="off" disabled class="form-control typeahead" placeholder="Loading search...">
   </form>
@@ -46,38 +46,45 @@
 <div
     id="dartdoc-main-content"
     class="main-content"
-    data-above-sidebar="mixpanel_flutter&#47;Mixpanel-class-sidebar.html"
+    data-above-sidebar="mixpanel_flutter_web&#47;MixpanelFlutterPlugin-class-sidebar.html"
     data-below-sidebar="">
     <div>
-<h1><span class="kind-method">setFlushBatchSize</span> method 
+<h1><span class="kind-method">handleGetAllVariants</span> method 
 </h1></div>
 
     <section class="multi-line-signature">
       
-<span class="returntype">void</span>
-<span class="name ">setFlushBatchSize</span>(<wbr><ol class="parameter-list single-line"> <li><span class="parameter" id="setFlushBatchSize-param-flushBatchSize"><span class="type-annotation"><a href="https://api.flutter.dev/flutter/dart-core/int-class.html">int</a></span> <span class="parameter-name">flushBatchSize</span></span></li>
-</ol>)
+<span class="returntype"><a href="https://api.flutter.dev/flutter/dart-core/Future-class.html">Future</a><span class="signature">&lt;<wbr><span class="type-parameter"><a href="https://api.flutter.dev/flutter/dart-core/Map-class.html">Map</a><span class="signature">&lt;<wbr><span class="type-parameter"><a href="https://api.flutter.dev/flutter/dart-core/String-class.html">String</a></span>, <span class="type-parameter"><a href="https://api.flutter.dev/flutter/dart-core/Map-class.html">Map</a><span class="signature">&lt;<wbr><span class="type-parameter"><a href="https://api.flutter.dev/flutter/dart-core/String-class.html">String</a></span>, <span class="type-parameter">dynamic</span>&gt;</span></span>&gt;</span></span>&gt;</span></span>
+<span class="name ">handleGetAllVariants</span>(<wbr>)
 
       
 
     </section>
     
 <section class="desc markdown">
-  <p>Set the number of events sent in a single network request to the Mixpanel server.
-By configuring this value, you can optimize network usage and manage the frequency of communication between the client
-and the server. The maximum size is 50; any value over 50 will default to 50.</p>
-<ul>
-<li><code>flushBatchSize</code> an int representing the number of events sent in a single network request.</li>
-</ul>
+  <p>Returns all loaded feature flag variants in the camelCase wire shape that
+the iOS/Android handlers produce (so the Dart wrapper stays platform-agnostic).</p>
+<p>Reads the internal <code>mixpanel.flags.flags</code> Map directly. The map yields
+variants with snake_case keys (<code>key</code> / <code>value</code> / <code>experiment_id</code> /
+<code>is_experiment_active</code> / <code>is_qa_tester</code>), which <code>_convertJsFlagsMap</code>
+translates to the camelCase shape the Dart wrapper expects.</p>
 </section>
 
 
     
 <section class="summary source-code" id="source">
   <h2><span>Implementation</span></h2>
-  <pre class="language-dart"><code class="language-dart">void setFlushBatchSize(int flushBatchSize) {
-  _channel.invokeMethod&lt;void&gt;(&#39;setFlushBatchSize&#39;,
-      &lt;String, dynamic&gt;{&#39;flushBatchSize&#39;: flushBatchSize});
+  <pre class="language-dart"><code class="language-dart">Future&lt;Map&lt;String, Map&lt;String, dynamic&gt;&gt;&gt; handleGetAllVariants() async {
+  try {
+    final raw = flags_internal_map;
+    &#47;&#47; mixpanel.flags.flags is a JS Map; dartify() treats JS Map&#47;Set as opaque,
+    &#47;&#47; so flatten to a plain object first via Object.fromEntries(Array.from(map)).
+    final plain = raw == null ? null : object_from_entries(array_from(raw));
+    return _convertJsFlagsMap(plain);
+  } catch (e) {
+    debugPrint(&#39;[Mixpanel] getAllVariants failed with error: $e, returning empty map&#39;);
+    return &lt;String, Map&lt;String, dynamic&gt;&gt;{};
+  }
 }</code></pre>
 </section>
 
@@ -92,12 +99,12 @@ and the server. The maximum size is 50; any value over 50 will default to 50.</p
 </header>
 <ol class="breadcrumbs gt-separated dark hidden-l" id="sidebar-nav">
     <li><a href="../../index.html">mixpanel_flutter</a></li>
-    <li><a href="../../mixpanel_flutter/">mixpanel_flutter</a></li>
-    <li><a href="../../mixpanel_flutter/Mixpanel-class.html">Mixpanel</a></li>
-    <li class="self-crumb">setFlushBatchSize method</li>
+    <li><a href="../../mixpanel_flutter_web/">mixpanel_flutter_web</a></li>
+    <li><a href="../../mixpanel_flutter_web/MixpanelFlutterPlugin-class.html">MixpanelFlutterPlugin</a></li>
+    <li class="self-crumb">handleGetAllVariants method</li>
 </ol>
 
-    <h5>Mixpanel class</h5>
+    <h5>MixpanelFlutterPlugin class</h5>
     <div id="dartdoc-sidebar-left-content"></div>
   </div><!--/.sidebar-offcanvas-->
   <div id="dartdoc-sidebar-right" class="sidebar sidebar-offcanvas-right">
