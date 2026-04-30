@@ -551,32 +551,17 @@ class MixpanelFlutterPlugin {
   /// Returns all loaded feature flag variants in the camelCase wire shape that
   /// the iOS/Android handlers produce (so the Dart wrapper stays platform-agnostic).
   ///
-  /// Prefers the public `mixpanel.flags.get_all_variants()` method when the
-  /// bundled mixpanel-js exposes it; falls back to reading the internal
-  /// `mixpanel.flags.flags` Map. Both paths yield variants with snake_case keys
-  /// (`key` / `value` / `experiment_id` / `is_experiment_active` / `is_qa_tester`),
-  /// so the same translation applies.
+  /// Reads the internal `mixpanel.flags.flags` Map directly. The map yields
+  /// variants with snake_case keys (`key` / `value` / `experiment_id` /
+  /// `is_experiment_active` / `is_qa_tester`), which `_convertJsFlagsMap`
+  /// translates to the camelCase shape the Dart wrapper expects.
   Future<Map<String, Map<String, dynamic>>> handleGetAllVariants() async {
     try {
-      final fn = flags_get_all_variants;
-      debugPrint('[Mixpanel] getAllVariants: flags_get_all_variants is ${fn == null ? 'null' : 'present, typeof=${fn.typeofEquals('function') ? 'function' : 'non-function'}'}');
-      if (fn != null && fn.typeofEquals('function')) {
-        debugPrint('[Mixpanel] getAllVariants: using public mixpanel.flags.get_all_variants() path');
-        final promise = (fn as JSFunction).callAsFunction() as JSPromise;
-        final jsResult = await promise.toDart;
-        final converted = _convertJsFlagsMap(jsResult);
-        debugPrint('[Mixpanel] getAllVariants: public path returned ${converted.length} variants');
-        return converted;
-      }
-      debugPrint('[Mixpanel] getAllVariants: falling back to mixpanel.flags.flags internal map peek');
       final raw = flags_internal_map;
-      debugPrint('[Mixpanel] getAllVariants: flags_internal_map is ${raw == null ? 'null' : 'present'}');
       // mixpanel.flags.flags is a JS Map; dartify() treats JS Map/Set as opaque,
       // so flatten to a plain object first via Object.fromEntries(Array.from(map)).
       final plain = raw == null ? null : object_from_entries(array_from(raw));
-      final converted = _convertJsFlagsMap(plain);
-      debugPrint('[Mixpanel] getAllVariants: fallback path returned ${converted.length} variants');
-      return converted;
+      return _convertJsFlagsMap(plain);
     } catch (e) {
       debugPrint('[Mixpanel] getAllVariants failed with error: $e, returning empty map');
       return <String, Map<String, dynamic>>{};

@@ -132,11 +132,6 @@ external JSPromise flags_load_flags();
 @JS('mixpanel.flags.flags')
 external JSAny? get flags_internal_map;
 
-// Reference to the public method; resolves to undefined or Dart's null on
-// mixpanel-js builds that don't yet expose it. Can be casted to a JSFunction and invoked after confirming it is one.
-@JS('mixpanel.flags.get_all_variants')
-external JSAny? get flags_get_all_variants;
-
 // JS built-ins used to convert a JS `Map` instance to a plain object so it
 // dartifies into a Dart Map. `dartify()` treats JS `Map`/`Set` as opaque.
 @JS('Object.fromEntries')
