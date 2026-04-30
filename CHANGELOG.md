@@ -1,5 +1,13 @@
 #
 
+## [v2.7.0](https://github.com/mixpanel/mixpanel-flutter/tree/v2.7.0) (2026-04-30)
+
+### Enhancements
+
+- Add `getAllVariants` support for Feature Flags [\#233](https://github.com/mixpanel/mixpanel-flutter/pull/233)
+
+#
+
 ## [v2.6.2](https://github.com/mixpanel/mixpanel-flutter/tree/v2.6.2) (2026-04-17)
 
 ### Enhancements
