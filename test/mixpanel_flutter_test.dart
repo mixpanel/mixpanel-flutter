@@ -1056,6 +1056,78 @@ void main() {
       );
     });
 
+    test('check getAllVariants returns the full variants map', () async {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (MethodCall m) async {
+        methodCall = m;
+        if (m.method == 'getAllVariants') {
+          return {
+            'flag_a': {
+              'key': 'variant_a',
+              'value': true,
+              'experimentId': 'exp_a',
+              'isExperimentActive': true,
+              'isQaTester': false,
+            },
+            'flag_b': {
+              'key': 'variant_b',
+              'value': 42,
+              'experimentId': null,
+              'isExperimentActive': null,
+              'isQaTester': null,
+            },
+          };
+        }
+        return null;
+      });
+
+      final flags = _mixpanel.getFeatureFlags();
+      final result = await flags.getAllVariants();
+      expect(result.length, 2);
+      expect(result['flag_a']!.key, 'variant_a');
+      expect(result['flag_a']!.value, true);
+      expect(result['flag_a']!.experimentId, 'exp_a');
+      expect(result['flag_a']!.isExperimentActive, true);
+      expect(result['flag_a']!.isQaTester, false);
+      expect(result['flag_b']!.key, 'variant_b');
+      expect(result['flag_b']!.value, 42);
+      expect(result['flag_b']!.experimentId, null);
+      expect(
+        methodCall,
+        isMethodCall(
+          'getAllVariants',
+          arguments: <String, dynamic>{'token': 'test token'},
+        ),
+      );
+    });
+
+    test('getAllVariants returns empty map when native returns null', () async {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (MethodCall m) async {
+        methodCall = m;
+        return null;
+      });
+
+      final flags = _mixpanel.getFeatureFlags();
+      final result = await flags.getAllVariants();
+      expect(result, isEmpty);
+    });
+
+    test('getAllVariants returns empty map when native returns empty map', () async {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (MethodCall m) async {
+        methodCall = m;
+        if (m.method == 'getAllVariants') {
+          return <String, dynamic>{};
+        }
+        return null;
+      });
+
+      final flags = _mixpanel.getFeatureFlags();
+      final result = await flags.getAllVariants();
+      expect(result, isEmpty);
+    });
+
     test('feature flags methods with empty flagName are not called', () async {
       final flags = _mixpanel.getFeatureFlags();
       methodCall = null;

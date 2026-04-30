@@ -200,6 +200,8 @@ class MixpanelFlutterPlugin {
         return handleUpdateFlagsContext(call);
       case 'loadFlags':
         return handleLoadFlags();
+      case 'getAllVariants':
+        return handleGetAllVariants();
       default:
         throw PlatformException(
           code: 'Unimplemented',
@@ -544,6 +546,47 @@ class MixpanelFlutterPlugin {
 
   Future<void> handleLoadFlags() async {
     await flags_load_flags().toDart;
+  }
+
+  /// Returns all loaded feature flag variants in the camelCase wire shape that
+  /// the iOS/Android handlers produce (so the Dart wrapper stays platform-agnostic).
+  ///
+  /// Reads the internal `mixpanel.flags.flags` Map directly. The map yields
+  /// variants with snake_case keys (`key` / `value` / `experiment_id` /
+  /// `is_experiment_active` / `is_qa_tester`), which `_convertJsFlagsMap`
+  /// translates to the camelCase shape the Dart wrapper expects.
+  Future<Map<String, Map<String, dynamic>>> handleGetAllVariants() async {
+    try {
+      final raw = flags_internal_map;
+      // mixpanel.flags.flags is a JS Map; dartify() treats JS Map/Set as opaque,
+      // so flatten to a plain object first via Object.fromEntries(Array.from(map)).
+      final plain = raw == null ? null : object_from_entries(array_from(raw));
+      return _convertJsFlagsMap(plain);
+    } catch (e) {
+      debugPrint('[Mixpanel] getAllVariants failed with error: $e, returning empty map');
+      return <String, Map<String, dynamic>>{};
+    }
+  }
+
+  Map<String, Map<String, dynamic>> _convertJsFlagsMap(JSAny? raw) {
+    final out = <String, Map<String, dynamic>>{};
+    if (raw == null) return out;
+
+    final dartified = (raw as JSObject).dartify();
+    if (dartified is! Map) return out;
+
+    dartified.forEach((key, value) {
+      if (key is String && value is Map) {
+        out[key] = {
+          'key': value['key'] as String? ?? '',
+          'value': value['value'],
+          'experimentId': value['experiment_id'] as String?,
+          'isExperimentActive': value['is_experiment_active'] as bool?,
+          'isQaTester': value['is_qa_tester'] as bool?,
+        };
+      }
+    });
+    return out;
   }
 
   Map<String, dynamic> _jsVariantToMap(JSAny? jsResult, Map<Object?, Object?> fallbackMap) {

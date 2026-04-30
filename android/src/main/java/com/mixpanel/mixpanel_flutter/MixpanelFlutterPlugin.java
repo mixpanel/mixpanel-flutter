@@ -195,6 +195,9 @@ public class MixpanelFlutterPlugin implements FlutterPlugin, MethodCallHandler {
             case "loadFlags":
                 handleLoadFlags(call, result);
                 break;
+            case "getAllVariants":
+                handleGetAllVariants(call, result);
+                break;
             default:
                 result.notImplemented();
                 break;
@@ -680,6 +683,21 @@ public class MixpanelFlutterPlugin implements FlutterPlugin, MethodCallHandler {
             } else {
                 result.error("LOAD_FLAGS_FAILED", "Failed to load feature flags", null);
             }
+        });
+    }
+
+    private void handleGetAllVariants(MethodCall call, Result result) {
+        if (mixpanel == null) {
+            android.util.Log.w("Mixpanel", "getAllVariants called before Mixpanel was initialized");
+            result.error("MIXPANEL_UNINITIALIZED", "getAllVariants called before Mixpanel was initialized", null);
+            return;
+        }
+        mixpanel.getFlags().getAllVariants(variants -> {
+            Map<String, Map<String, Object>> out = new HashMap<>();
+            for (Map.Entry<String, com.mixpanel.android.mpmetrics.MixpanelFlagVariant> entry : variants.entrySet()) {
+                out.put(entry.getKey(), flagVariantToMap(entry.getValue()));
+            }
+            result.success(out);
         });
     }
 

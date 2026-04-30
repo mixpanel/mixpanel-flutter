@@ -171,6 +171,9 @@ public class SwiftMixpanelFlutterPlugin: NSObject, FlutterPlugin {
         case "loadFlags":
             handleLoadFlags(call, result: result)
             break
+        case "getAllVariants":
+            handleGetAllVariants(call, result: result)
+            break
         default:
             result(FlutterMethodNotImplemented)
         }
@@ -671,6 +674,21 @@ public class SwiftMixpanelFlutterPlugin: NSObject, FlutterPlugin {
             } else {
                 result(FlutterError(code: "LOAD_FLAGS_FAILED", message: "Failed to load feature flags", details: nil))
             }
+        }
+    }
+
+    private func handleGetAllVariants(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+        guard let instance = instance else {
+            NSLog("[Mixpanel] getAllVariants called before Mixpanel was initialized")
+            result(FlutterError(code: "MIXPANEL_UNINITIALIZED", message: "getAllVariants called before Mixpanel was initialized", details: nil))
+            return
+        }
+        instance.flags.getAllVariants { variants in
+            var out = [String: [String: Any]]()
+            for (key, variant) in variants {
+                out[key] = self.flagVariantToMap(variant)
+            }
+            result(out)
         }
     }
 

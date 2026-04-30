@@ -127,3 +127,15 @@ external JSPromise flags_update_context(JSAny? context);
 
 @JS('mixpanel.flags.load_flags')
 external JSPromise flags_load_flags();
+
+// Temporarily reference the internal map for web, until a method is exposed
+@JS('mixpanel.flags.flags')
+external JSAny? get flags_internal_map;
+
+// JS built-ins used to convert a JS `Map` instance to a plain object so it
+// dartifies into a Dart Map. `dartify()` treats JS `Map`/`Set` as opaque.
+@JS('Object.fromEntries')
+external JSObject object_from_entries(JSAny entries);
+
+@JS('Array.from')
+external JSArray array_from(JSAny iterable);
