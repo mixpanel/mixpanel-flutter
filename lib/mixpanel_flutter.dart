@@ -6,6 +6,97 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
 import 'package:mixpanel_flutter/codec/mixpanel_message_codec.dart';
 
+/// Identifies where a served [MixpanelFlagVariant] came from. Non-null on
+/// every variant the SDK returns:
+/// - [NetworkSource]: the variant was assigned by the most recent successful
+///   `/flags/` network response.
+/// - [PersistenceSource]: the variant was loaded from the on-disk persistence
+///   layer; [PersistenceSource.persistedAt] is when the variant set was
+///   originally written.
+/// - [FallbackSource]: the SDK could not produce a real variant and returned
+///   the developer-supplied fallback unchanged. Variants the developer
+///   constructs directly also default to this source, since the only reason
+///   to build one is to pass it as a fallback.
+///
+/// The persistence timestamp lives only on [PersistenceSource] so invalid
+/// combinations like "network with a timestamp" are unrepresentable.
+abstract class MixpanelFlagVariantSource {
+  const MixpanelFlagVariantSource();
+
+  const factory MixpanelFlagVariantSource.network() = NetworkSource;
+  factory MixpanelFlagVariantSource.persistence(
+      {required DateTime persistedAt}) = PersistenceSource;
+  const factory MixpanelFlagVariantSource.fallback() = FallbackSource;
+
+  /// Decodes a source map produced by the platform handlers. Falls back to
+  /// [FallbackSource] for missing, malformed, or unrecognized payloads.
+  static MixpanelFlagVariantSource fromMap(Map<dynamic, dynamic>? map) {
+    if (map == null) return const FallbackSource();
+    final kind = map['kind'];
+    if (kind == 'network') return const NetworkSource();
+    if (kind == 'fallback') return const FallbackSource();
+    if (kind == 'persistence') {
+      final raw = map['persistedAtMillis'];
+      final millis = raw is int ? raw : (raw is num ? raw.toInt() : null);
+      if (millis == null) {
+        developer.log(
+            '`MixpanelFlagVariantSource.fromMap` received persistence source with missing persistedAtMillis, defaulting to fallback',
+            name: 'Mixpanel');
+        return const FallbackSource();
+      }
+      return PersistenceSource(
+          persistedAt: DateTime.fromMillisecondsSinceEpoch(millis));
+    }
+    return const FallbackSource();
+  }
+}
+
+/// The variant came from a fresh `/flags/` network response.
+class NetworkSource extends MixpanelFlagVariantSource {
+  const NetworkSource();
+
+  @override
+  String toString() => 'NetworkSource()';
+
+  @override
+  bool operator ==(Object other) => other is NetworkSource;
+
+  @override
+  int get hashCode => 0x4e57; // arbitrary stable constant for the singleton-ish case
+}
+
+/// The variant was loaded from the on-disk persistence layer.
+class PersistenceSource extends MixpanelFlagVariantSource {
+  /// Time the variant set was originally written to disk.
+  final DateTime persistedAt;
+
+  PersistenceSource({required this.persistedAt});
+
+  @override
+  String toString() => 'PersistenceSource(persistedAt: $persistedAt)';
+
+  @override
+  bool operator ==(Object other) =>
+      other is PersistenceSource && other.persistedAt == persistedAt;
+
+  @override
+  int get hashCode => persistedAt.hashCode;
+}
+
+/// The SDK returned the developer-supplied fallback unchanged.
+class FallbackSource extends MixpanelFlagVariantSource {
+  const FallbackSource();
+
+  @override
+  String toString() => 'FallbackSource()';
+
+  @override
+  bool operator ==(Object other) => other is FallbackSource;
+
+  @override
+  int get hashCode => 0xfa11; // arbitrary stable constant for the singleton-ish case
+}
+
 /// Represents a feature flag variant with metadata.
 ///
 /// Contains the flag's key, value, and optional experiment-related metadata.
@@ -26,12 +117,31 @@ class MixpanelFlagVariant {
   /// Whether the current user is a QA tester.
   final bool? isQaTester;
 
+  /// Where this variant was sourced from. Non-null on every variant the SDK
+  /// returns. Variants the developer constructs default to [FallbackSource],
+  /// since the only reason to build one is to pass it as a fallback.
+  ///
+  /// Use `is` checks to distinguish:
+  ///
+  /// ```dart
+  /// final src = variant.source;
+  /// if (src is PersistenceSource) {
+  ///   print('persisted at ${src.persistedAt}');
+  /// } else if (src is NetworkSource) {
+  ///   print('fresh from /flags/');
+  /// } else if (src is FallbackSource) {
+  ///   print('developer-supplied fallback');
+  /// }
+  /// ```
+  final MixpanelFlagVariantSource source;
+
   MixpanelFlagVariant({
     required this.key,
     required this.value,
     this.experimentId,
     this.isExperimentActive,
     this.isQaTester,
+    this.source = const FallbackSource(),
   });
 
   /// Creates a MixpanelFlagVariant from a Map (used for platform channel deserialization).
@@ -48,6 +158,8 @@ class MixpanelFlagVariant {
       experimentId: map['experimentId'] as String?,
       isExperimentActive: map['isExperimentActive'] as bool?,
       isQaTester: map['isQaTester'] as bool?,
+      source: MixpanelFlagVariantSource.fromMap(
+          map['source'] as Map<dynamic, dynamic>?),
     );
   }
 
@@ -57,6 +169,10 @@ class MixpanelFlagVariant {
   }
 
   /// Converts this variant to a Map for serialization.
+  ///
+  /// Note: [source] is intentionally not serialized — it's a server/SDK-stamped
+  /// field, never set by callers, and the platform handlers don't consume it
+  /// from inbound fallbacks.
   Map<String, dynamic> toMap() {
     return {
       'key': key,
@@ -69,7 +185,7 @@ class MixpanelFlagVariant {
 
   @override
   String toString() {
-    return 'MixpanelFlagVariant(key: $key, value: $value, experimentId: $experimentId, isExperimentActive: $isExperimentActive, isQaTester: $isQaTester)';
+    return 'MixpanelFlagVariant(key: $key, value: $value, experimentId: $experimentId, isExperimentActive: $isExperimentActive, isQaTester: $isQaTester, source: $source)';
   }
 
   @override
@@ -80,7 +196,8 @@ class MixpanelFlagVariant {
         value == other.value &&
         experimentId == other.experimentId &&
         isExperimentActive == other.isExperimentActive &&
-        isQaTester == other.isQaTester;
+        isQaTester == other.isQaTester &&
+        source == other.source;
   }
 
   @override
@@ -92,8 +209,84 @@ class MixpanelFlagVariant {
     result = 37 * result + (experimentId?.hashCode ?? 0);
     result = 37 * result + (isExperimentActive?.hashCode ?? 0);
     result = 37 * result + (isQaTester?.hashCode ?? 0);
+    result = 37 * result + source.hashCode;
     return result;
   }
+}
+
+/// Strategy for resolving feature flag variants relative to the on-disk
+/// persistence layer and the network. Pass to
+/// [FeatureFlagsConfig.variantLookupPolicy] at init.
+///
+/// - [VariantLookupPolicy.networkOnly] (default): no persistence; variant
+///   lookups always wait for the network call. Any stale data from a prior
+///   session that used a persisting policy is wiped on init.
+/// - [VariantLookupPolicy.persistenceUntilNetworkSuccess]: serve persisted
+///   variants immediately on init (within
+///   [PersistenceUntilNetworkSuccessPolicy.ttl]), refresh from the network in
+///   the background.
+/// - [VariantLookupPolicy.networkFirst]: await the network call; only fall
+///   back to persisted variants (within [NetworkFirstPolicy.ttl]) if the
+///   network call fails.
+///
+/// Inspect [MixpanelFlagVariant.source] on a served variant to tell whether
+/// it came from persistence or a fresh network response.
+abstract class VariantLookupPolicy {
+  const VariantLookupPolicy();
+
+  /// No persistence. Variant lookups always wait for the network call.
+  /// Wipes any stale on-disk data from a prior session on init.
+  const factory VariantLookupPolicy.networkOnly() = NetworkOnlyPolicy;
+
+  /// Serve persisted variants immediately on init (within [ttl]), then
+  /// refresh from the network in the background.
+  const factory VariantLookupPolicy.persistenceUntilNetworkSuccess(
+      {Duration ttl}) = PersistenceUntilNetworkSuccessPolicy;
+
+  /// Await the network call; fall back to persisted variants (within [ttl])
+  /// only on network failure.
+  const factory VariantLookupPolicy.networkFirst({Duration ttl}) =
+      NetworkFirstPolicy;
+
+  /// Serializes this policy for the platform channel.
+  Map<String, dynamic> toMap();
+}
+
+/// Policy: never read or write the on-disk persistence layer. Default behavior.
+class NetworkOnlyPolicy extends VariantLookupPolicy {
+  const NetworkOnlyPolicy();
+
+  @override
+  Map<String, dynamic> toMap() => const {'policy': 'networkOnly'};
+}
+
+/// Policy: serve persisted variants immediately, refresh in the background.
+class PersistenceUntilNetworkSuccessPolicy extends VariantLookupPolicy {
+  /// Maximum age of a persisted variant set before it is ignored on read.
+  /// Defaults to 24 hours.
+  final Duration ttl;
+
+  const PersistenceUntilNetworkSuccessPolicy(
+      {this.ttl = const Duration(hours: 24)});
+
+  @override
+  Map<String, dynamic> toMap() => {
+        'policy': 'persistenceUntilNetworkSuccess',
+        'ttlMs': ttl.inMilliseconds,
+      };
+}
+
+/// Policy: prefer fresh network values, fall back to persistence only on failure.
+class NetworkFirstPolicy extends VariantLookupPolicy {
+  /// Maximum age of a persisted variant set before it is ignored on read.
+  /// Defaults to 24 hours.
+  final Duration ttl;
+
+  const NetworkFirstPolicy({this.ttl = const Duration(hours: 24)});
+
+  @override
+  Map<String, dynamic> toMap() =>
+      {'policy': 'networkFirst', 'ttlMs': ttl.inMilliseconds};
 }
 
 /// Configuration options for feature flags.
@@ -107,9 +300,15 @@ class FeatureFlagsConfig {
   /// These can be used for targeting and segmentation.
   final Map<String, dynamic> context;
 
-  FeatureFlagsConfig({
+  /// Strategy for resolving variants relative to the on-disk cache and
+  /// network. Defaults to [VariantLookupPolicy.networkOnly] — matches the
+  /// native SDK defaults and pre-persistence behavior.
+  final VariantLookupPolicy variantLookupPolicy;
+
+  const FeatureFlagsConfig({
     this.enabled = true,
     this.context = const {},
+    this.variantLookupPolicy = const VariantLookupPolicy.networkOnly(),
   });
 
   /// Converts this config to a Map for serialization.
@@ -117,6 +316,7 @@ class FeatureFlagsConfig {
     return {
       'enabled': enabled,
       'context': context,
+      'variantLookupPolicy': variantLookupPolicy.toMap(),
     };
   }
 }

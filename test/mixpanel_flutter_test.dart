@@ -1179,6 +1179,7 @@ void main() {
             'featureFlags': {
               'enabled': true,
               'context': {'user_tier': 'premium'},
+              'variantLookupPolicy': {'policy': 'networkOnly'},
             },
           },
         ),
@@ -1209,6 +1210,7 @@ void main() {
             'featureFlags': {
               'enabled': true,
               'context': <String, dynamic>{},
+              'variantLookupPolicy': {'policy': 'networkOnly'},
             },
           },
         ),
@@ -1242,6 +1244,7 @@ void main() {
             'featureFlags': {
               'enabled': false,
               'context': {'user_tier': 'premium'},
+              'variantLookupPolicy': {'policy': 'networkOnly'},
             },
           },
         ),
@@ -1289,16 +1292,148 @@ void main() {
       final map = config.toMap();
       expect(map['enabled'], true);
       expect(map['context'], {'key': 'value'});
+      expect(map['variantLookupPolicy'], {'policy': 'networkOnly'});
     });
 
     test('FeatureFlagsConfig default values', () {
       final config = FeatureFlagsConfig();
       expect(config.enabled, true);
       expect(config.context, <String, dynamic>{});
+      expect(config.variantLookupPolicy, isA<NetworkOnlyPolicy>());
 
       final map = config.toMap();
       expect(map['enabled'], true);
       expect(map['context'], <String, dynamic>{});
+      expect(map['variantLookupPolicy'], {'policy': 'networkOnly'});
+    });
+
+    test('VariantLookupPolicy.persistenceUntilNetworkSuccess serializes ttlMs',
+        () {
+      const policy = VariantLookupPolicy.persistenceUntilNetworkSuccess(
+          ttl: Duration(hours: 24));
+      expect(policy, isA<PersistenceUntilNetworkSuccessPolicy>());
+      expect(policy.toMap(), {
+        'policy': 'persistenceUntilNetworkSuccess',
+        'ttlMs': const Duration(hours: 24).inMilliseconds,
+      });
+    });
+
+    test(
+        'VariantLookupPolicy.persistenceUntilNetworkSuccess defaults ttl to 24 hours',
+        () {
+      const policy = VariantLookupPolicy.persistenceUntilNetworkSuccess();
+      expect((policy as PersistenceUntilNetworkSuccessPolicy).ttl,
+          const Duration(hours: 24));
+      expect(policy.toMap()['ttlMs'], const Duration(hours: 24).inMilliseconds);
+    });
+
+    test('VariantLookupPolicy.networkFirst serializes ttlMs', () {
+      const policy =
+          VariantLookupPolicy.networkFirst(ttl: Duration(minutes: 30));
+      expect(policy, isA<NetworkFirstPolicy>());
+      expect(policy.toMap(), {
+        'policy': 'networkFirst',
+        'ttlMs': const Duration(minutes: 30).inMilliseconds,
+      });
+    });
+
+    test('VariantLookupPolicy.networkFirst defaults ttl to 24 hours', () {
+      const policy = VariantLookupPolicy.networkFirst();
+      expect((policy as NetworkFirstPolicy).ttl, const Duration(hours: 24));
+    });
+
+    test(
+        'FeatureFlagsConfig forwards persistenceUntilNetworkSuccess policy through init',
+        () async {
+      _mixpanel = await Mixpanel.init(
+        "test token",
+        optOutTrackingDefault: false,
+        trackAutomaticEvents: true,
+        featureFlags: const FeatureFlagsConfig(
+          enabled: true,
+          variantLookupPolicy: VariantLookupPolicy.persistenceUntilNetworkSuccess(
+              ttl: Duration(hours: 6)),
+        ),
+      );
+      final args = (methodCall!.arguments as Map)['featureFlags'] as Map;
+      expect(args['variantLookupPolicy'], {
+        'policy': 'persistenceUntilNetworkSuccess',
+        'ttlMs': const Duration(hours: 6).inMilliseconds,
+      });
+    });
+
+    test('MixpanelFlagVariant.fromMap parses persistence source', () {
+      final variant = MixpanelFlagVariant.fromMap({
+        'key': 'flag_a',
+        'value': 'on',
+        'source': {'kind': 'persistence', 'persistedAtMillis': 1700000000000},
+      });
+      expect(variant.source, isA<PersistenceSource>());
+      final src = variant.source as PersistenceSource;
+      expect(src.persistedAt,
+          DateTime.fromMillisecondsSinceEpoch(1700000000000));
+    });
+
+    test('MixpanelFlagVariant.fromMap parses network source', () {
+      final variant = MixpanelFlagVariant.fromMap({
+        'key': 'flag_a',
+        'value': 'on',
+        'source': {'kind': 'network'},
+      });
+      expect(variant.source, isA<NetworkSource>());
+    });
+
+    test('MixpanelFlagVariant.fromMap defaults source to FallbackSource when absent',
+        () {
+      final variant = MixpanelFlagVariant.fromMap({
+        'key': 'flag_a',
+        'value': 'on',
+      });
+      expect(variant.source, isA<FallbackSource>());
+    });
+
+    test('MixpanelFlagVariant.fromMap parses fallback source', () {
+      final variant = MixpanelFlagVariant.fromMap({
+        'key': 'flag_a',
+        'value': 'on',
+        'source': {'kind': 'fallback'},
+      });
+      expect(variant.source, isA<FallbackSource>());
+    });
+
+    test(
+        'MixpanelFlagVariant.fromMap defaults to FallbackSource when persistence source missing timestamp',
+        () {
+      final variant = MixpanelFlagVariant.fromMap({
+        'key': 'flag_a',
+        'value': 'on',
+        'source': {'kind': 'persistence'},
+      });
+      expect(variant.source, isA<FallbackSource>());
+    });
+
+    test('MixpanelFlagVariant.fallback factory has FallbackSource', () {
+      final variant = MixpanelFlagVariant.fallback('flag_a', 'control');
+      expect(variant.source, isA<FallbackSource>());
+    });
+
+    test('FallbackSource instances are equal', () {
+      expect(const FallbackSource(), const FallbackSource());
+    });
+
+    test('PersistenceSource equality uses persistedAt', () {
+      final t = DateTime.fromMillisecondsSinceEpoch(1700000000000);
+      expect(PersistenceSource(persistedAt: t),
+          PersistenceSource(persistedAt: t));
+      expect(
+          PersistenceSource(persistedAt: t),
+          isNot(PersistenceSource(
+              persistedAt:
+                  DateTime.fromMillisecondsSinceEpoch(1700000000001))));
+    });
+
+    test('NetworkSource instances are equal', () {
+      expect(const NetworkSource(), const NetworkSource());
     });
 
     test('areFlagsReady returns false when not ready', () async {
