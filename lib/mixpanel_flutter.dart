@@ -264,11 +264,6 @@ class NetworkOnlyPolicy extends VariantLookupPolicy {
 class PersistenceUntilNetworkSuccessPolicy extends VariantLookupPolicy {
   /// Maximum age of a persisted variant set before it is ignored on read.
   /// Defaults to 24 hours.
-  ///
-  /// Edge cases (handled by the native SDKs):
-  /// - [Duration.zero] — entries are always considered expired on every check.
-  /// - Negative durations — invalid; coerced to 24 hours and a warning is
-  ///   logged on the native side.
   final Duration ttl;
 
   const PersistenceUntilNetworkSuccessPolicy(
@@ -285,11 +280,6 @@ class PersistenceUntilNetworkSuccessPolicy extends VariantLookupPolicy {
 class NetworkFirstPolicy extends VariantLookupPolicy {
   /// Maximum age of a persisted variant set before it is ignored on read.
   /// Defaults to 24 hours.
-  ///
-  /// Edge cases (handled by the native SDKs):
-  /// - [Duration.zero] — entries are always considered expired on every check.
-  /// - Negative durations — invalid; coerced to 24 hours and a warning is
-  ///   logged on the native side.
   final Duration ttl;
 
   const NetworkFirstPolicy({this.ttl = const Duration(hours: 24)});
