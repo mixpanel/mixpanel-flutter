@@ -763,23 +763,23 @@ public class MixpanelFlutterPlugin implements FlutterPlugin, MethodCallHandler {
             case "networkOnly":
                 return VariantLookupPolicy.networkOnly();
             case "persistenceUntilNetworkSuccess":
-                return VariantLookupPolicy.persistenceUntilNetworkSuccess(readTtlMillis(policyMap));
+                return VariantLookupPolicy.persistenceUntilNetworkSuccess(readPersistenceTtlMillis(policyMap));
             case "networkFirst":
-                return VariantLookupPolicy.networkFirst(readTtlMillis(policyMap));
+                return VariantLookupPolicy.networkFirst(readPersistenceTtlMillis(policyMap));
             default:
                 android.util.Log.w("Mixpanel", "Unknown variantLookupPolicy '" + kind + "', falling back to networkOnly");
                 return VariantLookupPolicy.networkOnly();
         }
     }
 
-    private long readTtlMillis(Map<String, Object> policyMap) {
-        Object raw = policyMap.get("ttlMs");
+    private long readPersistenceTtlMillis(Map<String, Object> policyMap) {
+        Object raw = policyMap.get("persistenceTtlMillis");
         if (raw instanceof Number) {
             return ((Number) raw).longValue();
         }
         // Match the Dart-side default (24 hours). Should never hit this path in
-        // practice — the Dart layer always serializes ttlMs for non-networkOnly
-        // policies — but keep the constant in sync to stay safe.
+        // practice — the Dart layer always serializes persistenceTtlMillis for
+        // non-networkOnly policies — but keep the constant in sync to stay safe.
         return java.util.concurrent.TimeUnit.HOURS.toMillis(24);
     }
 

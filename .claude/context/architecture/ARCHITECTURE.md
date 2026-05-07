@@ -224,9 +224,9 @@ Mixpanel Servers
 
 ## Platform Dependencies
 
-- **Android**: Mixpanel Android SDK v8.0.3
-- **iOS**: Mixpanel-swift 6.1.0
-- **macOS**: Mixpanel-swift 6.1.0
+- **Android**: Mixpanel Android SDK v8.7.0
+- **iOS**: Mixpanel-swift 6.4.0
+- **macOS**: Mixpanel-swift 6.4.0
 - **Web**: Mixpanel JavaScript library (loaded from CDN)
 
 ## Example Usage

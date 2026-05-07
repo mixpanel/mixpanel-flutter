@@ -1307,39 +1307,44 @@ void main() {
       expect(map['variantLookupPolicy'], {'policy': 'networkOnly'});
     });
 
-    test('VariantLookupPolicy.persistenceUntilNetworkSuccess serializes ttlMs',
+    test(
+        'VariantLookupPolicy.persistenceUntilNetworkSuccess serializes persistenceTtlMillis',
         () {
       const policy = VariantLookupPolicy.persistenceUntilNetworkSuccess(
-          ttl: Duration(hours: 24));
+          persistenceTtl: Duration(hours: 24));
       expect(policy, isA<PersistenceUntilNetworkSuccessPolicy>());
       expect(policy.toMap(), {
         'policy': 'persistenceUntilNetworkSuccess',
-        'ttlMs': const Duration(hours: 24).inMilliseconds,
+        'persistenceTtlMillis': const Duration(hours: 24).inMilliseconds,
       });
     });
 
     test(
-        'VariantLookupPolicy.persistenceUntilNetworkSuccess defaults ttl to 24 hours',
+        'VariantLookupPolicy.persistenceUntilNetworkSuccess defaults persistenceTtl to 24 hours',
         () {
       const policy = VariantLookupPolicy.persistenceUntilNetworkSuccess();
-      expect((policy as PersistenceUntilNetworkSuccessPolicy).ttl,
+      expect((policy as PersistenceUntilNetworkSuccessPolicy).persistenceTtl,
           const Duration(hours: 24));
-      expect(policy.toMap()['ttlMs'], const Duration(hours: 24).inMilliseconds);
+      expect(policy.toMap()['persistenceTtlMillis'],
+          const Duration(hours: 24).inMilliseconds);
     });
 
-    test('VariantLookupPolicy.networkFirst serializes ttlMs', () {
+    test('VariantLookupPolicy.networkFirst serializes persistenceTtlMillis',
+        () {
       const policy =
-          VariantLookupPolicy.networkFirst(ttl: Duration(minutes: 30));
+          VariantLookupPolicy.networkFirst(persistenceTtl: Duration(minutes: 30));
       expect(policy, isA<NetworkFirstPolicy>());
       expect(policy.toMap(), {
         'policy': 'networkFirst',
-        'ttlMs': const Duration(minutes: 30).inMilliseconds,
+        'persistenceTtlMillis': const Duration(minutes: 30).inMilliseconds,
       });
     });
 
-    test('VariantLookupPolicy.networkFirst defaults ttl to 24 hours', () {
+    test('VariantLookupPolicy.networkFirst defaults persistenceTtl to 24 hours',
+        () {
       const policy = VariantLookupPolicy.networkFirst();
-      expect((policy as NetworkFirstPolicy).ttl, const Duration(hours: 24));
+      expect((policy as NetworkFirstPolicy).persistenceTtl,
+          const Duration(hours: 24));
     });
 
     test(
@@ -1352,13 +1357,13 @@ void main() {
         featureFlags: const FeatureFlagsConfig(
           enabled: true,
           variantLookupPolicy: VariantLookupPolicy.persistenceUntilNetworkSuccess(
-              ttl: Duration(hours: 6)),
+              persistenceTtl: Duration(hours: 6)),
         ),
       );
       final args = (methodCall!.arguments as Map)['featureFlags'] as Map;
       expect(args['variantLookupPolicy'], {
         'policy': 'persistenceUntilNetworkSuccess',
-        'ttlMs': const Duration(hours: 6).inMilliseconds,
+        'persistenceTtlMillis': const Duration(hours: 6).inMilliseconds,
       });
     });
 

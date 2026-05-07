@@ -741,22 +741,22 @@ public class SwiftMixpanelFlutterPlugin: NSObject, FlutterPlugin {
         case "networkOnly":
             return .networkOnly
         case "persistenceUntilNetworkSuccess":
-            return .persistenceUntilNetworkSuccess(ttl: readTtlSeconds(policyMap))
+            return .persistenceUntilNetworkSuccess(persistenceTtl: readPersistenceTtlSeconds(policyMap))
         case "networkFirst":
-            return .networkFirst(ttl: readTtlSeconds(policyMap))
+            return .networkFirst(persistenceTtl: readPersistenceTtlSeconds(policyMap))
         default:
             NSLog("[Mixpanel] Unknown variantLookupPolicy '\(kind)', falling back to networkOnly")
             return .networkOnly
         }
     }
 
-    private func readTtlSeconds(_ policyMap: [String: Any]) -> TimeInterval {
-        if let millis = policyMap["ttlMs"] as? NSNumber {
+    private func readPersistenceTtlSeconds(_ policyMap: [String: Any]) -> TimeInterval {
+        if let millis = policyMap["persistenceTtlMillis"] as? NSNumber {
             return TimeInterval(truncating: millis) / 1000.0
         }
         // Match the Dart-side default (24 hours). Should never hit this path in
-        // practice — the Dart layer always serializes ttlMs for non-networkOnly
-        // policies — but keep this in sync to stay safe.
+        // practice — the Dart layer always serializes persistenceTtlMillis for
+        // non-networkOnly policies — but keep this in sync to stay safe.
         return 24 * 60 * 60
     }
 

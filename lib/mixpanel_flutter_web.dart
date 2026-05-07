@@ -632,36 +632,27 @@ class MixpanelFlutterPlugin {
     }
   }
 
-  /// Translates the web SDK's flat `variant_source` + `persisted_age_in_ms`
+  /// Translates the web SDK's flat `variant_source` + `persisted_at_in_ms`
   /// fields into the discriminated `{kind, persistedAtMillis?}` shape that the
   /// Dart wrapper expects (and that the iOS/Android handlers produce). Returns
   /// `{'kind': 'fallback'}` when `variant_source` is absent — i.e., the
   /// variant is the developer-supplied fallback.
   Map<String, dynamic> _jsSourceToMap(Map<Object?, Object?> variant) {
     final raw = variant['variant_source'];
-    // The JS SDK names this case 'cache'; we surface it to the Dart layer as
-    // 'persistence' to match the mobile clients' terminology.
-    if (raw == 'cache' || raw == 'persistence') {
-      final ageRaw = variant['persisted_age_in_ms'];
-      final ageMs = ageRaw is num ? ageRaw.toInt() : null;
-      // The web SDK only exposes age, not the absolute write time. Compute the
-      // approximate persistedAt from "now" so the Dart side sees a DateTime
-      // consistent with iOS/Android. Drift is bounded by the few ms between
-      // the SDK reading from persistence and us reading this map.
-      if (ageMs == null) {
-        debugPrint('[Mixpanel] persistence variant missing persisted_age_in_ms, defaulting to fallback');
+    if (raw == 'persistence') {
+      final atRaw = variant['persisted_at_in_ms'];
+      final atMs = atRaw is num ? atRaw.toInt() : null;
+      if (atMs == null) {
+        debugPrint('[Mixpanel] persistence variant missing persisted_at_in_ms, defaulting to fallback');
         return {'kind': 'fallback'};
       }
-      return {
-        'kind': 'persistence',
-        'persistedAtMillis': DateTime.now().millisecondsSinceEpoch - ageMs,
-      };
+      return {'kind': 'persistence', 'persistedAtMillis': atMs};
     }
     if (raw == 'network') {
       return {'kind': 'network'};
     }
-    // Missing variant_source (or unknown value) means the JS SDK returned the
-    // developer-supplied fallback unchanged.
+    // 'fallback', missing, or unknown — the JS SDK returned the developer-
+    // supplied fallback unchanged.
     return {'kind': 'fallback'};
   }
 
@@ -674,7 +665,8 @@ class MixpanelFlutterPlugin {
     if (policy == 'persistenceUntilNetworkSuccess' || policy == 'networkFirst') {
       return {
         'variantLookupPolicy': policy,
-        if (policyMap['ttlMs'] is num) 'ttlMs': policyMap['ttlMs'],
+        if (policyMap['persistenceTtlMillis'] is num)
+          'persistenceTtlMs': policyMap['persistenceTtlMillis'],
       };
     }
     // 'networkOnly' (or unknown) — let the JS SDK use its default.

@@ -223,11 +223,11 @@ class MixpanelFlagVariant {
 ///   session that used a persisting policy is wiped on init.
 /// - [VariantLookupPolicy.persistenceUntilNetworkSuccess]: serve persisted
 ///   variants immediately on init (within
-///   [PersistenceUntilNetworkSuccessPolicy.ttl]), refresh from the network in
-///   the background.
+///   [PersistenceUntilNetworkSuccessPolicy.persistenceTtl]), refresh from the
+///   network in the background.
 /// - [VariantLookupPolicy.networkFirst]: await the network call; only fall
-///   back to persisted variants (within [NetworkFirstPolicy.ttl]) if the
-///   network call fails.
+///   back to persisted variants (within [NetworkFirstPolicy.persistenceTtl])
+///   if the network call fails.
 ///
 /// Inspect [MixpanelFlagVariant.source] on a served variant to tell whether
 /// it came from persistence or a fresh network response.
@@ -238,14 +238,22 @@ abstract class VariantLookupPolicy {
   /// Wipes any stale on-disk data from a prior session on init.
   const factory VariantLookupPolicy.networkOnly() = NetworkOnlyPolicy;
 
-  /// Serve persisted variants immediately on init (within [ttl]), then
-  /// refresh from the network in the background.
+  /// Serve persisted variants immediately on init (within [persistenceTtl]),
+  /// then refresh from the network in the background.
+  ///
+  /// **Web:** not yet supported by the Mixpanel JS SDK at the time of this
+  /// release. On web this policy is silently treated as [networkOnly] until
+  /// JS SDK support ships. Check the Mixpanel JS docs for availability.
   const factory VariantLookupPolicy.persistenceUntilNetworkSuccess(
-      {Duration ttl}) = PersistenceUntilNetworkSuccessPolicy;
+      {Duration persistenceTtl}) = PersistenceUntilNetworkSuccessPolicy;
 
-  /// Await the network call; fall back to persisted variants (within [ttl])
-  /// only on network failure.
-  const factory VariantLookupPolicy.networkFirst({Duration ttl}) =
+  /// Await the network call; fall back to persisted variants (within
+  /// [persistenceTtl]) only on network failure.
+  ///
+  /// **Web:** not yet supported by the Mixpanel JS SDK at the time of this
+  /// release. On web this policy is silently treated as [networkOnly] until
+  /// JS SDK support ships. Check the Mixpanel JS docs for availability.
+  const factory VariantLookupPolicy.networkFirst({Duration persistenceTtl}) =
       NetworkFirstPolicy;
 
   /// Serializes this policy for the platform channel.
@@ -264,15 +272,15 @@ class NetworkOnlyPolicy extends VariantLookupPolicy {
 class PersistenceUntilNetworkSuccessPolicy extends VariantLookupPolicy {
   /// Maximum age of a persisted variant set before it is ignored on read.
   /// Defaults to 24 hours.
-  final Duration ttl;
+  final Duration persistenceTtl;
 
   const PersistenceUntilNetworkSuccessPolicy(
-      {this.ttl = const Duration(hours: 24)});
+      {this.persistenceTtl = const Duration(hours: 24)});
 
   @override
   Map<String, dynamic> toMap() => {
         'policy': 'persistenceUntilNetworkSuccess',
-        'ttlMs': ttl.inMilliseconds,
+        'persistenceTtlMillis': persistenceTtl.inMilliseconds,
       };
 }
 
@@ -280,13 +288,15 @@ class PersistenceUntilNetworkSuccessPolicy extends VariantLookupPolicy {
 class NetworkFirstPolicy extends VariantLookupPolicy {
   /// Maximum age of a persisted variant set before it is ignored on read.
   /// Defaults to 24 hours.
-  final Duration ttl;
+  final Duration persistenceTtl;
 
-  const NetworkFirstPolicy({this.ttl = const Duration(hours: 24)});
+  const NetworkFirstPolicy({this.persistenceTtl = const Duration(hours: 24)});
 
   @override
-  Map<String, dynamic> toMap() =>
-      {'policy': 'networkFirst', 'ttlMs': ttl.inMilliseconds};
+  Map<String, dynamic> toMap() => {
+        'policy': 'networkFirst',
+        'persistenceTtlMillis': persistenceTtl.inMilliseconds,
+      };
 }
 
 /// Configuration options for feature flags.
