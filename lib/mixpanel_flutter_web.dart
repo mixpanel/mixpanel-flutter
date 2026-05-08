@@ -634,9 +634,13 @@ class MixpanelFlutterPlugin {
 
   /// Translates the web SDK's flat `variant_source` + `persisted_at_in_ms`
   /// fields into the discriminated `{kind, persistedAtMillis?}` shape that the
-  /// Dart wrapper expects (and that the iOS/Android handlers produce). Returns
-  /// `{'kind': 'fallback'}` when `variant_source` is absent — i.e., the
-  /// variant is the developer-supplied fallback.
+  /// Dart wrapper expects (and that the iOS/Android handlers produce). Defaults
+  /// to `{'kind': 'network'}` when `variant_source` is absent: at the time of
+  /// this release the Mixpanel JS SDK does not yet emit `variant_source`, so
+  /// every served variant lands here — treating them as network beats
+  /// mislabeling every successful fetch as a fallback. Sources will be
+  /// reported accurately once JS SDK support ships; check the Mixpanel JS
+  /// docs for availability.
   Map<String, dynamic> _jsSourceToMap(Map<Object?, Object?> variant) {
     final raw = variant['variant_source'];
     if (raw == 'persistence') {
@@ -648,12 +652,11 @@ class MixpanelFlutterPlugin {
       }
       return {'kind': 'persistence', 'persistedAtMillis': atMs};
     }
-    if (raw == 'network') {
-      return {'kind': 'network'};
+    if (raw == 'fallback') {
+      return {'kind': 'fallback'};
     }
-    // 'fallback', missing, or unknown — the JS SDK returned the developer-
-    // supplied fallback unchanged.
-    return {'kind': 'fallback'};
+    // 'network', missing, or unknown.
+    return {'kind': 'network'};
   }
 
   /// Translates the Dart-side [VariantLookupPolicy] wire format into the
