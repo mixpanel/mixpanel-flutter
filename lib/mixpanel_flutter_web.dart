@@ -222,12 +222,17 @@ class MixpanelFlutterPlugin {
     if (featureFlags != null && featureFlags is Map) {
       bool enabled = featureFlags['enabled'] == true;
       if (enabled) {
+        final flagsConfig = <String, dynamic>{};
         dynamic context = featureFlags['context'];
         if (context != null && context is Map && context.isNotEmpty) {
-          initConfig['flags'] = {'context': context};
-        } else {
-          initConfig['flags'] = true;
+          flagsConfig['context'] = context;
         }
+        final persistence =
+            _flagsPersistenceFromPolicy(featureFlags['variantLookupPolicy']);
+        if (persistence != null) {
+          flagsConfig['persistence'] = persistence;
+        }
+        initConfig['flags'] = flagsConfig.isEmpty ? true : flagsConfig;
       }
     }
 
@@ -583,6 +588,7 @@ class MixpanelFlutterPlugin {
           'experimentId': value['experiment_id'] as String?,
           'isExperimentActive': value['is_experiment_active'] as bool?,
           'isQaTester': value['is_qa_tester'] as bool?,
+          'source': _jsSourceToMap(value),
         };
       }
     });
@@ -590,15 +596,18 @@ class MixpanelFlutterPlugin {
   }
 
   Map<String, dynamic> _jsVariantToMap(JSAny? jsResult, Map<Object?, Object?> fallbackMap) {
+    Map<String, dynamic> fallback() => {
+          'key': fallbackMap['key'] as String? ?? '',
+          'value': fallbackMap['value'],
+          'experimentId': null,
+          'isExperimentActive': null,
+          'isQaTester': null,
+          'source': const {'kind': 'fallback'},
+        };
+
     if (jsResult == null) {
       debugPrint('[Mixpanel] _jsVariantToMap received null result, returning fallback');
-      return {
-        'key': fallbackMap['key'] as String? ?? '',
-        'value': fallbackMap['value'],
-        'experimentId': null,
-        'isExperimentActive': null,
-        'isQaTester': null,
-      };
+      return fallback();
     }
 
     // Convert JS object to Dart map
@@ -606,13 +615,7 @@ class MixpanelFlutterPlugin {
       Map<Object?, Object?>? dartMap = (jsResult as JSObject).dartify() as Map<Object?, Object?>?;
       if (dartMap == null) {
         debugPrint('[Mixpanel] _jsVariantToMap failed to convert JS object, returning fallback');
-        return {
-          'key': fallbackMap['key'] as String? ?? '',
-          'value': fallbackMap['value'],
-          'experimentId': null,
-          'isExperimentActive': null,
-          'isQaTester': null,
-        };
+        return fallback();
       }
 
       return {
@@ -621,16 +624,55 @@ class MixpanelFlutterPlugin {
         'experimentId': dartMap['experiment_id'] as String?,
         'isExperimentActive': dartMap['is_experiment_active'] as bool?,
         'isQaTester': dartMap['is_qa_tester'] as bool?,
+        'source': _jsSourceToMap(dartMap),
       };
     } catch (e) {
       debugPrint('[Mixpanel] _jsVariantToMap failed with error: $e, returning fallback');
+      return fallback();
+    }
+  }
+
+  /// Translates the web SDK's flat `variant_source` + `persisted_at_in_ms`
+  /// fields into the discriminated `{kind, persistedAtMillis?}` shape that the
+  /// Dart wrapper expects (and that the iOS/Android handlers produce). Defaults
+  /// to `{'kind': 'network'}` when `variant_source` is absent: at the time of
+  /// this release the Mixpanel JS SDK does not yet emit `variant_source`, so
+  /// every served variant lands here — treating them as network beats
+  /// mislabeling every successful fetch as a fallback. Sources will be
+  /// reported accurately once JS SDK support ships; check the Mixpanel JS
+  /// docs for availability.
+  Map<String, dynamic> _jsSourceToMap(Map<Object?, Object?> variant) {
+    final raw = variant['variant_source'];
+    if (raw == 'persistence') {
+      final atRaw = variant['persisted_at_in_ms'];
+      final atMs = atRaw is num ? atRaw.toInt() : null;
+      if (atMs == null) {
+        debugPrint('[Mixpanel] persistence variant missing persisted_at_in_ms, defaulting to fallback');
+        return {'kind': 'fallback'};
+      }
+      return {'kind': 'persistence', 'persistedAtMillis': atMs};
+    }
+    if (raw == 'fallback') {
+      return {'kind': 'fallback'};
+    }
+    // 'network', missing, or unknown.
+    return {'kind': 'network'};
+  }
+
+  /// Translates the Dart-side [VariantLookupPolicy] wire format into the
+  /// `flags.persistence` config shape the web SDK accepts. Returns `null` for
+  /// the default `networkOnly` policy so we don't bloat the config.
+  Map<String, dynamic>? _flagsPersistenceFromPolicy(dynamic policyMap) {
+    if (policyMap is! Map) return null;
+    final policy = policyMap['policy'];
+    if (policy == 'persistenceUntilNetworkSuccess' || policy == 'networkFirst') {
       return {
-        'key': fallbackMap['key'] as String? ?? '',
-        'value': fallbackMap['value'],
-        'experimentId': null,
-        'isExperimentActive': null,
-        'isQaTester': null,
+        'variantLookupPolicy': policy,
+        if (policyMap['persistenceTtlMillis'] is num)
+          'persistenceTtlMs': policyMap['persistenceTtlMillis'],
       };
     }
+    // 'networkOnly' (or unknown) — let the JS SDK use its default.
+    return null;
   }
 }

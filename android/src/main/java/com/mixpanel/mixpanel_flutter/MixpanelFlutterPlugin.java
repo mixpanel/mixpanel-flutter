@@ -20,8 +20,11 @@ import io.flutter.plugin.common.MethodChannel;
 import io.flutter.plugin.common.MethodChannel.MethodCallHandler;
 import io.flutter.plugin.common.MethodChannel.Result;
 
+import com.mixpanel.android.mpmetrics.FeatureFlagOptions;
 import com.mixpanel.android.mpmetrics.MixpanelAPI;
+import com.mixpanel.android.mpmetrics.MixpanelFlagVariant;
 import com.mixpanel.android.mpmetrics.MixpanelOptions;
+import com.mixpanel.android.mpmetrics.VariantLookupPolicy;
 
 /**
  * MixpanelFlutterPlugin
@@ -241,6 +244,7 @@ public class MixpanelFlutterPlugin implements FlutterPlugin, MethodCallHandler {
         Map<String, Object> featureFlagsMap = call.<HashMap<String, Object>>argument("featureFlags");
         Boolean featureFlagsEnabled = null;
         JSONObject featureFlagsContext = null;
+        VariantLookupPolicy variantLookupPolicy = null;
         if (featureFlagsMap != null) {
             Object enabledValue = featureFlagsMap.get("enabled");
             if (enabledValue instanceof Boolean) {
@@ -256,6 +260,12 @@ public class MixpanelFlutterPlugin implements FlutterPlugin, MethodCallHandler {
                     android.util.Log.w("Mixpanel", "Failed to parse feature flags context: " + e.getMessage());
                 }
             }
+            Object policyValue = featureFlagsMap.get("variantLookupPolicy");
+            if (policyValue instanceof Map) {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> policyMap = (Map<String, Object>) policyValue;
+                variantLookupPolicy = parseVariantLookupPolicy(policyMap);
+            }
         }
 
         // Build MixpanelOptions with feature flags configuration
@@ -264,10 +274,14 @@ public class MixpanelFlutterPlugin implements FlutterPlugin, MethodCallHandler {
                 .superProperties(superAndMixpanelProperties);
 
         if (featureFlagsEnabled != null && featureFlagsEnabled) {
-            optionsBuilder.featureFlagsEnabled(true);
+            FeatureFlagOptions.Builder ffBuilder = new FeatureFlagOptions.Builder().enabled(true);
             if (featureFlagsContext != null) {
-                optionsBuilder.featureFlagsContext(featureFlagsContext);
+                ffBuilder.context(featureFlagsContext);
             }
+            if (variantLookupPolicy != null) {
+                ffBuilder.variantLookupPolicy(variantLookupPolicy);
+            }
+            optionsBuilder.featureFlagOptions(ffBuilder.build());
         }
 
         boolean trackAutoEvents = trackAutomaticEvents == null ? true : trackAutomaticEvents;
@@ -701,23 +715,72 @@ public class MixpanelFlutterPlugin implements FlutterPlugin, MethodCallHandler {
         });
     }
 
-    private com.mixpanel.android.mpmetrics.MixpanelFlagVariant mapToFlagVariant(Map<String, Object> map) {
+    private MixpanelFlagVariant mapToFlagVariant(Map<String, Object> map) {
         if (map == null) {
-            return new com.mixpanel.android.mpmetrics.MixpanelFlagVariant("", null);
+            return new MixpanelFlagVariant("", null);
         }
         String key = (String) map.get("key");
         Object value = map.get("value");
-        return new com.mixpanel.android.mpmetrics.MixpanelFlagVariant(key != null ? key : "", value);
+        return new MixpanelFlagVariant(key != null ? key : "", value);
     }
 
-    private Map<String, Object> flagVariantToMap(com.mixpanel.android.mpmetrics.MixpanelFlagVariant variant) {
+    private Map<String, Object> flagVariantToMap(MixpanelFlagVariant variant) {
         Map<String, Object> map = new HashMap<>();
         map.put("key", variant.key);
         map.put("value", variant.value);
         map.put("experimentId", variant.experimentID);
         map.put("isExperimentActive", variant.isExperimentActive);
         map.put("isQaTester", variant.isQATester);
+        map.put("source", flagVariantSourceToMap(variant.source));
         return map;
+    }
+
+    private Map<String, Object> flagVariantSourceToMap(MixpanelFlagVariant.Source source) {
+        // Native source is non-null on every variant the SDK returns. Defensive
+        // null-check kept in case the bridge runs against an older native build
+        // that still allowed null sources.
+        if (source == null) {
+            return null;
+        }
+        Map<String, Object> map = new HashMap<>();
+        if (source instanceof MixpanelFlagVariant.Source.Persistence) {
+            map.put("kind", "persistence");
+            map.put("persistedAtMillis", ((MixpanelFlagVariant.Source.Persistence) source).persistedAtMillis);
+        } else if (source instanceof MixpanelFlagVariant.Source.Network) {
+            map.put("kind", "network");
+        } else {
+            map.put("kind", "fallback");
+        }
+        return map;
+    }
+
+    private VariantLookupPolicy parseVariantLookupPolicy(Map<String, Object> policyMap) {
+        Object kind = policyMap.get("policy");
+        if (!(kind instanceof String)) {
+            return null;
+        }
+        switch ((String) kind) {
+            case "networkOnly":
+                return VariantLookupPolicy.networkOnly();
+            case "persistenceUntilNetworkSuccess":
+                return VariantLookupPolicy.persistenceUntilNetworkSuccess(readPersistenceTtlMillis(policyMap));
+            case "networkFirst":
+                return VariantLookupPolicy.networkFirst(readPersistenceTtlMillis(policyMap));
+            default:
+                android.util.Log.w("Mixpanel", "Unknown variantLookupPolicy '" + kind + "', falling back to networkOnly");
+                return VariantLookupPolicy.networkOnly();
+        }
+    }
+
+    private long readPersistenceTtlMillis(Map<String, Object> policyMap) {
+        Object raw = policyMap.get("persistenceTtlMillis");
+        if (raw instanceof Number) {
+            return ((Number) raw).longValue();
+        }
+        // Match the Dart-side default (24 hours). Should never hit this path in
+        // practice — the Dart layer always serializes persistenceTtlMillis for
+        // non-networkOnly policies — but keep the constant in sync to stay safe.
+        return java.util.concurrent.TimeUnit.HOURS.toMillis(24);
     }
 
     @Override

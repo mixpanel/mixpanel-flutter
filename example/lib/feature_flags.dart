@@ -129,6 +129,14 @@ class _FeatureFlagsScreenState extends State<FeatureFlagsScreen> {
                     variant.isExperimentActive == expectedIsExperimentActive
                         ? '✓'
                         : '✗';
+                final src = variant.source;
+                final sourceLabel = src is PersistenceSource
+                    ? 'persistence (persistedAt: ${src.persistedAt})'
+                    : src is NetworkSource
+                        ? 'network'
+                        : src is FallbackSource
+                            ? 'fallback'
+                            : 'unknown';
                 final alertText = '''Expected:
   key: $expectedKey
   experimentId: $expectedExperimentId
@@ -139,7 +147,8 @@ Actual:
   value: ${variant.value}
   experimentId: ${variant.experimentId}  $expIdMatch
   isExperimentActive: ${variant.isExperimentActive}  $activeMatch
-  isQaTester: ${variant.isQaTester}''';
+  isQaTester: ${variant.isQaTester}
+  source: $sourceLabel''';
                 _showAlert(context, "Full Variant: $flagName", alertText);
               },
             ),

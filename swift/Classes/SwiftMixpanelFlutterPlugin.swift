@@ -194,12 +194,16 @@ public class SwiftMixpanelFlutterPlugin: NSObject, FlutterPlugin {
         let trackAutomaticEvents = arguments["trackAutomaticEvents"] as! Bool
 
         // Check for feature flags configuration
-        var featureFlagsEnabled = false
-        var featureFlagsContext: [String: Any] = [:]
+        var featureFlagOptions: FeatureFlagOptions? = nil
         if let featureFlags = arguments["featureFlags"] as? [String: Any],
            let enabled = featureFlags["enabled"] as? Bool, enabled {
-            featureFlagsEnabled = true
-            featureFlagsContext = featureFlags["context"] as? [String: Any] ?? [:]
+            let context = featureFlags["context"] as? [String: Any] ?? [:]
+            let policy = parseVariantLookupPolicy(featureFlags["variantLookupPolicy"] as? [String: Any])
+            featureFlagOptions = FeatureFlagOptions(
+                enabled: true,
+                context: context,
+                variantLookupPolicy: policy
+            )
         }
 
         let options = MixpanelOptions(
@@ -209,8 +213,7 @@ public class SwiftMixpanelFlutterPlugin: NSObject, FlutterPlugin {
             trackAutomaticEvents: trackAutomaticEvents,
             optOutTrackingByDefault: optOutTrackingDefault ?? false,
             superProperties: MixpanelTypeHandler.mixpanelProperties(properties: superProperties, mixpanelProperties: mixpanelProperties),
-            featureFlagsEnabled: featureFlagsEnabled,
-            featureFlagsContext: featureFlagsContext
+            featureFlagOptions: featureFlagOptions
         )
         instance = Mixpanel.initialize(options: options)
 
@@ -707,8 +710,54 @@ public class SwiftMixpanelFlutterPlugin: NSObject, FlutterPlugin {
             "value": variant.value ?? NSNull(),
             "experimentId": variant.experimentID ?? NSNull(),
             "isExperimentActive": variant.isExperimentActive ?? NSNull(),
-            "isQaTester": variant.isQATester ?? NSNull()
+            "isQaTester": variant.isQATester ?? NSNull(),
+            "source": flagVariantSourceToMap(variant.source) ?? NSNull()
         ]
+    }
+
+    private func flagVariantSourceToMap(_ source: MixpanelFlagVariant.Source?) -> [String: Any]? {
+        // Native source is non-nil on every variant the SDK returns. Defensive
+        // nil-check kept in case the bridge runs against an older native build
+        // that still allowed nil sources.
+        guard let source = source else { return nil }
+        switch source {
+        case .network:
+            return ["kind": "network"]
+        case .persistence(let persistedAt):
+            return [
+                "kind": "persistence",
+                "persistedAtMillis": Int64(persistedAt.timeIntervalSince1970 * 1000)
+            ]
+        case .fallback:
+            return ["kind": "fallback"]
+        }
+    }
+
+    private func parseVariantLookupPolicy(_ policyMap: [String: Any]?) -> VariantLookupPolicy {
+        guard let policyMap = policyMap, let kind = policyMap["policy"] as? String else {
+            return .networkOnly
+        }
+        switch kind {
+        case "networkOnly":
+            return .networkOnly
+        case "persistenceUntilNetworkSuccess":
+            return .persistenceUntilNetworkSuccess(persistenceTtl: readPersistenceTtlSeconds(policyMap))
+        case "networkFirst":
+            return .networkFirst(persistenceTtl: readPersistenceTtlSeconds(policyMap))
+        default:
+            NSLog("[Mixpanel] Unknown variantLookupPolicy '\(kind)', falling back to networkOnly")
+            return .networkOnly
+        }
+    }
+
+    private func readPersistenceTtlSeconds(_ policyMap: [String: Any]) -> TimeInterval {
+        if let millis = policyMap["persistenceTtlMillis"] as? NSNumber {
+            return TimeInterval(truncating: millis) / 1000.0
+        }
+        // Match the Dart-side default (24 hours). Should never hit this path in
+        // practice — the Dart layer always serializes persistenceTtlMillis for
+        // non-networkOnly policies — but keep this in sync to stay safe.
+        return 24 * 60 * 60
     }
 
 }
