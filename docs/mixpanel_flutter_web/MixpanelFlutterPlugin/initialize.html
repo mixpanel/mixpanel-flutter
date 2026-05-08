@@ -78,12 +78,17 @@
   if (featureFlags != null &amp;&amp; featureFlags is Map) {
     bool enabled = featureFlags[&#39;enabled&#39;] == true;
     if (enabled) {
+      final flagsConfig = &lt;String, dynamic&gt;{};
       dynamic context = featureFlags[&#39;context&#39;];
       if (context != null &amp;&amp; context is Map &amp;&amp; context.isNotEmpty) {
-        initConfig[&#39;flags&#39;] = {&#39;context&#39;: context};
-      } else {
-        initConfig[&#39;flags&#39;] = true;
+        flagsConfig[&#39;context&#39;] = context;
       }
+      final persistence =
+          _flagsPersistenceFromPolicy(featureFlags[&#39;variantLookupPolicy&#39;]);
+      if (persistence != null) {
+        flagsConfig[&#39;persistence&#39;] = persistence;
+      }
+      initConfig[&#39;flags&#39;] = flagsConfig.isEmpty ? true : flagsConfig;
     }
   }
 
@@ -116,7 +121,7 @@
 <footer>
   <span class="no-break">
     mixpanel_flutter
-      2.7.0
+      2.8.0
   </span>
   
 </footer>

@@ -65,10 +65,11 @@
     <h2>Constructors</h2>
     <dl class="constructor-summary-list">
         <dt id="FeatureFlagsConfig.new" class="callable">
-          <span class="name"><a href="../mixpanel_flutter/FeatureFlagsConfig/FeatureFlagsConfig.html">FeatureFlagsConfig</a></span><span class="signature">({<span class="parameter" id="-param-enabled"><span class="type-annotation"><a href="https://api.flutter.dev/flutter/dart-core/bool-class.html">bool</a></span> <span class="parameter-name">enabled</span> = <span class="default-value">true</span>, </span><span class="parameter" id="-param-context"><span class="type-annotation"><a href="https://api.flutter.dev/flutter/dart-core/Map-class.html">Map</a><span class="signature">&lt;<wbr><span class="type-parameter"><a href="https://api.flutter.dev/flutter/dart-core/String-class.html">String</a></span>, <span class="type-parameter">dynamic</span>&gt;</span></span> <span class="parameter-name">context</span> = <span class="default-value">const {}</span></span>})</span>
+          <span class="name"><a href="../mixpanel_flutter/FeatureFlagsConfig/FeatureFlagsConfig.html">FeatureFlagsConfig</a></span><span class="signature">({<span class="parameter" id="-param-enabled"><span class="type-annotation"><a href="https://api.flutter.dev/flutter/dart-core/bool-class.html">bool</a></span> <span class="parameter-name">enabled</span> = <span class="default-value">true</span>, </span><span class="parameter" id="-param-context"><span class="type-annotation"><a href="https://api.flutter.dev/flutter/dart-core/Map-class.html">Map</a><span class="signature">&lt;<wbr><span class="type-parameter"><a href="https://api.flutter.dev/flutter/dart-core/String-class.html">String</a></span>, <span class="type-parameter">dynamic</span>&gt;</span></span> <span class="parameter-name">context</span> = <span class="default-value">const {}</span>, </span><span class="parameter" id="-param-variantLookupPolicy"><span class="type-annotation"><a href="../mixpanel_flutter/VariantLookupPolicy-class.html">VariantLookupPolicy</a></span> <span class="parameter-name">variantLookupPolicy</span> = <span class="default-value">const VariantLookupPolicy.networkOnly()</span></span>})</span>
         </dt>
         <dd>
           
+            <div class="constructor-modifier features">const</div>
         </dd>
     </dl>
   </section>
@@ -124,6 +125,20 @@ These can be used for targeting and segmentation.
 <dd class="inherited">
   A representation of the runtime type of the object.
   <div class="features"><span class="feature">no setter</span><span class="feature">inherited</span></div>
+
+</dd>
+
+        <dt id="variantLookupPolicy" class="property">
+  <span class="name"><a href="../mixpanel_flutter/FeatureFlagsConfig/variantLookupPolicy.html">variantLookupPolicy</a></span>
+  <span class="signature">&#8594; <a href="../mixpanel_flutter/VariantLookupPolicy-class.html">VariantLookupPolicy</a></span>
+  
+
+</dt>
+<dd>
+  Strategy for resolving variants relative to the on-disk cache and
+network. Defaults to <a href="../mixpanel_flutter/VariantLookupPolicy/VariantLookupPolicy.networkOnly.html">VariantLookupPolicy.networkOnly</a> — matches the
+native SDK defaults and pre-persistence behavior.
+  <div class="features"><span class="feature">final</span></div>
 
 </dd>
 
@@ -225,7 +240,7 @@ These can be used for targeting and segmentation.
 <footer>
   <span class="no-break">
     mixpanel_flutter
-      2.7.0
+      2.8.0
   </span>
   
 </footer>

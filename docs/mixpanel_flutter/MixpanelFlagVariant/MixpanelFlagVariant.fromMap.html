@@ -79,6 +79,8 @@
     experimentId: map[&#39;experimentId&#39;] as String?,
     isExperimentActive: map[&#39;isExperimentActive&#39;] as bool?,
     isQaTester: map[&#39;isQaTester&#39;] as bool?,
+    source: MixpanelFlagVariantSource.fromMap(
+        map[&#39;source&#39;] as Map&lt;dynamic, dynamic&gt;?),
   );
 }</code></pre>
 </section>
@@ -108,7 +110,7 @@
 <footer>
   <span class="no-break">
     mixpanel_flutter
-      2.7.0
+      2.8.0
   </span>
   
 </footer>
