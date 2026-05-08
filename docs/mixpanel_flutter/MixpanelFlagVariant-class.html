@@ -65,7 +65,7 @@
     <h2>Constructors</h2>
     <dl class="constructor-summary-list">
         <dt id="MixpanelFlagVariant.new" class="callable">
-          <span class="name"><a href="../mixpanel_flutter/MixpanelFlagVariant/MixpanelFlagVariant.html">MixpanelFlagVariant</a></span><span class="signature">({<span class="parameter" id="-param-key"><span>required</span> <span class="type-annotation"><a href="https://api.flutter.dev/flutter/dart-core/String-class.html">String</a></span> <span class="parameter-name">key</span>, </span><span class="parameter" id="-param-value"><span>required</span> <span class="type-annotation">dynamic</span> <span class="parameter-name">value</span>, </span><span class="parameter" id="-param-experimentId"><span class="type-annotation"><a href="https://api.flutter.dev/flutter/dart-core/String-class.html">String</a>?</span> <span class="parameter-name">experimentId</span>, </span><span class="parameter" id="-param-isExperimentActive"><span class="type-annotation"><a href="https://api.flutter.dev/flutter/dart-core/bool-class.html">bool</a>?</span> <span class="parameter-name">isExperimentActive</span>, </span><span class="parameter" id="-param-isQaTester"><span class="type-annotation"><a href="https://api.flutter.dev/flutter/dart-core/bool-class.html">bool</a>?</span> <span class="parameter-name">isQaTester</span></span>})</span>
+          <span class="name"><a href="../mixpanel_flutter/MixpanelFlagVariant/MixpanelFlagVariant.html">MixpanelFlagVariant</a></span><span class="signature">({<span class="parameter" id="-param-key"><span>required</span> <span class="type-annotation"><a href="https://api.flutter.dev/flutter/dart-core/String-class.html">String</a></span> <span class="parameter-name">key</span>, </span><span class="parameter" id="-param-value"><span>required</span> <span class="type-annotation">dynamic</span> <span class="parameter-name">value</span>, </span><span class="parameter" id="-param-experimentId"><span class="type-annotation"><a href="https://api.flutter.dev/flutter/dart-core/String-class.html">String</a>?</span> <span class="parameter-name">experimentId</span>, </span><span class="parameter" id="-param-isExperimentActive"><span class="type-annotation"><a href="https://api.flutter.dev/flutter/dart-core/bool-class.html">bool</a>?</span> <span class="parameter-name">isExperimentActive</span>, </span><span class="parameter" id="-param-isQaTester"><span class="type-annotation"><a href="https://api.flutter.dev/flutter/dart-core/bool-class.html">bool</a>?</span> <span class="parameter-name">isQaTester</span>, </span><span class="parameter" id="-param-source"><span class="type-annotation"><a href="../mixpanel_flutter/MixpanelFlagVariantSource-class.html">MixpanelFlagVariantSource</a></span> <span class="parameter-name">source</span> = <span class="default-value">const FallbackSource()</span></span>})</span>
         </dt>
         <dd>
           
@@ -161,6 +161,20 @@
 <dd class="inherited">
   A representation of the runtime type of the object.
   <div class="features"><span class="feature">no setter</span><span class="feature">inherited</span></div>
+
+</dd>
+
+        <dt id="source" class="property">
+  <span class="name"><a href="../mixpanel_flutter/MixpanelFlagVariant/source.html">source</a></span>
+  <span class="signature">&#8594; <a href="../mixpanel_flutter/MixpanelFlagVariantSource-class.html">MixpanelFlagVariantSource</a></span>
+  
+
+</dt>
+<dd>
+  Where this variant was sourced from. Non-null on every variant the SDK
+returns. Variants the developer constructs default to <a href="../mixpanel_flutter/FallbackSource-class.html">FallbackSource</a>,
+since the only reason to build one is to pass it as a fallback.
+  <div class="features"><span class="feature">final</span></div>
 
 </dd>
 
@@ -275,7 +289,7 @@ Can be any type: bool, String, int, double, Map, List, etc.
 <footer>
   <span class="no-break">
     mixpanel_flutter
-      2.7.0
+      2.8.0
   </span>
   
 </footer>

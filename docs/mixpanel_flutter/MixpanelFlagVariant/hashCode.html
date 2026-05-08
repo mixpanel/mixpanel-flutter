@@ -112,6 +112,7 @@ int get hashCode {
   result = 37 * result + (experimentId?.hashCode ?? 0);
   result = 37 * result + (isExperimentActive?.hashCode ?? 0);
   result = 37 * result + (isQaTester?.hashCode ?? 0);
+  result = 37 * result + source.hashCode;
   return result;
 }</code></pre>
 </section>
@@ -143,7 +144,7 @@ int get hashCode {
 <footer>
   <span class="no-break">
     mixpanel_flutter
-      2.7.0
+      2.8.0
   </span>
   
 </footer>
