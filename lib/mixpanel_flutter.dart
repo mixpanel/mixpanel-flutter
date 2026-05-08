@@ -339,7 +339,7 @@ class Mixpanel {
       : const MethodChannel(
           'mixpanel_flutter', StandardMethodCodec(MixpanelMessageCodec()));
   static final Map<String, String> _mixpanelProperties = {
-    '\$lib_version': '2.7.0',
+    '\$lib_version': '2.8.0',
     'mp_lib': 'flutter',
   };
 
