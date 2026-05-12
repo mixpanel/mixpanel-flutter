@@ -2,6 +2,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mixpanel_flutter/codec/mixpanel_message_codec.dart';
 import 'package:mixpanel_flutter/mixpanel_flutter.dart';
+import 'package:mixpanel_flutter/src/version.dart';
 
 void main() {
   const MethodChannel channel = MethodChannel(
@@ -41,7 +42,7 @@ void main() {
             'optOutTrackingDefault': false,
             'trackAutomaticEvents': true,
             'mixpanelProperties': {
-              '\$lib_version': '2.8.0',
+              '\$lib_version': sdkVersion,
               'mp_lib': 'flutter',
             },
             'superProperties': null,
@@ -63,7 +64,7 @@ void main() {
             'optOutTrackingDefault': true,
             'trackAutomaticEvents': true,
             'mixpanelProperties': {
-              '\$lib_version': '2.8.0',
+              '\$lib_version': sdkVersion,
               'mp_lib': 'flutter',
             },
             'superProperties': null,
@@ -85,7 +86,7 @@ void main() {
             'optOutTrackingDefault': true,
             'trackAutomaticEvents': false,
             'mixpanelProperties': {
-              '\$lib_version': '2.8.0',
+              '\$lib_version': sdkVersion,
               'mp_lib': 'flutter',
             },
             'superProperties': null,
@@ -1171,7 +1172,7 @@ void main() {
             'optOutTrackingDefault': false,
             'trackAutomaticEvents': true,
             'mixpanelProperties': {
-              '\$lib_version': '2.8.0',
+              '\$lib_version': sdkVersion,
               'mp_lib': 'flutter',
             },
             'superProperties': null,
@@ -1202,7 +1203,7 @@ void main() {
             'optOutTrackingDefault': false,
             'trackAutomaticEvents': true,
             'mixpanelProperties': {
-              '\$lib_version': '2.8.0',
+              '\$lib_version': sdkVersion,
               'mp_lib': 'flutter',
             },
             'superProperties': null,
@@ -1236,7 +1237,7 @@ void main() {
             'optOutTrackingDefault': false,
             'trackAutomaticEvents': true,
             'mixpanelProperties': {
-              '\$lib_version': '2.8.0',
+              '\$lib_version': sdkVersion,
               'mp_lib': 'flutter',
             },
             'superProperties': null,

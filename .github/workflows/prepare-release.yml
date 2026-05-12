@@ -1,0 +1,216 @@
+name: Prepare Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      module:
+        description: 'Module to release (must match a key in .github/modules.json)'
+        required: true
+        type: string
+      version:
+        description: 'Release version (e.g., 1.0.0 or 0.2.0-beta.1)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: prepare-release-${{ inputs.module }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: "Prepare ${{ inputs.module }} ${{ inputs.version }}"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Validate inputs
+        env:
+          MODULE: ${{ inputs.module }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
+            echo "::error::Invalid version format: $VERSION"
+            exit 1
+          fi
+          jq -e --arg m "$MODULE" '.[$m]' .github/modules.json > /dev/null || {
+            echo "::error::Unknown module '$MODULE'. Valid modules: $(jq -r 'keys | join(", ")' .github/modules.json)"
+            exit 1
+          }
+
+      - name: Resolve module config
+        id: config
+        env:
+          MODULE: ${{ inputs.module }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          MODULE_CONFIG=$(jq -e --arg m "$MODULE" '.[$m]' .github/modules.json)
+
+          TAG_PREFIX=$(echo "$MODULE_CONFIG" | jq -r '.tag_prefix')
+          echo "tag=${TAG_PREFIX}${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "pubspec=$(echo "$MODULE_CONFIG" | jq -r '.pubspec')" >> "$GITHUB_OUTPUT"
+          echo "version_files=$(echo "$MODULE_CONFIG" | jq -c '.version_files // []')" >> "$GITHUB_OUTPUT"
+          echo "changelog=$(echo "$MODULE_CONFIG" | jq -r '.changelog')" >> "$GITHUB_OUTPUT"
+          echo "readme=$(echo "$MODULE_CONFIG" | jq -r '.readme')" >> "$GITHUB_OUTPUT"
+          echo "package_name=$(echo "$MODULE_CONFIG" | jq -r '.package_name')" >> "$GITHUB_OUTPUT"
+          echo "branch=release/${MODULE}/${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Validate version not already released
+        env:
+          TAG: ${{ steps.config.outputs.tag }}
+        run: |
+          if git tag -l "$TAG" | grep -q .; then
+            echo "::error::Tag $TAG already exists"
+            exit 1
+          fi
+
+      - name: Clean up existing release branch and PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BRANCH: ${{ steps.config.outputs.branch }}
+        run: |
+          EXISTING_PR=$(gh pr list --head "$BRANCH" --json number --jq '.[0].number' 2>/dev/null || true)
+          if [[ -n "$EXISTING_PR" ]]; then
+            echo "Closing existing PR #$EXISTING_PR and deleting branch"
+            gh pr close "$EXISTING_PR" --delete-branch
+          elif git ls-remote --exit-code origin "refs/heads/$BRANCH" &>/dev/null; then
+            echo "Deleting existing remote branch $BRANCH"
+            git push origin --delete "$BRANCH"
+          fi
+
+      - name: Create release branch
+        env:
+          BRANCH: ${{ steps.config.outputs.branch }}
+        run: git checkout -b "$BRANCH"
+
+      - name: Bump version in pubspec and version files
+        env:
+          VERSION: ${{ inputs.version }}
+          PUBSPEC: ${{ steps.config.outputs.pubspec }}
+          VERSION_FILES: ${{ steps.config.outputs.version_files }}
+          PACKAGE_NAME: ${{ steps.config.outputs.package_name }}
+        run: |
+          OLD_VERSION=$(grep '^version:' "$PUBSPEC" | awk '{print $2}')
+          if [ -z "$OLD_VERSION" ]; then
+            echo "::error::Could not read current version from $PUBSPEC"
+            exit 1
+          fi
+          echo "Bumping ${OLD_VERSION} -> ${VERSION}"
+
+          sed -i "s/^version: .*/version: ${VERSION}/" "$PUBSPEC"
+
+          # Replace any literal occurrence of the previous version in each
+          # version file. Works for plain `X.Y.Z` constants and embedded forms
+          # like `X.Y.Z-flutter` because the suffix is preserved verbatim.
+          while IFS= read -r FILE; do
+            [ -z "$FILE" ] && continue
+            if [ ! -f "$FILE" ]; then
+              echo "::error::version_files entry not found: $FILE"
+              exit 1
+            fi
+            sed -i "s/${OLD_VERSION}/${VERSION}/g" "$FILE"
+          done < <(echo "$VERSION_FILES" | jq -r '.[]')
+
+      - name: Update README install snippet and version header
+        env:
+          REPO_URL: ${{ github.server_url }}/${{ github.repository }}
+          TAG: ${{ steps.config.outputs.tag }}
+          README: ${{ steps.config.outputs.readme }}
+          PACKAGE_NAME: ${{ steps.config.outputs.package_name }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          DATE=$(date +"%B %d, %Y")
+          # Replace the install snippet line: `<package>: <version>`.
+          sed -i -E \
+            "s|^( *${PACKAGE_NAME}): .*|\1: ${VERSION}|" \
+            "$README"
+          # Replace the runbook-style version header line.
+          # The `1,/pat/` address range bounds the substitution to lines from
+          # the start of the file through the first match, so a README that
+          # accidentally contains a second matching line is left untouched.
+          sed -i -E \
+            "1,/^##### _.*_ - \[.*\]\(.*\)\$/ s|^##### _.*_ - \[.*\]\(.*\)\$|##### _${DATE}_ - [${TAG}](${REPO_URL}/releases/tag/${TAG})|" \
+            "$README"
+
+      - name: Generate changelog
+        env:
+          REPO_URL: ${{ github.server_url }}/${{ github.repository }}
+          MODULE: ${{ inputs.module }}
+          TAG: ${{ steps.config.outputs.tag }}
+          CHANGELOG_FILE: ${{ steps.config.outputs.changelog }}
+        run: |
+          CHANGELOG=$(.github/scripts/generate-changelog.sh \
+            "$MODULE" "$TAG" "$REPO_URL" HEAD)
+
+          if [ -f "$CHANGELOG_FILE" ]; then
+            {
+              printf '# Changelog\n\n%s\n' "$CHANGELOG"
+              sed '1{/^# Changelog$/d;}' "$CHANGELOG_FILE"
+            } > CHANGELOG.new.md
+            mv CHANGELOG.new.md "$CHANGELOG_FILE"
+          else
+            printf '# Changelog\n\n%s\n' "$CHANGELOG" > "$CHANGELOG_FILE"
+          fi
+
+      - name: Commit and push
+        env:
+          MODULE: ${{ inputs.module }}
+          VERSION: ${{ inputs.version }}
+          BRANCH: ${{ steps.config.outputs.branch }}
+          PUBSPEC: ${{ steps.config.outputs.pubspec }}
+          VERSION_FILES: ${{ steps.config.outputs.version_files }}
+          CHANGELOG_FILE: ${{ steps.config.outputs.changelog }}
+          README: ${{ steps.config.outputs.readme }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add "$PUBSPEC" "$CHANGELOG_FILE" "$README"
+          while IFS= read -r FILE; do
+            [ -z "$FILE" ] && continue
+            git add "$FILE"
+          done < <(echo "$VERSION_FILES" | jq -r '.[]')
+          git commit -m "release: prepare ${MODULE} ${VERSION}"
+          git push origin "$BRANCH"
+
+      - name: Create pull request
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MODULE: ${{ inputs.module }}
+          VERSION: ${{ inputs.version }}
+          TAG: ${{ steps.config.outputs.tag }}
+          PUBSPEC: ${{ steps.config.outputs.pubspec }}
+          CHANGELOG_FILE: ${{ steps.config.outputs.changelog }}
+          README: ${{ steps.config.outputs.readme }}
+          BRANCH: ${{ steps.config.outputs.branch }}
+        run: |
+          gh pr create \
+            --title "release: prepare ${MODULE} ${VERSION}" \
+            --body "$(cat <<EOF
+          ## Release ${MODULE} ${VERSION}
+
+          This PR prepares the ${MODULE} module for release.
+
+          ### Changes
+          - Bumps \`version\` to \`${VERSION}\` in \`${PUBSPEC}\` and any \`version_files\` listed in \`.github/modules.json\`
+          - Updates \`${CHANGELOG_FILE}\` with a new section since the last \`${TAG%${VERSION}}*\` tag
+          - Updates \`${README}\` install snippet and version header
+
+          ### After merging
+          1. Push tag \`${TAG}\` from the merge commit on \`main\` to trigger the publish workflow:
+             \`\`\`
+             git checkout main && git pull
+             git tag ${TAG}
+             git push origin ${TAG}
+             \`\`\`
+          2. The publish workflow creates a draft GitHub release and publishes to pub.dev. Review and publish the GitHub release after the workflow finishes.
+          EOF
+          )" \
+            --base main \
+            --head "$BRANCH"

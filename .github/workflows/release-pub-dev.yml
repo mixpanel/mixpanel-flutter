@@ -1,0 +1,207 @@
+name: Publish Release to pub.dev
+
+# Tag-triggered: pub.dev's OIDC trusted publishing only accepts publishes from
+# workflow runs triggered by a tag-push matching the pattern configured in
+# pub.dev admin. Add new tag prefixes here as additional modules are added to
+# .github/modules.json (e.g. `- 'foo-v*'`).
+on:
+  push:
+    tags:
+      - 'v*'
+
+concurrency:
+  group: pub-publish
+  cancel-in-progress: false
+
+permissions:
+  contents: write   # create the draft GitHub release
+  id-token: write   # OIDC for pub.dev
+
+jobs:
+  publish:
+    name: "Publish ${{ github.ref_name }} to pub.dev"
+    runs-on: ubuntu-latest
+    environment: release
+    timeout-minutes: 30
+
+    # One-time pub.dev admin / GitHub Environment / tag ruleset setup is
+    # documented in the Flutter Release Runbook (Notion). The `environment:`
+    # name above must match what pub.dev admin is configured to require.
+
+    steps:
+      - name: Checkout tagged commit
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Resolve module from tag
+        id: module
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          MODULE=$(jq -r --arg t "$TAG" '
+            to_entries
+            | map(select($t | startswith(.value.tag_prefix)))
+            | max_by(.value.tag_prefix | length)
+            | .key // empty
+          ' .github/modules.json)
+
+          if [ -z "$MODULE" ]; then
+            echo "::error::Tag '$TAG' does not match any module tag_prefix in .github/modules.json"
+            exit 1
+          fi
+
+          MODULE_CONFIG=$(jq -e --arg m "$MODULE" '.[$m]' .github/modules.json)
+          TAG_PREFIX=$(echo "$MODULE_CONFIG" | jq -r '.tag_prefix')
+          VERSION="${TAG#${TAG_PREFIX}}"
+
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
+            echo "::error::Version '$VERSION' (from tag '$TAG') is not a valid semver"
+            exit 1
+          fi
+
+          {
+            echo "module=$MODULE"
+            echo "version=$VERSION"
+            echo "tag_prefix=$TAG_PREFIX"
+            echo "pubspec=$(echo "$MODULE_CONFIG" | jq -r '.pubspec')"
+            echo "version_files=$(echo "$MODULE_CONFIG" | jq -c '.version_files // []')"
+            echo "changelog=$(echo "$MODULE_CONFIG" | jq -r '.changelog')"
+            echo "package_name=$(echo "$MODULE_CONFIG" | jq -r '.package_name')"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "Resolved tag '$TAG' -> module '$MODULE', version '$VERSION'"
+
+      - name: Verify tag commit is on main
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          git fetch origin main
+          TAG_SHA=$(git rev-parse HEAD)
+          if ! git merge-base --is-ancestor "$TAG_SHA" origin/main; then
+            echo "::error::Tag '$TAG' ($TAG_SHA) is not an ancestor of origin/main."
+            echo "Tags must be pushed from a commit on the main branch."
+            exit 1
+          fi
+
+      - name: Validate pubspec version matches tag
+        env:
+          VERSION: ${{ steps.module.outputs.version }}
+          PUBSPEC: ${{ steps.module.outputs.pubspec }}
+        run: |
+          PUBSPEC_VERSION=$(grep '^version:' "$PUBSPEC" | awk '{print $2}')
+          if [ "$VERSION" != "$PUBSPEC_VERSION" ]; then
+            echo "::error::Tag version '$VERSION' does not match $PUBSPEC version '$PUBSPEC_VERSION'"
+            exit 1
+          fi
+          echo "Version confirmed: $PUBSPEC_VERSION"
+
+      - name: Validate version_files contain only the tag version
+        env:
+          VERSION: ${{ steps.module.outputs.version }}
+          VERSION_FILES: ${{ steps.module.outputs.version_files }}
+        run: |
+          # Every semver-shaped string in each version_files entry must equal
+          # $VERSION exactly. Catches stale references like a leftover
+          # `0.2.0-beta.1-flutter` constant when publishing v0.2.0 (a substring
+          # match would falsely pass).
+          while IFS= read -r FILE; do
+            [ -z "$FILE" ] && continue
+            if [ ! -f "$FILE" ]; then
+              echo "::error::version_files entry not found: $FILE"
+              exit 1
+            fi
+            FOUND=$(grep -oE '[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?' "$FILE" | sort -u || true)
+            if [ -z "$FOUND" ]; then
+              echo "::error::$FILE contains no semver-shaped string; expected '$VERSION'"
+              exit 1
+            fi
+            if [ "$FOUND" != "$VERSION" ]; then
+              echo "::error::$FILE contains semver(s) other than '$VERSION':"
+              echo "$FOUND" | sed 's/^/  /'
+              exit 1
+            fi
+          done < <(echo "$VERSION_FILES" | jq -r '.[]')
+
+      # Keep this version in sync with the value used in flutter.yml so the
+      # package is built and published against the same Flutter SDK that CI
+      # tested with.
+      - uses: ./.github/actions/setup-flutter
+        with:
+          flutter-version: '3.41.0'
+
+      # Provisions the pub.dev OIDC credentials at ~/.config/dart/pub-credentials.json.
+      # `dart pub publish` reads this file to authenticate. setup-flutter installs
+      # the Dart SDK but does not perform this OIDC token exchange.
+      - name: Set up Dart (pub.dev OIDC)
+        uses: dart-lang/setup-dart@65eb853c7ba17dde3be364c3d2858773e7144260  # v1.7.2
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Dry run publish
+        run: dart pub publish --dry-run
+
+      - name: Extract changelog section for tag
+        env:
+          TAG: ${{ github.ref_name }}
+          CHANGELOG: ${{ steps.module.outputs.changelog }}
+        run: |
+          # Match the section header `## [${TAG}](...)` and stop at the next `## ` header.
+          # Falls back to a placeholder if no matching section is found.
+          python3 - <<'PY' > release_notes.md
+          import os, re, sys
+          tag = os.environ["TAG"]
+          changelog_path = os.environ["CHANGELOG"]
+          try:
+              content = open(changelog_path).read()
+          except FileNotFoundError:
+              print(f"Release {tag}")
+              sys.exit(0)
+          pattern = r'^## \[' + re.escape(tag) + r'\].*?\n(.*?)(?=^## |\Z)'
+          match = re.search(pattern, content, re.DOTALL | re.MULTILINE)
+          if match:
+              print(match.group(1).strip())
+          else:
+              print(f"Release {tag}")
+          PY
+          echo "--- release_notes.md ---"
+          cat release_notes.md
+
+      - name: Create draft GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          # Idempotent: if a draft release for this tag already exists, leave it alone.
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "GitHub release for $TAG already exists; skipping creation"
+          else
+            gh release create "$TAG" \
+              --draft \
+              --title "$TAG" \
+              --notes-file release_notes.md
+          fi
+
+      # Publish last — pub.dev uploads are irreversible. The draft GitHub
+      # release acts as the human gate (mirrors the Maven Central Portal's
+      # manual Publish step).
+      - name: Publish to pub.dev
+        run: dart pub publish --force
+
+      - name: Summary
+        env:
+          MODULE: ${{ steps.module.outputs.module }}
+          VERSION: ${{ steps.module.outputs.version }}
+          PACKAGE_NAME: ${{ steps.module.outputs.package_name }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          {
+            echo "## ${MODULE} ${VERSION} published"
+            echo ""
+            echo "- [pub.dev](https://pub.dev/packages/${PACKAGE_NAME}/versions/${VERSION})"
+            echo "- [Draft GitHub Release](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/tag/${TAG})"
+            echo ""
+            echo "### Next step"
+            echo "Review the draft GitHub release and click **Publish release** to make it live."
+          } >> "$GITHUB_STEP_SUMMARY"

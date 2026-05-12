@@ -1,4 +1,4 @@
-#
+# Changelog
 
 ## [v2.8.0](https://github.com/mixpanel/mixpanel-flutter/tree/v2.8.0) (2026-05-08)
 
