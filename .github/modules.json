@@ -1,0 +1,10 @@
+{
+  "analytics": {
+    "tag_prefix": "v",
+    "pubspec": "pubspec.yaml",
+    "version_files": ["lib/src/version.dart"],
+    "changelog": "CHANGELOG.md",
+    "readme": "README.md",
+    "package_name": "mixpanel_flutter"
+  }
+}

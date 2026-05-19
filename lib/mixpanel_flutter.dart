@@ -5,6 +5,7 @@ import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
 import 'package:mixpanel_flutter/codec/mixpanel_message_codec.dart';
+import 'package:mixpanel_flutter/src/version.dart';
 
 /// Identifies where a served [MixpanelFlagVariant] came from. Non-null on
 /// every variant the SDK returns:
@@ -339,7 +340,7 @@ class Mixpanel {
       : const MethodChannel(
           'mixpanel_flutter', StandardMethodCodec(MixpanelMessageCodec()));
   static final Map<String, String> _mixpanelProperties = {
-    '\$lib_version': '2.8.0',
+    '\$lib_version': sdkVersion,
     'mp_lib': 'flutter',
   };
 

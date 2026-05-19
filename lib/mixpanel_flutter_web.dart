@@ -4,6 +4,7 @@ import 'dart:js_interop';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_web_plugins/flutter_web_plugins.dart';
+import 'package:mixpanel_flutter/src/version.dart';
 import 'package:mixpanel_flutter/web/mixpanel_js_bindings.dart';
 
 /// Safely converts Dart values to JavaScript-compatible types for web interop.
@@ -67,7 +68,7 @@ JSAny? safeJsify(dynamic value) {
 /// A web implementation of the MixpanelFlutter plugin.
 class MixpanelFlutterPlugin {
   static final Map<String, String> _mixpanelProperties = {
-    '\$lib_version': '2.5.0',
+    '\$lib_version': sdkVersion,
     'mp_lib': 'flutter',
   };
 

@@ -2,9 +2,12 @@
 # To learn more about a Podspec see http://guides.cocoapods.org/syntax/podspec.html.
 # Run `pod lib lint mixpanel_flutter.podspec' to validate before publishing.
 #
+require 'yaml'
+pubspec = YAML.load_file(File.join(__dir__, '..', 'pubspec.yaml'))
+
 Pod::Spec.new do |s|
-  s.name             = 'mixpanel_flutter'
-  s.version          = '2.6.2'
+  s.name             = pubspec['name']
+  s.version          = pubspec['version']
   s.summary          = 'Official Flutter Tracking Library for Mixpanel Analytics'
   s.homepage         = 'https://www.mixpanel.com'
   s.license          = { :file => '../LICENSE' }
