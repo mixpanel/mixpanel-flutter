@@ -13,7 +13,11 @@ on:
 jobs:
   # The job MUST be called `copilot-setup-steps` or it will not be picked up by Copilot.
   copilot-setup-steps:
-    runs-on: ubuntu-latest
+    # macOS is required because the package's unit tests use `Platform.isMacOS`
+    # to select the iOS/macOS code path (lib/mixpanel_flutter.dart in append/
+    # union/remove). On Linux runners those tests fall into the Android branch
+    # and fail. Keep this in sync with flutter.yml's `test-main-code` job.
+    runs-on: macos-latest
 
     # Set permissions based on project needs
     permissions:
@@ -23,10 +27,12 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
 
+      # Keep flutter-version aligned with .github/workflows/flutter.yml so
+      # Copilot's environment matches what CI tests against.
       - name: Set up Flutter
         uses: ./.github/actions/setup-flutter
         with:
-          flutter-version: "3.16.0"
+          flutter-version: "3.41.0"
           channel: "stable"
           cache: "true"
 
