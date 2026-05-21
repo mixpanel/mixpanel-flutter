@@ -25,7 +25,10 @@ import org.json.JSONObject
  */
 object EventBridgeSubscriber {
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    // MethodChannel.invokeMethod on Android is thread-safe — DartMessenger
+    // queues from any thread and the Dart handler runs on the platform
+    // thread regardless. No reason to occupy the UI thread for fan-out.
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var job: Job? = null
 
     @JvmStatic
