@@ -50,7 +50,7 @@ jobs:
           java-version: '17'
 
       - name: Set up Ruby for iOS tooling
-        uses: ruby/setup-ruby@319994f95fa847cf3fb3cd3dbe89f6dcde9f178f  # v1
+        uses: ruby/setup-ruby@0cb964fd540e0a24c900370abf38a33466142735  # v1
         with:
           ruby-version: '3.0'
           bundler-cache: true
