@@ -31,6 +31,7 @@ jobs:
           cache: true
 
       - name: Install Flutter dependencies
+        working-directory: packages/mixpanel_flutter
         run: |
           flutter --version
           flutter pub get
@@ -57,9 +58,11 @@ jobs:
           dart pub global activate coverage
 
       - name: Run Flutter analyze
+        working-directory: packages/mixpanel_flutter
         run: flutter analyze --no-fatal-infos --no-fatal-warnings
 
       - name: Verify test setup
+        working-directory: packages/mixpanel_flutter
         run: flutter test --no-pub
 
       - name: Cache setup validation

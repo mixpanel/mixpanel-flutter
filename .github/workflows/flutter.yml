@@ -12,6 +12,9 @@ permissions:
 jobs:
   test-main-code:
     runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: packages/mixpanel_flutter
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
       - uses: ./.github/actions/setup-flutter
@@ -33,7 +36,7 @@ jobs:
         with:
           flutter-version: "3.41.0"
       - name: Test Android integration
-        working-directory: example
+        working-directory: packages/mixpanel_flutter/example
         run: flutter build apk
 
   test-ios-integration:
@@ -48,16 +51,16 @@ jobs:
         with:
           flutter-version: "3.41.0"
       - name: Clean
-        working-directory: example
+        working-directory: packages/mixpanel_flutter/example
         run: flutter clean
       - name: Flutter pub get
-        working-directory: example
+        working-directory: packages/mixpanel_flutter/example
         run: flutter pub get
       - name: CocoaPods update
-        working-directory: example/ios
+        working-directory: packages/mixpanel_flutter/example/ios
         run: pod repo update
       - name: Test iOS integration
-        working-directory: example
+        working-directory: packages/mixpanel_flutter/example
         run: flutter build ios --debug --simulator --no-codesign
 
   test-macos-integration:
@@ -68,14 +71,14 @@ jobs:
         with:
           flutter-version: "3.41.0"
       - name: Clean
-        working-directory: example
+        working-directory: packages/mixpanel_flutter/example
         run: flutter clean
       - name: Flutter pub get
-        working-directory: example
+        working-directory: packages/mixpanel_flutter/example
         run: flutter pub get
       - name: CocoaPods update
-        working-directory: example/macos
+        working-directory: packages/mixpanel_flutter/example/macos
         run: pod repo update
       - name: Test macOS integration
-        working-directory: example
+        working-directory: packages/mixpanel_flutter/example
         run: flutter build macos --debug

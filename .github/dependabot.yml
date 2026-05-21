@@ -1,7 +1,7 @@
 version: 2
 updates:
   - package-ecosystem: "pub"
-    directory: "/"
+    directory: "/packages/mixpanel_flutter"
     schedule:
       interval: "weekly"
     cooldown:
