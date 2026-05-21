@@ -65,6 +65,7 @@ jobs:
             echo "version=$VERSION"
             echo "tag_prefix=$TAG_PREFIX"
             echo "pubspec=$(echo "$MODULE_CONFIG" | jq -r '.pubspec')"
+            echo "working_dir=$(dirname "$(echo "$MODULE_CONFIG" | jq -r '.pubspec')")"
             echo "version_files=$(echo "$MODULE_CONFIG" | jq -c '.version_files // []')"
             echo "changelog=$(echo "$MODULE_CONFIG" | jq -r '.changelog')"
             echo "package_name=$(echo "$MODULE_CONFIG" | jq -r '.package_name')"
@@ -123,6 +124,23 @@ jobs:
             fi
           done < <(echo "$VERSION_FILES" | jq -r '.[]')
 
+      - name: Validate pubspec name matches module package_name
+        env:
+          PUBSPEC: ${{ steps.module.outputs.pubspec }}
+          PACKAGE_NAME: ${{ steps.module.outputs.package_name }}
+        run: |
+          # Defense in depth: if modules.json is misconfigured (e.g. an entry's
+          # `pubspec` path points at the wrong package's pubspec.yaml), the
+          # tag-pattern check on pub.dev would still let the upload through.
+          # Asserting the pubspec's own `name:` field matches the expected
+          # package_name catches that class of mistake here.
+          PUBSPEC_NAME=$(awk '/^name:/ {print $2; exit}' "$PUBSPEC")
+          if [ "$PUBSPEC_NAME" != "$PACKAGE_NAME" ]; then
+            echo "::error::$PUBSPEC declares name '$PUBSPEC_NAME' but modules.json expects '$PACKAGE_NAME'"
+            exit 1
+          fi
+          echo "Package name confirmed: $PUBSPEC_NAME"
+
       # Keep this version in sync with the value used in flutter.yml so the
       # package is built and published against the same Flutter SDK that CI
       # tested with.
@@ -137,9 +155,11 @@ jobs:
         uses: dart-lang/setup-dart@65eb853c7ba17dde3be364c3d2858773e7144260  # v1.7.2
 
       - name: Install dependencies
+        working-directory: ${{ steps.module.outputs.working_dir }}
         run: flutter pub get
 
       - name: Dry run publish
+        working-directory: ${{ steps.module.outputs.working_dir }}
         run: dart pub publish --dry-run
 
       - name: Extract changelog section for tag
@@ -183,6 +203,7 @@ jobs:
       # release acts as the human gate (mirrors the Maven Central Portal's
       # manual Publish step).
       - name: Publish to pub.dev
+        working-directory: ${{ steps.module.outputs.working_dir }}
         run: dart pub publish --force
 
       - name: Summary

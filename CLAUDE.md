@@ -54,23 +54,28 @@ Future<void> methodName(parameters) async {
 
 ## Development Commands
 
+The publishable package lives at `packages/mixpanel_flutter/`. Run all
+package commands from that directory.
+
 ```bash
+cd packages/mixpanel_flutter
+
 # Install dependencies
 flutter pub get
 
 # Run tests
 flutter test
 
-# Run the example app (from project root)
+# Run the example app
 cd example
 flutter run
 
-# Build for specific platform
+# Build for specific platform (from example/)
 flutter build apk      # Android
 flutter build ios      # iOS
 flutter build web      # Web
 
-# Analyze code
+# Analyze code (from packages/mixpanel_flutter/)
 flutter analyze
 
 # Format code
@@ -82,15 +87,17 @@ flutter pub run dartdoc
 
 ## Testing Strategy
 
-- Unit tests are in `test/mixpanel_flutter_test.dart`
+- Unit tests are in `packages/mixpanel_flutter/test/mixpanel_flutter_test.dart`
 - The example app serves as an integration test suite with pages for each feature
 - Platform-specific functionality should be tested through the example app on each platform
 
 ## Release Process
 
-Use the release script: `python tool/release.py`
-
-This handles version bumping, changelog updates, and tagging.
+Releases are tag-driven. Pushing a tag matching a module's `tag_prefix`
+in `.github/modules.json` (today: `v*` for `mixpanel_flutter`) runs
+`.github/workflows/release-pub-dev.yml`, which validates the pubspec
+version, creates a draft GitHub release, and publishes to pub.dev via
+OIDC trusted publishing.
 
 ## Important Implementation Notes
 
