@@ -4,18 +4,24 @@ import Flutter
 import FlutterMacOS
 #endif
 import Mixpanel
+import MixpanelSwiftCommon
 
 #if os(macOS)
 public typealias MixpanelFlutterPlugin = SwiftMixpanelFlutterPlugin
 #endif
 
 public class SwiftMixpanelFlutterPlugin: NSObject, FlutterPlugin {
-    
+
     private var instance: MixpanelInstance?
     var token: String?
     var mixpanelProperties: [String: String]?
     let defaultFlushInterval = 60.0
-    
+
+    // Holds the long-lived AsyncStream consumer that forwards native
+    // MixpanelEventBridge events to Dart. Cancelled on deinit so hot-restart
+    // and engine teardown don't leak the task.
+    private var eventBridgeTask: Task<Void, Never>?
+
     public static func register(with registrar: FlutterPluginRegistrar) {
         let readWriter = MixpanelReaderWriter()
         let codec = FlutterStandardMethodCodec(readerWriter: readWriter)
@@ -26,6 +32,26 @@ public class SwiftMixpanelFlutterPlugin: NSObject, FlutterPlugin {
         #endif
         let instance = SwiftMixpanelFlutterPlugin()
         registrar.addMethodCallDelegate(instance, channel: channel)
+
+        // Subscribe to the native EventBridge and forward each event back to
+        // Dart. The channel is captured by the closure, so we only need to
+        // hold the Task itself on the instance for cancellation.
+        if #available(iOS 13.0, macOS 10.15, *) {
+            instance.eventBridgeTask = Task {
+                for await event in MixpanelEventBridge.shared.eventStream() {
+                    await MainActor.run {
+                        channel.invokeMethod("onMixpanelEvent", arguments: [
+                            "eventName": event.eventName,
+                            "properties": event.properties,
+                        ])
+                    }
+                }
+            }
+        }
+    }
+
+    deinit {
+        eventBridgeTask?.cancel()
     }
     
     public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {

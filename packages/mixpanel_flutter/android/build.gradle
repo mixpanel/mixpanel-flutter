@@ -2,6 +2,7 @@ group 'com.mixpanel.mixpanel_flutter'
 version '1.0'
 
 buildscript {
+    ext.kotlin_version = '1.9.0'
     repositories {
         google()
         mavenCentral()
@@ -10,6 +11,7 @@ buildscript {
     dependencies {
         // Use a compatible version of Gradle Plugin
         classpath 'com.android.tools.build:gradle:8.1.0' // Updated to 8.1.0
+        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
     }
 }
 
@@ -21,6 +23,7 @@ rootProject.allprojects {
 }
 
 apply plugin: 'com.android.library'
+apply plugin: 'kotlin-android'
 
 android {
     // Safely handle 'namespace' property for new Android Gradle plugin versions
@@ -40,12 +43,23 @@ android {
         targetCompatibility JavaVersion.VERSION_17
     }
 
+    kotlinOptions {
+        jvmTarget = '17'
+    }
+
+    sourceSets {
+        main.kotlin.srcDirs += 'src/main/kotlin'
+    }
+
     lintOptions {
         disable 'InvalidPackage'
     }
 }
 
 dependencies {
-    // Use the Mixpanel Android SDK
+    // Use the Mixpanel Android SDK (includes the common EventBridge module
+    // since 8.7.0 via PR #924, the source of events the subscriber consumes).
     implementation "com.mixpanel.android:mixpanel-android:8.7.0"
+    implementation "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
+    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.1"
 }

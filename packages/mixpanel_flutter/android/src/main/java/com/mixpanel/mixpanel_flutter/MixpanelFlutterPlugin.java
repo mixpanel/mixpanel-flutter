@@ -212,6 +212,7 @@ public class MixpanelFlutterPlugin implements FlutterPlugin, MethodCallHandler {
             channel = new MethodChannel(flutterPluginBinding.getBinaryMessenger(), "mixpanel_flutter",
                     new StandardMethodCodec(new MixpanelMessageCodec()));
             channel.setMethodCallHandler(this);
+            EventBridgeSubscriber.start(channel);
         }
     }
 
@@ -785,6 +786,7 @@ public class MixpanelFlutterPlugin implements FlutterPlugin, MethodCallHandler {
 
     @Override
     public void onDetachedFromEngine(@NonNull FlutterPluginBinding binding) {
+        EventBridgeSubscriber.stop();
         if (channel != null) {
             channel.setMethodCallHandler(null);
             channel = null;

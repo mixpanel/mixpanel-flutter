@@ -1,0 +1,122 @@
+import 'dart:async';
+
+import 'package:test/test.dart';
+import 'package:mixpanel_flutter_common/mixpanel_flutter_common.dart';
+
+void main() {
+  group('MixpanelEventBridge', () {
+    test('subscriber receives events emitted after listen', () async {
+      final received = <MixpanelEvent>[];
+      final sub = MixpanelEventBridge.events.listen(received.add);
+
+      MixpanelEventBridge.notifyListeners(eventName: 'A', properties: {'x': 1});
+      MixpanelEventBridge.notifyListeners(eventName: 'B');
+
+      // Stream delivery is async — flush the microtask queue.
+      await Future<void>.delayed(Duration.zero);
+
+      expect(received, hasLength(2));
+      expect(received[0].eventName, 'A');
+      expect(received[0].properties, {'x': 1});
+      expect(received[1].eventName, 'B');
+      expect(received[1].properties, isNull);
+
+      await sub.cancel();
+    });
+
+    test(
+      'multiple subscribers each see every event (broadcast semantics)',
+      () async {
+        final a = <String>[];
+        final b = <String>[];
+        final subA = MixpanelEventBridge.events.listen(
+          (e) => a.add(e.eventName),
+        );
+        final subB = MixpanelEventBridge.events.listen(
+          (e) => b.add(e.eventName),
+        );
+
+        MixpanelEventBridge.notifyListeners(eventName: 'evt');
+        await Future<void>.delayed(Duration.zero);
+
+        expect(a, ['evt']);
+        expect(b, ['evt']);
+
+        await subA.cancel();
+        await subB.cancel();
+      },
+    );
+
+    test('late subscribers miss prior events (no replay buffer)', () async {
+      // Emit before anyone is listening.
+      MixpanelEventBridge.notifyListeners(eventName: 'lost');
+      await Future<void>.delayed(Duration.zero);
+
+      final received = <String>[];
+      final sub = MixpanelEventBridge.events.listen(
+        (e) => received.add(e.eventName),
+      );
+
+      MixpanelEventBridge.notifyListeners(eventName: 'after');
+      await Future<void>.delayed(Duration.zero);
+
+      expect(received, ['after']); // 'lost' never reaches the late subscriber
+      await sub.cancel();
+    });
+
+    test('nullable properties pass through unchanged', () async {
+      final received = <MixpanelEvent>[];
+      final sub = MixpanelEventBridge.events.listen(received.add);
+
+      MixpanelEventBridge.notifyListeners(eventName: 'null-props');
+      MixpanelEventBridge.notifyListeners(
+        eventName: 'empty-props',
+        properties: const {},
+      );
+      MixpanelEventBridge.notifyListeners(
+        eventName: 'with-props',
+        properties: const {'a': 1, 'b': 'two'},
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      expect(received[0].properties, isNull);
+      expect(received[1].properties, isEmpty);
+      expect(received[2].properties, {'a': 1, 'b': 'two'});
+
+      await sub.cancel();
+    });
+
+    test('exception in one listener does not block other listeners', () async {
+      // When a broadcast listener throws synchronously, the exception is
+      // delivered to the surrounding zone's uncaught-error handler rather
+      // than aborting other subscriptions. runZonedGuarded captures it so
+      // the test framework doesn't see an unhandled error.
+      final survivors = <String>[];
+      final errors = <Object>[];
+
+      await runZonedGuarded(
+        () async {
+          final boom = MixpanelEventBridge.events.listen((_) {
+            throw StateError('listener exploded');
+          });
+          final ok = MixpanelEventBridge.events.listen(
+            (e) => survivors.add(e.eventName),
+          );
+
+          MixpanelEventBridge.notifyListeners(eventName: 'evt');
+          await Future<void>.delayed(Duration.zero);
+
+          await boom.cancel();
+          await ok.cancel();
+        },
+        (error, _) {
+          errors.add(error);
+        },
+      );
+
+      expect(survivors, ['evt']);
+      expect(errors, hasLength(1));
+      expect(errors.first, isA<StateError>());
+    });
+  });
+}
