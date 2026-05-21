@@ -201,10 +201,28 @@ public class MixpanelFlutterPlugin implements FlutterPlugin, MethodCallHandler {
             case "getAllVariants":
                 handleGetAllVariants(call, result);
                 break;
+            case "startEventBridge":
+                handleStartEventBridge(result);
+                break;
+            case "stopEventBridge":
+                handleStopEventBridge(result);
+                break;
             default:
                 result.notImplemented();
                 break;
         }
+    }
+
+    private void handleStartEventBridge(Result result) {
+        if (channel != null) {
+            EventBridgeSubscriber.start(channel);
+        }
+        result.success(null);
+    }
+
+    private void handleStopEventBridge(Result result) {
+        EventBridgeSubscriber.stop();
+        result.success(null);
     }
 
     private void initializeMethodChannel() {
@@ -212,7 +230,6 @@ public class MixpanelFlutterPlugin implements FlutterPlugin, MethodCallHandler {
             channel = new MethodChannel(flutterPluginBinding.getBinaryMessenger(), "mixpanel_flutter",
                     new StandardMethodCodec(new MixpanelMessageCodec()));
             channel.setMethodCallHandler(this);
-            EventBridgeSubscriber.start(channel);
         }
     }
 

@@ -6,7 +6,9 @@ import 'package:mixpanel_flutter_common/mixpanel_flutter_common.dart';
 
 /// Verifies the reverse path: when the native plugin invokes
 /// `onMixpanelEvent` on the channel, the event surfaces on the Dart-side
-/// [MixpanelEventBridge.events] stream.
+/// [MixpanelEventBridge.events] stream. Also verifies the lazy lifecycle —
+/// `startEventBridge` fires on first subscribe, `stopEventBridge` on last
+/// cancel.
 void main() {
   const channel = MethodChannel(
     'mixpanel_flutter',
@@ -16,18 +18,27 @@ void main() {
 
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  late List<MethodCall> outgoingCalls;
+
   setUp(() async {
-    // Force the static initializer in Mixpanel that registers the
-    // setMethodCallHandler for 'onMixpanelEvent'. Init touches that path.
+    outgoingCalls = <MethodCall>[];
+    // Persistent mock that records every Dart→native call. Importantly it
+    // intercepts the `startEventBridge`/`stopEventBridge` invocations that
+    // the lazy lifecycle issues on listener add/cancel, otherwise they'd
+    // throw MissingPluginException in the test environment.
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(channel, (_) async => null);
+        .setMockMethodCallHandler(channel, (call) async {
+      outgoingCalls.add(call);
+      return null;
+    });
     await Mixpanel.init(
       'test token',
       optOutTrackingDefault: false,
       trackAutomaticEvents: true,
     );
-    // Now release the mock so the real reverse-direction handler installed
-    // by Mixpanel.init() can receive simulated native calls.
+  });
+
+  tearDown(() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, null);
   });
@@ -42,6 +53,8 @@ void main() {
         'properties': properties,
       }),
     );
+    // handlePlatformMessage bypasses the mock and hits the real
+    // MethodCallHandler installed by Mixpanel during init.
     await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .handlePlatformMessage('mixpanel_flutter', message, (_) {});
   }
@@ -105,5 +118,47 @@ void main() {
 
     expect(received, isEmpty);
     await sub.cancel();
+  });
+
+  group('lazy native subscription', () {
+    test('first Dart listener invokes startEventBridge on the channel',
+        () async {
+      outgoingCalls.clear();
+      final sub = MixpanelEventBridge.events.listen((_) {});
+      // The mock handler is called synchronously inside invokeMethod's
+      // future chain; one microtask flush is enough to settle it.
+      await Future<void>.delayed(Duration.zero);
+
+      expect(
+        outgoingCalls.map((c) => c.method).toList(),
+        contains('startEventBridge'),
+      );
+
+      await sub.cancel();
+    });
+
+    test('last Dart cancel invokes stopEventBridge on the channel', () async {
+      final sub = MixpanelEventBridge.events.listen((_) {});
+      await Future<void>.delayed(Duration.zero);
+
+      outgoingCalls.clear();
+      await sub.cancel();
+      await Future<void>.delayed(Duration.zero);
+
+      expect(
+        outgoingCalls.map((c) => c.method).toList(),
+        contains('stopEventBridge'),
+      );
+    });
+
+    test('start is not issued when no Dart listeners are attached', () async {
+      // Nothing subscribes during this test — only Mixpanel.init() ran in
+      // setUp, and it must not have triggered the lazy start.
+      await Future<void>.delayed(Duration.zero);
+      expect(
+        outgoingCalls.map((c) => c.method),
+        isNot(contains('startEventBridge')),
+      );
+    });
   });
 }

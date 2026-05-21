@@ -86,6 +86,74 @@ void main() {
       await sub.cancel();
     });
 
+    group('lifecycle callbacks', () {
+      tearDown(() {
+        // Detach callbacks so they don't bleed into unrelated tests that
+        // subscribe/cancel through the same singleton controller.
+        MixpanelEventBridge.setLifecycleCallbacks();
+      });
+
+      test('onActivate fires when first listener subscribes', () async {
+        var activations = 0;
+        MixpanelEventBridge.setLifecycleCallbacks(
+          onActivate: () => activations++,
+        );
+
+        final sub = MixpanelEventBridge.events.listen((_) {});
+        expect(activations, 1);
+
+        await sub.cancel();
+      });
+
+      test('onActivate fires only on the 0→1 transition', () async {
+        var activations = 0;
+        MixpanelEventBridge.setLifecycleCallbacks(
+          onActivate: () => activations++,
+        );
+
+        final a = MixpanelEventBridge.events.listen((_) {});
+        final b = MixpanelEventBridge.events.listen((_) {});
+        expect(activations, 1);
+
+        await a.cancel();
+        await b.cancel();
+      });
+
+      test('onDeactivate fires only when the last listener cancels', () async {
+        var deactivations = 0;
+        MixpanelEventBridge.setLifecycleCallbacks(
+          onDeactivate: () => deactivations++,
+        );
+
+        final a = MixpanelEventBridge.events.listen((_) {});
+        final b = MixpanelEventBridge.events.listen((_) {});
+
+        await a.cancel();
+        expect(deactivations, 0);
+
+        await b.cancel();
+        expect(deactivations, 1);
+      });
+
+      test('re-subscribing after cancel re-activates', () async {
+        var activations = 0;
+        var deactivations = 0;
+        MixpanelEventBridge.setLifecycleCallbacks(
+          onActivate: () => activations++,
+          onDeactivate: () => deactivations++,
+        );
+
+        final first = MixpanelEventBridge.events.listen((_) {});
+        await first.cancel();
+        final second = MixpanelEventBridge.events.listen((_) {});
+
+        expect(activations, 2);
+        expect(deactivations, 1);
+
+        await second.cancel();
+      });
+    });
+
     test('exception in one listener does not block other listeners', () async {
       // When a broadcast listener throws synchronously, the exception is
       // delivered to the surrounding zone's uncaught-error handler rather

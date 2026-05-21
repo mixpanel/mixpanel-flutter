@@ -12,6 +12,14 @@ import 'mixpanel_event.dart';
 /// bridge and forward each event into [notifyListeners]. Any number of
 /// Dart consumers (session replay, custom triggers) subscribe to [events].
 ///
+/// ## Lazy native subscription
+/// The native bridge subscription is only activated while at least one Dart
+/// listener is attached. `mixpanel_flutter` registers activation/deactivation
+/// hooks via [setLifecycleCallbacks] in its initializer; the first listener
+/// triggers `onActivate` (which starts the native subscription), and the
+/// last cancel triggers `onDeactivate` (which stops it). This keeps the
+/// MethodChannel quiet for apps that never consume events.
+///
 /// ## Late subscribers
 /// The stream does not buffer or replay. Events emitted before a listener
 /// attaches are dropped. This matches the native `replay = 0` semantics.
@@ -24,8 +32,14 @@ import 'mixpanel_event.dart';
 class MixpanelEventBridge {
   MixpanelEventBridge._();
 
+  static void Function()? _onActivate;
+  static void Function()? _onDeactivate;
+
   static final StreamController<MixpanelEvent> _controller =
-      StreamController<MixpanelEvent>.broadcast();
+      StreamController<MixpanelEvent>.broadcast(
+        onListen: () => _onActivate?.call(),
+        onCancel: () => _onDeactivate?.call(),
+      );
 
   /// Subscribe to all events tracked by Mixpanel.
   ///
@@ -46,5 +60,22 @@ class MixpanelEventBridge {
     _controller.add(
       MixpanelEvent(eventName: eventName, properties: properties),
     );
+  }
+
+  /// Registers hooks invoked when the listener count transitions across zero.
+  ///
+  /// `onActivate` fires the moment a first listener attaches to a previously
+  /// empty broadcast stream; `onDeactivate` fires when the last listener
+  /// cancels. `mixpanel_flutter` uses these to start/stop the native event
+  /// bridge subscription lazily so the MethodChannel stays idle when no
+  /// Dart consumer cares about events.
+  ///
+  /// Application code should never call this directly.
+  static void setLifecycleCallbacks({
+    void Function()? onActivate,
+    void Function()? onDeactivate,
+  }) {
+    _onActivate = onActivate;
+    _onDeactivate = onDeactivate;
   }
 }

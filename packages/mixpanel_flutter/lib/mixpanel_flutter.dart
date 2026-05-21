@@ -354,8 +354,11 @@ class Mixpanel {
     'mp_lib': 'flutter',
   };
 
-  // Eagerly wires the reverse path from the native MixpanelEventBridge into
-  // the Dart-side [MixpanelEventBridge] the first time `Mixpanel` is touched.
+  // Wires the reverse path from the native MixpanelEventBridge into the
+  // Dart-side [MixpanelEventBridge] the first time `Mixpanel` is touched.
+  // The MethodCallHandler is installed eagerly so a native event can never
+  // race ahead of the handler, but the native subscription itself is only
+  // started when a Dart listener attaches — see [setLifecycleCallbacks].
   // Web is skipped — the JS SDK has no EventBridge.
   // ignore: unused_field
   static final bool _eventBridgeWired = _wireEventBridge();
@@ -377,6 +380,10 @@ class Mixpanel {
       }
       return null;
     });
+    MixpanelEventBridge.setLifecycleCallbacks(
+      onActivate: () => _channel.invokeMethod<void>('startEventBridge'),
+      onDeactivate: () => _channel.invokeMethod<void>('stopEventBridge'),
+    );
     return true;
   }
 
