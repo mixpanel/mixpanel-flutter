@@ -57,9 +57,12 @@ android {
 }
 
 dependencies {
-    // Use the Mixpanel Android SDK (includes the common EventBridge module
-    // since 8.7.0 via PR #924, the source of events the subscriber consumes).
     implementation "com.mixpanel.android:mixpanel-android:8.7.0"
+    // mixpanel-android:8.7.0 only declares mixpanel-android-common as a
+    // runtime dependency, so MixpanelEventBridge is not on the compile
+    // classpath unless we add it explicitly here. EventBridgeSubscriber.kt
+    // imports it directly.
+    implementation "com.mixpanel.android:mixpanel-android-common:1.0.1"
     implementation "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
     implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.1"
 }
