@@ -2,7 +2,10 @@ group 'com.mixpanel.mixpanel_flutter'
 version '1.0'
 
 buildscript {
-    ext.kotlin_version = '1.9.0'
+    // Must be >= 2.0 to consume mixpanel-android-common:1.0.1, which
+    // is published with Kotlin 2.0 metadata. 2.1.0 also clears Flutter's
+    // upcoming minimum-Kotlin-version check.
+    ext.kotlin_version = '2.1.0'
     repositories {
         google()
         mavenCentral()
