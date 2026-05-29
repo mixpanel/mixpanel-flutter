@@ -12,7 +12,8 @@ void main() {
   final entries = jsonDecode(raw) as List<Object?>;
 
   var currentSection = 'tests';
-  for (final entry in entries) {
+  for (var i = 0; i < entries.length; i++) {
+    final entry = entries[i];
     if (entry is String) {
       final trimmed = entry.replaceFirst(RegExp(r'^#\s*'), '').trim();
       if (trimmed.isNotEmpty && !trimmed.split('').every((c) => c == '=')) {
@@ -20,7 +21,12 @@ void main() {
       }
       continue;
     }
-    if (entry is! List || entry.length < 3) continue;
+    if (entry is! List || entry.length < 3) {
+      throw StateError(
+        'Malformed fixture entry at index $i in $fixturePath: '
+        'expected a [rule, data, expected] triple, got ${jsonEncode(entry)}',
+      );
+    }
 
     final rule = entry[0];
     final data = entry[1];
