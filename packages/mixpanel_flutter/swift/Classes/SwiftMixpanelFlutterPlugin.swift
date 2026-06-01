@@ -9,6 +9,7 @@ import Mixpanel
 public typealias MixpanelFlutterPlugin = SwiftMixpanelFlutterPlugin
 #endif
 
+@objc(MixpanelFlutterPlugin)
 public class SwiftMixpanelFlutterPlugin: NSObject, FlutterPlugin {
     
     private var instance: MixpanelInstance?
