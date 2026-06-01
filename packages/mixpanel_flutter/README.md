@@ -90,6 +90,20 @@ class _YourClassState extends State<YourClass> {
 
 Once you've called this method once, you can access `mixpanel` throughout the rest of your application.
 
+### Custom Proxy or Data Residency
+
+To route data to a specific Mixpanel regional endpoint (EU, India) or a custom proxy, pass the optional `serverURL` parameter at initialization:
+
+```dart
+mixpanel = await Mixpanel.init(
+  "Your Mixpanel Token",
+  trackAutomaticEvents: false,
+  serverURL: "https://api-eu.mixpanel.com", // or https://api-in.mixpanel.com
+);
+```
+
+You can also update the endpoint at runtime using `setServerURL()`.
+
 ## 3. Send Data
 
 Once you've initialized the SDK, Mixpanel will <a href="https://mixpanel.com/help/questions/articles/which-common-mobile-events-can-mixpanel-collect-on-my-behalf-automatically" target="_blank">automatically collect common mobile events</a>. You can enable/disable automatic collection through your project settings.

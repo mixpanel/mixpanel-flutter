@@ -218,6 +218,11 @@ class MixpanelFlutterPlugin {
     dynamic config = args['config'];
     Map<String, dynamic> initConfig = Map<String, dynamic>.from(config ?? {});
 
+    dynamic serverURL = args['serverURL'];
+    if (serverURL != null && serverURL is String && serverURL.isNotEmpty) {
+      initConfig['api_host'] = serverURL;
+    }
+
     // Handle feature flags configuration
     dynamic featureFlags = args['featureFlags'];
     if (featureFlags != null && featureFlags is Map) {

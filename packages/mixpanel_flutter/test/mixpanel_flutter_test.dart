@@ -110,6 +110,39 @@ void main() {
       );
     });
 
+    test('check initialize call with serverURL', () async {
+      _mixpanel = await Mixpanel.init("test token",
+          optOutTrackingDefault: false,
+          trackAutomaticEvents: true,
+          serverURL: "https://api-eu.mixpanel.com");
+      expect(
+        methodCall,
+        isMethodCall(
+          'initialize',
+          arguments: <String, dynamic>{
+            'token': "test token",
+            'optOutTrackingDefault': false,
+            'trackAutomaticEvents': true,
+            'mixpanelProperties': {
+              '\$lib_version': sdkVersion,
+              'mp_lib': 'flutter',
+            },
+            'superProperties': null,
+            'config': null,
+            'serverURL': 'https://api-eu.mixpanel.com',
+          },
+        ),
+      );
+    });
+
+    test('check initialize call without serverURL omits serverURL key', () async {
+      _mixpanel = await Mixpanel.init("test token",
+          optOutTrackingDefault: false,
+          trackAutomaticEvents: true);
+      final args = methodCall?.arguments as Map<dynamic, dynamic>;
+      expect(args.containsKey('serverURL'), isFalse);
+    });
+
     test('check setLoggingEnabled', () async {
       _mixpanel.setLoggingEnabled(true);
       expect(
