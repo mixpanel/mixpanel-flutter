@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
 import 'package:mixpanel_flutter/codec/mixpanel_message_codec.dart';
 import 'package:mixpanel_flutter/src/version.dart';
+import 'package:mixpanel_flutter_common/mixpanel_flutter_common.dart';
 
 /// Identifies where a served [MixpanelFlagVariant] came from. Non-null on
 /// every variant the SDK returns:
@@ -344,6 +345,39 @@ class Mixpanel {
     'mp_lib': 'flutter',
   };
 
+  // Wires the reverse path from the native MixpanelEventBridge into the
+  // Dart-side [MixpanelEventBridge] the first time `Mixpanel` is touched.
+  // The MethodCallHandler is installed eagerly so a native event can never
+  // race ahead of the handler, but the native subscription itself is only
+  // started when a Dart listener attaches — see [setLifecycleCallbacks].
+  // Web is skipped — the JS SDK has no EventBridge.
+  // ignore: unused_field
+  static final bool _eventBridgeWired = _wireEventBridge();
+
+  static bool _wireEventBridge() {
+    if (kIsWeb) return false;
+    _channel.setMethodCallHandler((MethodCall call) async {
+      if (call.method == 'onMixpanelEvent') {
+        final args = (call.arguments as Map?)?.cast<String, Object?>();
+        final eventName = args?['eventName'] as String?;
+        final properties =
+            (args?['properties'] as Map?)?.cast<String, Object?>();
+        if (eventName != null) {
+          MixpanelEventBridge.notifyListeners(
+            eventName: eventName,
+            properties: properties,
+          );
+        }
+      }
+      return null;
+    });
+    MixpanelEventBridge.setLifecycleCallbacks(
+      onActivate: () => _channel.invokeMethod<void>('startEventBridge'),
+      onDeactivate: () => _channel.invokeMethod<void>('stopEventBridge'),
+    );
+    return true;
+  }
+
   final String _token;
   final People _people;
   final FeatureFlags _featureFlags;
@@ -371,6 +405,9 @@ class Mixpanel {
       Map<String, dynamic>? superProperties,
       Map<String, dynamic>? config,
       FeatureFlagsConfig? featureFlags}) async {
+    // Force lazy initialization of the reverse-direction MethodCallHandler
+    // so any native events tracked after this point reach Dart subscribers.
+    _eventBridgeWired;
     var allProperties = <String, dynamic>{'token': token};
     allProperties['optOutTrackingDefault'] = optOutTrackingDefault;
     allProperties['trackAutomaticEvents'] = trackAutomaticEvents;
