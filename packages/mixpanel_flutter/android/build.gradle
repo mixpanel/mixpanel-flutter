@@ -47,6 +47,15 @@ android {
 
     kotlinOptions {
         jvmTarget = '17'
+        // mixpanel-android-common:1.0.1 is published with Kotlin 2.0
+        // metadata. Flutter's gradle integration picks a KGP version we
+        // can't reliably control from this module's buildscript, so a
+        // Kotlin 1.9.x compiler often ends up compiling this plugin and
+        // chokes on the newer metadata. The bytecode itself is
+        // forward-compatible (the consumed APIs are just a Flow and a
+        // data class), so suppressing the metadata version check is the
+        // canonical workaround.
+        freeCompilerArgs += ['-Xskip-metadata-version-check']
     }
 
     sourceSets {
