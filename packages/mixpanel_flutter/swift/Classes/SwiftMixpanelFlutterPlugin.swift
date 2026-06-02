@@ -192,8 +192,7 @@ public class SwiftMixpanelFlutterPlugin: NSObject, FlutterPlugin {
         let superProperties = arguments["superProperties"] as? [String: Any]
         self.token = token
         let trackAutomaticEvents = arguments["trackAutomaticEvents"] as! Bool
-        let serverURLArg = arguments["serverURL"] as? String
-        let serverURL = (serverURLArg != nil && !serverURLArg!.isEmpty) ? serverURLArg : nil
+        let serverURL = (arguments["serverURL"] as? String).flatMap { $0.isEmpty ? nil : $0 }
 
         // Check for feature flags configuration
         var featureFlagOptions: FeatureFlagOptions? = nil

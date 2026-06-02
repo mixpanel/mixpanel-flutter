@@ -150,6 +150,32 @@ void main() {
       );
     });
 
+    test('check initialize omits serverURL when null', () async {
+      _mixpanel = await Mixpanel.init(
+        "test token",
+        optOutTrackingDefault: false,
+        trackAutomaticEvents: true,
+        serverURL: null,
+      );
+      expect(
+        methodCall,
+        isMethodCall(
+          'initialize',
+          arguments: <String, dynamic>{
+            'token': "test token",
+            'optOutTrackingDefault': false,
+            'trackAutomaticEvents': true,
+            'mixpanelProperties': {
+              '\$lib_version': sdkVersion,
+              'mp_lib': 'flutter',
+            },
+            'superProperties': null,
+            'config': null,
+          },
+        ),
+      );
+    });
+
     test('check setServerURL', () async {
       _mixpanel.setServerURL("https://api-eu.mixpanel.com");
       expect(
