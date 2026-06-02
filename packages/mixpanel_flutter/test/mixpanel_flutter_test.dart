@@ -139,7 +139,8 @@ void main() {
       _mixpanel = await Mixpanel.init("test token",
           optOutTrackingDefault: false,
           trackAutomaticEvents: true);
-      final args = methodCall?.arguments as Map<dynamic, dynamic>;
+      expect(methodCall, isNotNull);
+      final args = methodCall!.arguments as Map<dynamic, dynamic>;
       expect(args.containsKey('serverURL'), isFalse);
     });
 
