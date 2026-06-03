@@ -19,10 +19,13 @@ import org.json.JSONObject
  * `SharedFlow`) and forwards each event to the Dart side via the existing
  * Flutter MethodChannel.
  *
- * The Java plugin calls [start] from `onAttachedToEngine` and [stop] from
- * `onDetachedFromEngine`. This object is a singleton because the native
- * SharedFlow itself is a singleton — we never want more than one active
- * subscription per process.
+ * Lifecycle is driven from Dart: [start] runs when the plugin receives a
+ * `startEventBridge` MethodChannel call (issued the first time a Dart
+ * consumer subscribes to `MixpanelEventBridge.events`), and [stop] runs
+ * on `stopEventBridge` (last cancel) and on `onDetachedFromEngine`.
+ *
+ * This object is a singleton because the native SharedFlow itself is a
+ * singleton — we never want more than one active collector per process.
  */
 object EventBridgeSubscriber {
 

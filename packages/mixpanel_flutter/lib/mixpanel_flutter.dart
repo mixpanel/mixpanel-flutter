@@ -346,16 +346,12 @@ class Mixpanel {
   };
 
   // Wires the reverse path from the native MixpanelEventBridge into the
-  // Dart-side [MixpanelEventBridge] the first time `Mixpanel` is touched.
-  // The MethodCallHandler is installed eagerly so a native event can never
-  // race ahead of the handler, but the native subscription itself is only
-  // started when a Dart listener attaches — see [setLifecycleCallbacks].
-  // Web is skipped — the JS SDK has no EventBridge.
-  // ignore: unused_field
-  static final bool _eventBridgeWired = _wireEventBridge();
-
-  static bool _wireEventBridge() {
-    if (kIsWeb) return false;
+  // Dart-side [MixpanelEventBridge]. Runs only when a consumer actually
+  // reads [MixpanelEventBridge.events] — `init()` registers this as a
+  // one-shot hook via [MixpanelEventBridge.setSourceWiringHook], so apps
+  // that never subscribe never install the MethodCallHandler and never
+  // issue start/stopEventBridge over the channel.
+  static void _wireEventBridge() {
     _channel.setMethodCallHandler((MethodCall call) async {
       if (call.method == 'onMixpanelEvent') {
         final args = (call.arguments as Map?)?.cast<String, Object?>();
@@ -375,7 +371,6 @@ class Mixpanel {
       onActivate: () => _channel.invokeMethod<void>('startEventBridge'),
       onDeactivate: () => _channel.invokeMethod<void>('stopEventBridge'),
     );
-    return true;
   }
 
   final String _token;
@@ -405,9 +400,13 @@ class Mixpanel {
       Map<String, dynamic>? superProperties,
       Map<String, dynamic>? config,
       FeatureFlagsConfig? featureFlags}) async {
-    // Force lazy initialization of the reverse-direction MethodCallHandler
-    // so any native events tracked after this point reach Dart subscribers.
-    _eventBridgeWired;
+    // Defer the reverse-channel wiring until something actually reads
+    // MixpanelEventBridge.events. Apps that never subscribe pay only the
+    // stored function reference — no MethodCallHandler, no native subscribe.
+    // Web is skipped — the JS SDK has no EventBridge.
+    if (!kIsWeb) {
+      MixpanelEventBridge.setSourceWiringHook(_wireEventBridge);
+    }
     var allProperties = <String, dynamic>{'token': token};
     allProperties['optOutTrackingDefault'] = optOutTrackingDefault;
     allProperties['trackAutomaticEvents'] = trackAutomaticEvents;

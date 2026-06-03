@@ -186,5 +186,66 @@ void main() {
       expect(errors, hasLength(1));
       expect(errors.first, isA<StateError>());
     });
+
+    group('source wiring hook', () {
+      tearDown(() {
+        MixpanelEventBridge.setSourceWiringHook();
+      });
+
+      test('fires the first time events is read', () {
+        var calls = 0;
+        MixpanelEventBridge.setSourceWiringHook(() => calls++);
+
+        // Access alone (no listener) is enough — wiring needs to be in
+        // place before .listen() triggers onActivate.
+        // ignore: unused_local_variable
+        final _ = MixpanelEventBridge.events;
+        expect(calls, 1);
+      });
+
+      test('does not fire on subsequent reads of events', () {
+        var calls = 0;
+        MixpanelEventBridge.setSourceWiringHook(() => calls++);
+
+        MixpanelEventBridge.events;
+        MixpanelEventBridge.events;
+        MixpanelEventBridge.events;
+        expect(calls, 1);
+      });
+
+      test('does not fire when events is never read', () {
+        var calls = 0;
+        MixpanelEventBridge.setSourceWiringHook(() => calls++);
+        expect(calls, 0);
+      });
+
+      test('re-registering after consumption fires again on next read', () {
+        var calls = 0;
+        MixpanelEventBridge.setSourceWiringHook(() => calls++);
+        MixpanelEventBridge.events; // consumes the first hook
+        MixpanelEventBridge.setSourceWiringHook(() => calls++);
+        MixpanelEventBridge.events; // consumes the second hook
+        expect(calls, 2);
+      });
+
+      test('hook runs before listeners observe onActivate', () async {
+        // The wiring hook is `mixpanel_flutter`'s opportunity to install
+        // its lifecycle callbacks. If onActivate fires before the hook
+        // runs, the native side never gets a startEventBridge.
+        final order = <String>[];
+        MixpanelEventBridge.setSourceWiringHook(() {
+          order.add('hook');
+          MixpanelEventBridge.setLifecycleCallbacks(
+            onActivate: () => order.add('activate'),
+          );
+        });
+
+        final sub = MixpanelEventBridge.events.listen((_) {});
+        expect(order, ['hook', 'activate']);
+
+        await sub.cancel();
+        MixpanelEventBridge.setLifecycleCallbacks();
+      });
+    });
   });
 }
