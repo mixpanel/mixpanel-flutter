@@ -239,7 +239,7 @@ public class MixpanelFlutterPlugin implements FlutterPlugin, MethodCallHandler {
 
         Boolean optOutTrackingDefault = call.<Boolean>argument("optOutTrackingDefault");
         Boolean trackAutomaticEvents = call.<Boolean>argument("trackAutomaticEvents");
-        String serverURL = call.argument("serverURL");
+        String serverURL = call.<String>argument("serverURL");
 
         // Parse feature flags config if provided
         Map<String, Object> featureFlagsMap = call.<HashMap<String, Object>>argument("featureFlags");
