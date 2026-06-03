@@ -10,6 +10,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.plus
+import kotlinx.coroutines.withContext
 import org.json.JSONException
 import org.json.JSONObject
 
@@ -25,7 +26,11 @@ import org.json.JSONObject
  */
 object EventBridgeSubscriber {
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    // Collect on Default so the per-event JSONObject → Map conversion
+    // (which can be expensive for fat property payloads) runs off the main
+    // thread; only the MethodChannel dispatch itself, which requires the
+    // platform thread, is hopped back to Main.
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var job: Job? = null
 
     @JvmStatic
@@ -34,13 +39,13 @@ object EventBridgeSubscriber {
         job = scope.launch {
             MixpanelEventBridge.events().collect { event ->
                 val properties = event.properties?.let { safelyConvert(it) }
-                channel.invokeMethod(
-                    "onMixpanelEvent",
-                    mapOf(
-                        "eventName" to event.eventName,
-                        "properties" to properties,
-                    )
+                val args = mapOf(
+                    "eventName" to event.eventName,
+                    "properties" to properties,
                 )
+                withContext(Dispatchers.Main) {
+                    channel.invokeMethod("onMixpanelEvent", args)
+                }
             }
         }
     }
