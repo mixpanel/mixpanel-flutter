@@ -192,6 +192,7 @@ public class SwiftMixpanelFlutterPlugin: NSObject, FlutterPlugin {
         let superProperties = arguments["superProperties"] as? [String: Any]
         self.token = token
         let trackAutomaticEvents = arguments["trackAutomaticEvents"] as! Bool
+        let serverURL = (arguments["serverURL"] as? String).flatMap { $0.isEmpty ? nil : $0 }
 
         // Check for feature flags configuration
         var featureFlagOptions: FeatureFlagOptions? = nil
@@ -213,6 +214,7 @@ public class SwiftMixpanelFlutterPlugin: NSObject, FlutterPlugin {
             trackAutomaticEvents: trackAutomaticEvents,
             optOutTrackingByDefault: optOutTrackingDefault ?? false,
             superProperties: MixpanelTypeHandler.mixpanelProperties(properties: superProperties, mixpanelProperties: mixpanelProperties),
+            serverURL: serverURL,
             featureFlagOptions: featureFlagOptions
         )
         instance = Mixpanel.initialize(options: options)
