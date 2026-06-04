@@ -162,6 +162,53 @@ void main() {
       );
     });
 
+    // Int-precision fast path: two distinct 64-bit ints above 2^53 must
+    // not be considered equal. mixpanel-android's evaluator collapses to
+    // double here and loses precision — Flutter follows mixpanel-swift-
+    // common which preserves int precision.
+    test('=== returns false for distinct ints above 2^53', () {
+      // 2^53 + 1 vs 2^53 + 2 — both round to the same double (2^53 + 2).
+      expect(
+        evaluate('{"===": [{"var": "a"}, {"var": "b"}]}', {
+          'a': 9007199254740993,
+          'b': 9007199254740994,
+        }),
+        isFalse,
+      );
+    });
+
+    test('=== returns true for matching ints above 2^53', () {
+      expect(
+        evaluate('{"===": [{"var": "a"}, {"var": "b"}]}', {
+          'a': 9007199254740993,
+          'b': 9007199254740993,
+        }),
+        isTrue,
+      );
+    });
+
+    test('=== returns true for mixed int and double of equal value', () {
+      // The mixed-type case still goes through Double coercion so
+      // `1 === 1.0` keeps returning true (JS-style numeric semantics).
+      expect(
+        evaluate('{"===": [{"var": "a"}, {"var": "b"}]}', {
+          'a': 1,
+          'b': 1.0,
+        }),
+        isTrue,
+      );
+    });
+
+    test('=== returns true for matching doubles', () {
+      expect(
+        evaluate('{"===": [{"var": "a"}, {"var": "b"}]}', {
+          'a': 1.5,
+          'b': 1.5,
+        }),
+        isTrue,
+      );
+    });
+
     test('!== returns false for matching numbers', () {
       expect(evaluate('{"!==": [{"var": "count"}, 1]}', {'count': 1}), isFalse);
     });

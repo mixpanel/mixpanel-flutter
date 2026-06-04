@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mixpanel_flutter/codec/mixpanel_message_codec.dart';
@@ -107,18 +109,30 @@ void main() {
     await sub.cancel();
   });
 
-  test('unknown method names are ignored', () async {
-    final received = <MixpanelEvent>[];
-    final sub = MixpanelEventBridge.events.listen(received.add);
+  test(
+    'unknown method names raise MissingPluginException to the caller',
+    () async {
+      final received = <MixpanelEvent>[];
+      final sub = MixpanelEventBridge.events.listen(received.add);
 
-    final bogus = codec.encodeMethodCall(const MethodCall('somethingElse'));
-    await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .handlePlatformMessage('mixpanel_flutter', bogus, (_) {});
-    await Future<void>.delayed(Duration.zero);
+      // Flutter's MethodChannel protocol uses a null reply envelope to
+      // signal "method not implemented". The Dart handler must propagate
+      // this for future native→Dart push features added to the shared
+      // channel — silently swallowing unknown methods (the prior
+      // behavior) would mask real bugs.
+      ByteData? reply;
+      final bogus = codec.encodeMethodCall(const MethodCall('somethingElse'));
+      await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .handlePlatformMessage('mixpanel_flutter', bogus, (data) {
+        reply = data;
+      });
+      await Future<void>.delayed(Duration.zero);
 
-    expect(received, isEmpty);
-    await sub.cancel();
-  });
+      expect(reply, isNull, reason: 'null reply signals MissingPluginException');
+      expect(received, isEmpty);
+      await sub.cancel();
+    },
+  );
 
   group('lazy native subscription', () {
     test('first Dart listener invokes startEventBridge on the channel',
@@ -159,6 +173,29 @@ void main() {
         outgoingCalls.map((c) => c.method),
         isNot(contains('startEventBridge')),
       );
+    });
+
+    test('channel errors from start/stopEventBridge do not escape the zone',
+        () async {
+      // Engine teardown ordering, missing platform handlers in unit
+      // tests, etc. can cause invokeMethod to error after onActivate /
+      // onDeactivate is dispatched. Those signals are best-effort and
+      // must be swallowed — otherwise an uncaught async error fails the
+      // surrounding zone (and unrelated tests).
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async {
+        throw PlatformException(code: 'TEST_ERROR', message: call.method);
+      });
+
+      final errors = <Object>[];
+      await runZonedGuarded(() async {
+        final sub = MixpanelEventBridge.events.listen((_) {});
+        await Future<void>.delayed(Duration.zero);
+        await sub.cancel();
+        await Future<void>.delayed(Duration.zero);
+      }, (e, _) => errors.add(e));
+
+      expect(errors, isEmpty);
     });
   });
 }
