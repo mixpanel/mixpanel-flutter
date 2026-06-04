@@ -274,7 +274,7 @@ public class MixpanelFlutterPlugin implements FlutterPlugin, MethodCallHandler {
                 .optOutTrackingDefault(optOutTrackingDefault == null ? false : optOutTrackingDefault)
                 .superProperties(superAndMixpanelProperties);
 
-        if (serverURL != null && !serverURL.isEmpty()) {
+        if (serverURL != null && !serverURL.trim().isEmpty()) {
             optionsBuilder.serverURL(serverURL);
         }
 
