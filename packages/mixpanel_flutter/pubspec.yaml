@@ -16,6 +16,11 @@ dependencies:
   flutter_web_plugins:
     sdk: flutter
   mixpanel_flutter_common:
+    # Both `version` and `path` are required so local dev resolves via path
+    # while `flutter pub publish` resolves via the published version on
+    # pub.dev (publish rejects path-only deps). Keep these in lockstep with
+    # ../mixpanel_flutter_common/pubspec.yaml.
+    version: ^0.1.0
     path: ../mixpanel_flutter_common
 
 dev_dependencies:

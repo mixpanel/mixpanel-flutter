@@ -189,7 +189,14 @@ void main() {
 
     group('source wiring hook', () {
       tearDown(() {
+        // Reset both the wiring hook AND lifecycle callbacks — the
+        // `hook runs before listeners observe onActivate` test installs
+        // a lifecycle callback inside the hook, and if its assertion
+        // fails before the inline reset, the leaked closure would bleed
+        // into subsequent tests that subscribe through the singleton
+        // controller.
         MixpanelEventBridge.setSourceWiringHook();
+        MixpanelEventBridge.setLifecycleCallbacks();
       });
 
       test('fires the first time events is read', () {
@@ -244,7 +251,8 @@ void main() {
         expect(order, ['hook', 'activate']);
 
         await sub.cancel();
-        MixpanelEventBridge.setLifecycleCallbacks();
+        // Lifecycle callbacks are also reset in the group tearDown — no
+        // need to reset inline here.
       });
     });
   });

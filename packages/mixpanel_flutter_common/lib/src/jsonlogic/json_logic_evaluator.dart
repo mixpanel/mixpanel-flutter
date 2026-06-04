@@ -114,6 +114,11 @@ class JsonLogicEvaluator {
     }
 
     if (a is num && b is num) {
+      // Compare ints directly so 64-bit values above 2^53 don't collapse
+      // to the same double mantissa (e.g. transaction/session IDs).
+      // Mixed int+double still coerces, matching JS-style `===` numeric
+      // semantics where 1 === 1.0.
+      if (a is int && b is int) return a == b;
       return a.toDouble() == b.toDouble();
     }
 

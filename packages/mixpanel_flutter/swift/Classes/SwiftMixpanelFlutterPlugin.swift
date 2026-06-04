@@ -49,6 +49,16 @@ public class SwiftMixpanelFlutterPlugin: NSObject, FlutterPlugin {
         eventBridgeTask?.cancel()
     }
 
+    // FlutterPlugin lifecycle hook — invoked when the engine releases the
+    // plugin. Tears down the EventBridge task promptly instead of waiting
+    // for ARC to deallocate the plugin instance, which mirrors Android's
+    // `onDetachedFromEngine` cleanup.
+    public func detachFromEngine(for registrar: FlutterPluginRegistrar) {
+        eventBridgeTask?.cancel()
+        eventBridgeTask = nil
+        channel = nil
+    }
+
     private func handleStartEventBridge(_ result: @escaping FlutterResult) {
         guard eventBridgeTask == nil, let channel = channel else {
             result(nil)

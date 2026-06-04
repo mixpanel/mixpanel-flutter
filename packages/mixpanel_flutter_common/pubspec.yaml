@@ -12,6 +12,9 @@ environment:
   # mixpanel_flutter consumers to bump their Dart version.
   sdk: '>=2.12.0 <4.0.0'
 
+dependencies:
+  meta: ^1.8.0
+
 dev_dependencies:
   test: ^1.24.0
   lints: ^4.0.0

@@ -359,17 +359,31 @@ class Mixpanel {
         final properties =
             (args?['properties'] as Map?)?.cast<String, Object?>();
         if (eventName != null) {
+          // mixpanel_flutter is the privileged producer for this bridge —
+          // acknowledged use of the @internal API on the common package.
+          // ignore: invalid_use_of_internal_member
           MixpanelEventBridge.notifyListeners(
             eventName: eventName,
             properties: properties,
           );
         }
+        return null;
       }
-      return null;
+      // Surface unknown inbound methods loudly rather than silently
+      // returning null — protects future native→Dart push features added
+      // on this same shared channel from being swallowed here.
+      throw MissingPluginException(
+        'No handler for inbound method ${call.method} on mixpanel_flutter channel',
+      );
     });
+    // ignore: invalid_use_of_internal_member
     MixpanelEventBridge.setLifecycleCallbacks(
-      onActivate: () => _channel.invokeMethod<void>('startEventBridge'),
-      onDeactivate: () => _channel.invokeMethod<void>('stopEventBridge'),
+      // Swallow channel errors (e.g. MissingPluginException during engine
+      // teardown) — the activate/deactivate signal is best-effort.
+      onActivate: () =>
+          _channel.invokeMethod<void>('startEventBridge').catchError((_) {}),
+      onDeactivate: () =>
+          _channel.invokeMethod<void>('stopEventBridge').catchError((_) {}),
     );
   }
 
@@ -405,6 +419,7 @@ class Mixpanel {
     // stored function reference — no MethodCallHandler, no native subscribe.
     // Web is skipped — the JS SDK has no EventBridge.
     if (!kIsWeb) {
+      // ignore: invalid_use_of_internal_member
       MixpanelEventBridge.setSourceWiringHook(_wireEventBridge);
     }
     var allProperties = <String, dynamic>{'token': token};

@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:meta/meta.dart';
+
 import 'mixpanel_event.dart';
 
 /// Process-wide bridge for tracked Mixpanel events.
@@ -70,6 +72,7 @@ class MixpanelEventBridge {
   /// Application code should never call this directly. It is left public
   /// (rather than library-private) so the `mixpanel_flutter` package can
   /// reach it without circular imports.
+  @internal
   static void notifyListeners({
     required String eventName,
     Map<String, Object?>? properties,
@@ -88,6 +91,7 @@ class MixpanelEventBridge {
   /// Dart consumer cares about events.
   ///
   /// Application code should never call this directly.
+  @internal
   static void setLifecycleCallbacks({
     void Function()? onActivate,
     void Function()? onDeactivate,
@@ -107,6 +111,7 @@ class MixpanelEventBridge {
   /// Pass `null` (or no argument) to clear an existing hook.
   ///
   /// Application code should never call this directly.
+  @internal
   static void setSourceWiringHook([void Function()? hook]) {
     _ensureSourceWired = hook;
   }
