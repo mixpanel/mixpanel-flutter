@@ -364,9 +364,8 @@ class Mixpanel {
   ///  * [superProperties] Optional super properties to register
   ///  * [config] Optional A dictionary of config options to override (WEB ONLY)
   ///  * [featureFlags] Optional Feature flags configuration
-  ///  * [serverURL] Optional base URL used for Mixpanel API requests. Useful if you
-  ///  need to proxy Mixpanel requests, or to route data to Mixpanel's EU servers
-  ///  (`https://api-eu.mixpanel.com`). Defaults to `https://api.mixpanel.com`.
+  ///  * [serverURL] Optional base URL for Mixpanel API requests. Use for EU/India data
+  ///  residency or a custom proxy. Defaults to https://api.mixpanel.com
   ///
   static Future<Mixpanel> init(String token,
       {bool optOutTrackingDefault = false,
