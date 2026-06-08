@@ -6,5 +6,13 @@
     "changelog": "packages/mixpanel_flutter/CHANGELOG.md",
     "readme": "packages/mixpanel_flutter/README.md",
     "package_name": "mixpanel_flutter"
+  },
+  "common": {
+    "tag_prefix": "common-v",
+    "pubspec": "packages/mixpanel_flutter_common/pubspec.yaml",
+    "version_files": [],
+    "changelog": "packages/mixpanel_flutter_common/CHANGELOG.md",
+    "readme": "packages/mixpanel_flutter_common/README.md",
+    "package_name": "mixpanel_flutter_common"
   }
 }
