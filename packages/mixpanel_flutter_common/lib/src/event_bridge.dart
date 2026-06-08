@@ -54,6 +54,9 @@ class MixpanelEventBridge {
   ///
   /// Returns a broadcast [Stream]; multiple listeners are supported. Each
   /// listener sees every event from the moment it subscribes.
+  ///
+  /// Intended for Mixpanel-authored downstream packages.
+  @internal
   static Stream<MixpanelEvent> get events {
     // Fire the wiring hook at most once. Cleared before invocation so the
     // hook can't re-enter itself via `events` from inside `mixpanel_flutter`'s

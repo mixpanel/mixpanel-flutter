@@ -41,11 +41,12 @@ import 'package:mixpanel_flutter_common/mixpanel_flutter_common.dart';
 
 # Public API surface
 
-The exported library is intentionally narrow:
+The exported library is intentionally narrow.
+
+### Application API
 
 | Symbol | Use |
 |---|---|
-| `MixpanelEventBridge.events` | Subscribe to the stream of tracked events |
 | `MixpanelEvent` | Event payload type |
 | `JsonLogicRule` | Opaque token returned by the parser and consumed by the evaluator |
 | `JsonLogicParser.parse(String)` | Parse a JSONLogic JSON string into a rule |
@@ -57,11 +58,14 @@ are AST implementation details and are intentionally not exported.
 Treat `JsonLogicRule` as an opaque value: get one from the parser, pass
 it to the evaluator.
 
-Three methods on `MixpanelEventBridge` (`notifyListeners`,
+### `MixpanelEventBridge` — reserved for Mixpanel-authored packages
+
+All members on `MixpanelEventBridge` (`events`, `notifyListeners`,
 `setLifecycleCallbacks`, `setSourceWiringHook`) are annotated `@internal`.
-They exist so `mixpanel_flutter` can wire its native EventBridge into
-this stream and so downstream packages can inject events from tests.
-Application code should not call them.
+They form the cross-package coordination surface used by `mixpanel_flutter`
+(to forward native events into Dart) and by downstream packages such as
+`mixpanel_flutter_session_replay` (to subscribe to events and inject
+fakes from tests).
 
 # Versioning
 
