@@ -116,11 +116,8 @@ class JsonLogicEvaluator {
     if (a is num && b is num) {
       // Compare ints directly so 64-bit values above 2^53 don't collapse
       // to the same double mantissa (transaction/session IDs, ns
-      // timestamps). Matches mixpanel-swift-common's JSONLogicEvaluator,
-      // which also tries Int === Int before falling back to Double
-      // coercion for mixed int+double cases. (mixpanel-android currently
-      // coerces everything to double and loses this precision — Flutter
-      // intentionally diverges to match the more accurate iOS behavior.)
+      // timestamps). Mixed int+double cases fall through to double
+      // coercion below.
       if (a is int && b is int) return a == b;
       return a.toDouble() == b.toDouble();
     }

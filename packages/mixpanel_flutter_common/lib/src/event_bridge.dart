@@ -6,31 +6,29 @@ import 'mixpanel_event.dart';
 
 /// Process-wide bridge for tracked Mixpanel events.
 ///
-/// Direct Dart analog of the native dispatchers:
-/// - Android `MixpanelEventBridge` (Kotlin SharedFlow)
-/// - Swift `MixpanelEventBridge.shared.eventStream()` (AsyncStream)
-///
-/// `mixpanel_flutter`'s native plugins subscribe to their platform's native
-/// bridge and forward each event into [notifyListeners]. Any number of
-/// Dart consumers (session replay, custom triggers) subscribe to [events].
+/// `mixpanel_flutter` forwards each tracked event into [notifyListeners].
+/// Mixpanel-authored downstream packages such as
+/// `mixpanel_flutter_session_replay` subscribe to [events]. All members
+/// are annotated `@internal` — application code should rely on the public
+/// `mixpanel_flutter` SDK APIs rather than subscribing to this stream
+/// directly.
 ///
 /// ## Lazy wiring
 /// `mixpanel_flutter` registers a one-shot wiring hook via
 /// [setSourceWiringHook] during `init()`. The hook fires the first time
 /// anything reads [events] and installs the MethodChannel handler plus
 /// lifecycle callbacks. Apps that never consume events pay only for one
-/// stored function reference — no handler is installed and no native
+/// stored function reference — no handler is installed and no upstream
 /// subscription is ever started.
 ///
-/// ## Lazy native subscription
-/// Once the source is wired, the native bridge subscription itself is
-/// only activated while at least one Dart listener is attached. The first
-/// listener triggers `onActivate` (which starts the native subscription),
-/// and the last cancel triggers `onDeactivate` (which stops it).
+/// ## Lazy activation
+/// Once the source is wired, the upstream subscription is only activated
+/// while at least one Dart listener is attached. The first listener
+/// triggers `onActivate`, and the last cancel triggers `onDeactivate`.
 ///
 /// ## Late subscribers
 /// The stream does not buffer or replay. Events emitted before a listener
-/// attaches are dropped. This matches the native `replay = 0` semantics.
+/// attaches are dropped.
 ///
 /// ## Handler expectations
 /// Keep listeners fast and non-blocking — there is no backpressure buffer
@@ -55,7 +53,8 @@ class MixpanelEventBridge {
   /// Returns a broadcast [Stream]; multiple listeners are supported. Each
   /// listener sees every event from the moment it subscribes.
   ///
-  /// Intended for Mixpanel-authored downstream packages.
+  /// Reserved for Mixpanel-authored downstream packages — application code
+  /// should use the public `mixpanel_flutter` SDK APIs instead.
   @internal
   static Stream<MixpanelEvent> get events {
     // Fire the wiring hook at most once. Cleared before invocation so the
@@ -69,8 +68,8 @@ class MixpanelEventBridge {
     return _controller.stream;
   }
 
-  /// Internal entry point — invoked by `mixpanel_flutter`'s plugin after
-  /// the native SDK has tracked and decorated an event.
+  /// Internal entry point — invoked by `mixpanel_flutter` after a tracked
+  /// event has been decorated.
   ///
   /// Application code should never call this directly. It is left public
   /// (rather than library-private) so the `mixpanel_flutter` package can
@@ -89,9 +88,9 @@ class MixpanelEventBridge {
   ///
   /// `onActivate` fires the moment a first listener attaches to a previously
   /// empty broadcast stream; `onDeactivate` fires when the last listener
-  /// cancels. `mixpanel_flutter` uses these to start/stop the native event
-  /// bridge subscription lazily so the MethodChannel stays idle when no
-  /// Dart consumer cares about events.
+  /// cancels. `mixpanel_flutter` uses these to start/stop its upstream
+  /// subscription lazily so the MethodChannel stays idle when no Dart
+  /// consumer cares about events.
   ///
   /// Application code should never call this directly.
   @internal

@@ -2,10 +2,12 @@
 ///
 /// Two pieces:
 /// 1. [MixpanelEventBridge] — process-wide stream of tracked events,
-///    populated by `mixpanel_flutter`'s native plugins. Consume this in
-///    session replay, custom trigger logic, etc.
-/// 2. JSONLogic — parser and evaluator for the Event Trigger rule subset
-///    aligned across mixpanel-android, mixpanel-swift, and this package.
+///    populated by `mixpanel_flutter`. All members are annotated
+///    `@internal` — reserved for Mixpanel-authored downstream packages
+///    (e.g. `mixpanel_flutter_session_replay`). Application code should
+///    rely on the public `mixpanel_flutter` SDK APIs instead.
+/// 2. JSONLogic — parser and evaluator for the subset of expressions used
+///    by Mixpanel Event Triggers.
 library mixpanel_flutter_common;
 
 export 'src/event_bridge.dart';

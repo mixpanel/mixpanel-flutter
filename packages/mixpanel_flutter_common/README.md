@@ -14,15 +14,15 @@ or JSONLogic evaluator.
 # Contents
 
 - **`MixpanelEventBridge`** — a process-wide broadcast stream of tracked
-  events. `mixpanel_flutter` populates the stream from each native SDK's
-  internal event bridge; downstream packages such as session replay
-  subscribe to the stream to react to events without re-instrumenting
-  `track()` call sites.
+  events. `mixpanel_flutter` populates the stream; Mixpanel-authored
+  downstream packages such as `mixpanel_flutter_session_replay` subscribe
+  to it to react to events without re-instrumenting `track()` call sites.
 - **`MixpanelEvent`** — the event payload delivered through the bridge.
 - **JSONLogic evaluator** — `JsonLogicParser` + `JsonLogicEvaluator` for
   the subset of [json-logic](https://jsonlogic.com) expressions used by
-  server-configured Event Triggers. Aligned across `mixpanel-android`,
-  `mixpanel-swift`, and this package.
+  Mixpanel server-configured Event Triggers. Behavior is aligned with the
+  Android and iOS Mixpanel SDKs so trigger evaluation is consistent across
+  platforms.
 
 # Install
 
@@ -63,9 +63,10 @@ it to the evaluator.
 All members on `MixpanelEventBridge` (`events`, `notifyListeners`,
 `setLifecycleCallbacks`, `setSourceWiringHook`) are annotated `@internal`.
 They form the cross-package coordination surface used by `mixpanel_flutter`
-(to forward native events into Dart) and by downstream packages such as
+(to forward tracked events into Dart) and by downstream packages such as
 `mixpanel_flutter_session_replay` (to subscribe to events and inject
-fakes from tests).
+fakes from tests). Application code should rely on the public
+`mixpanel_flutter` SDK APIs instead of subscribing to this stream directly.
 
 # Versioning
 

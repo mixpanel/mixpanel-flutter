@@ -58,13 +58,12 @@ class JsonLogicParser {
         "input must be a JSON object: '${_truncate(trimmed)}'",
       );
     }
-    return parseValue(decoded);
+    return _parseValue(decoded);
   }
 
-  /// Parses any decoded JSON value into a [JsonLogicRule].
-  ///
-  /// Internal use only - use [parse] for parsing JSON strings.
-  static JsonLogicRule parseValue(Object? value, [int depth = 0]) {
+  /// Recursive helper for [parse]. Walks a decoded JSON value and produces
+  /// the corresponding [JsonLogicRule] subtree, enforcing [maxDepth].
+  static JsonLogicRule _parseValue(Object? value, [int depth = 0]) {
     if (depth > maxDepth) {
       throw InvalidExpressionException(
         'parse',
@@ -85,7 +84,7 @@ class JsonLogicParser {
 
   static JsonLogicRule _parseArray(List<Object?> array, int depth) {
     final elements = array
-        .map((e) => parseValue(e, depth + 1))
+        .map((e) => _parseValue(e, depth + 1))
         .toList(growable: false);
     final hasRules = elements.any((e) => e is! LiteralRule);
     if (hasRules) {
@@ -170,9 +169,9 @@ class JsonLogicParser {
       return const [LiteralRule(null)];
     }
     if (args is List) {
-      return args.map((e) => parseValue(e, depth + 1)).toList(growable: false);
+      return args.map((e) => _parseValue(e, depth + 1)).toList(growable: false);
     }
-    return [parseValue(args, depth + 1)];
+    return [_parseValue(args, depth + 1)];
   }
 
   static T _requireBinary<T extends JsonLogicRule>(
