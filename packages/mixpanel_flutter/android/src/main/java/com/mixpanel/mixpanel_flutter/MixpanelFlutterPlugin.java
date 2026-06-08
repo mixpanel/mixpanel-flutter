@@ -257,6 +257,7 @@ public class MixpanelFlutterPlugin implements FlutterPlugin, MethodCallHandler {
 
         Boolean optOutTrackingDefault = call.<Boolean>argument("optOutTrackingDefault");
         Boolean trackAutomaticEvents = call.<Boolean>argument("trackAutomaticEvents");
+        String serverURL = call.<String>argument("serverURL");
 
         // Parse feature flags config if provided
         Map<String, Object> featureFlagsMap = call.<HashMap<String, Object>>argument("featureFlags");
@@ -290,6 +291,10 @@ public class MixpanelFlutterPlugin implements FlutterPlugin, MethodCallHandler {
         MixpanelOptions.Builder optionsBuilder = new MixpanelOptions.Builder()
                 .optOutTrackingDefault(optOutTrackingDefault == null ? false : optOutTrackingDefault)
                 .superProperties(superAndMixpanelProperties);
+
+        if (serverURL != null && !serverURL.trim().isEmpty()) {
+            optionsBuilder.serverURL(serverURL);
+        }
 
         if (featureFlagsEnabled != null && featureFlagsEnabled) {
             FeatureFlagOptions.Builder ffBuilder = new FeatureFlagOptions.Builder().enabled(true);

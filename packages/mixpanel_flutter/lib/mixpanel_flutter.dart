@@ -407,13 +407,16 @@ class Mixpanel {
   ///  * [superProperties] Optional super properties to register
   ///  * [config] Optional A dictionary of config options to override (WEB ONLY)
   ///  * [featureFlags] Optional Feature flags configuration
+  ///  * [serverURL] Optional base URL for Mixpanel API requests. Use for EU/India data
+  ///  residency or a custom proxy. Defaults to https://api.mixpanel.com
   ///
   static Future<Mixpanel> init(String token,
       {bool optOutTrackingDefault = false,
       required bool trackAutomaticEvents,
       Map<String, dynamic>? superProperties,
       Map<String, dynamic>? config,
-      FeatureFlagsConfig? featureFlags}) async {
+      FeatureFlagsConfig? featureFlags,
+      String? serverURL}) async {
     // Defer the reverse-channel wiring until something actually reads
     // MixpanelEventBridge.events. Apps that never subscribe pay only the
     // stored function reference — no MethodCallHandler, no native subscribe.
@@ -430,6 +433,9 @@ class Mixpanel {
     allProperties['config'] = _MixpanelHelper.ensureSerializableProperties(config);
     if (featureFlags != null) {
       allProperties['featureFlags'] = featureFlags.toMap();
+    }
+    if (serverURL != null && _MixpanelHelper.isValidString(serverURL)) {
+      allProperties['serverURL'] = serverURL;
     }
     await _channel.invokeMethod<void>('initialize', allProperties);
     return Mixpanel(token);
