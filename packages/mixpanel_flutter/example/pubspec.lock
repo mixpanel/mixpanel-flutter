@@ -144,7 +144,7 @@ packages:
     source: path
     version: "2.8.0"
   mixpanel_flutter_common:
-    dependency: transitive
+    dependency: "direct main"
     description:
       path: "../../mixpanel_flutter_common"
       relative: true

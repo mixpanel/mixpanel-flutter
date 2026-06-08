@@ -13,6 +13,9 @@ dependencies:
   mixpanel_flutter:
     path: ../
 
+  mixpanel_flutter_common:
+    path: ../../mixpanel_flutter_common
+
   cupertino_icons: ^1.0.0
 
 dev_dependencies:

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:mixpanel_flutter_example/widget.dart';
 
 import 'event.dart';
+import 'event_bridge.dart';
 import 'feature_flags.dart';
 import 'gdpr.dart';
 import 'group.dart';
@@ -32,6 +33,7 @@ class _MyAppState extends State<MyApp> {
         '/gdpr': (context) => GDPRScreen(),
         '/group': (context) => GroupScreen(),
         '/feature_flags': (context) => FeatureFlagsScreen(),
+        '/event_bridge': (context) => EventBridgeScreen(),
       },
     );
   }
@@ -105,6 +107,18 @@ class FirstScreen extends StatelessWidget {
               text: 'FEATURE FLAGS',
               onPressed: () {
                 Navigator.pushNamed(context, '/feature_flags');
+              },
+            ),
+          ),
+          SizedBox(
+            height: 20,
+          ),
+          SizedBox(
+            width: MediaQuery.of(context).size.width * 0.65,
+            child: MixpanelButton(
+              text: 'EVENT BRIDGE',
+              onPressed: () {
+                Navigator.pushNamed(context, '/event_bridge');
               },
             ),
           ),
