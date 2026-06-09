@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
 import 'package:mixpanel_flutter/codec/mixpanel_message_codec.dart';
 import 'package:mixpanel_flutter/src/version.dart';
+import 'package:mixpanel_flutter_common/mixpanel_flutter_common.dart';
 
 /// Identifies where a served [MixpanelFlagVariant] came from. Non-null on
 /// every variant the SDK returns:
@@ -344,6 +345,48 @@ class Mixpanel {
     'mp_lib': 'flutter',
   };
 
+  // Wires the reverse path from the native MixpanelEventBridge into the
+  // Dart-side [MixpanelEventBridge]. Runs only when a consumer actually
+  // reads [MixpanelEventBridge.events] — `init()` registers this as a
+  // one-shot hook via [MixpanelEventBridge.setSourceWiringHook], so apps
+  // that never subscribe never install the MethodCallHandler and never
+  // issue start/stopEventBridge over the channel.
+  static void _wireEventBridge() {
+    _channel.setMethodCallHandler((MethodCall call) async {
+      if (call.method == 'onMixpanelEvent') {
+        final args = (call.arguments as Map?)?.cast<String, Object?>();
+        final eventName = args?['eventName'] as String?;
+        final properties =
+            (args?['properties'] as Map?)?.cast<String, Object?>();
+        if (eventName != null) {
+          // mixpanel_flutter is the privileged producer for this bridge —
+          // acknowledged use of the @internal API on the common package.
+          // ignore: invalid_use_of_internal_member
+          MixpanelEventBridge.notifyListeners(
+            eventName: eventName,
+            properties: properties,
+          );
+        }
+        return null;
+      }
+      // Surface unknown inbound methods loudly rather than silently
+      // returning null — protects future native→Dart push features added
+      // on this same shared channel from being swallowed here.
+      throw MissingPluginException(
+        'No handler for inbound method ${call.method} on mixpanel_flutter channel',
+      );
+    });
+    // ignore: invalid_use_of_internal_member
+    MixpanelEventBridge.setLifecycleCallbacks(
+      // Swallow channel errors (e.g. MissingPluginException during engine
+      // teardown) — the activate/deactivate signal is best-effort.
+      onActivate: () =>
+          _channel.invokeMethod<void>('startEventBridge').catchError((_) {}),
+      onDeactivate: () =>
+          _channel.invokeMethod<void>('stopEventBridge').catchError((_) {}),
+    );
+  }
+
   final String _token;
   final People _people;
   final FeatureFlags _featureFlags;
@@ -374,6 +417,14 @@ class Mixpanel {
       Map<String, dynamic>? config,
       FeatureFlagsConfig? featureFlags,
       String? serverURL}) async {
+    // Defer the reverse-channel wiring until something actually reads
+    // MixpanelEventBridge.events. Apps that never subscribe pay only the
+    // stored function reference — no MethodCallHandler, no native subscribe.
+    // Web is skipped — the JS SDK has no EventBridge.
+    if (!kIsWeb) {
+      // ignore: invalid_use_of_internal_member
+      MixpanelEventBridge.setSourceWiringHook(_wireEventBridge);
+    }
     var allProperties = <String, dynamic>{'token': token};
     allProperties['optOutTrackingDefault'] = optOutTrackingDefault;
     allProperties['trackAutomaticEvents'] = trackAutomaticEvents;

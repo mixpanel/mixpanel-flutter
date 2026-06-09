@@ -24,6 +24,18 @@ jobs:
       - run: flutter test
       - run: flutter analyze --no-pub --no-current-package --no-fatal-infos lib
 
+  test-common:
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: packages/mixpanel_flutter_common
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+      - uses: dart-lang/setup-dart@65eb853c7ba17dde3be364c3d2858773e7144260  # v1.7.2
+      - run: dart pub get
+      - run: dart analyze --fatal-infos --fatal-warnings
+      - run: dart test
+
   test-android-integration:
     runs-on: macos-latest
     steps:

@@ -4,6 +4,7 @@ import Flutter
 import FlutterMacOS
 #endif
 import Mixpanel
+import MixpanelSwiftCommon
 
 #if os(macOS)
 public typealias MixpanelFlutterPlugin = SwiftMixpanelFlutterPlugin
@@ -11,12 +12,22 @@ public typealias MixpanelFlutterPlugin = SwiftMixpanelFlutterPlugin
 
 @objc(MixpanelFlutterPlugin)
 public class SwiftMixpanelFlutterPlugin: NSObject, FlutterPlugin {
-    
+
     private var instance: MixpanelInstance?
     var token: String?
     var mixpanelProperties: [String: String]?
     let defaultFlushInterval = 60.0
-    
+
+    // Held so `startEventBridge` (invoked lazily from Dart) can fan native
+    // events back through the same channel that delivers regular method
+    // calls. Released on `deinit` along with the task.
+    private var channel: FlutterMethodChannel?
+
+    // The long-lived AsyncStream consumer that forwards native
+    // MixpanelEventBridge events to Dart. Created on first
+    // `startEventBridge` and cancelled by `stopEventBridge` / `deinit`.
+    private var eventBridgeTask: Task<Void, Never>?
+
     public static func register(with registrar: FlutterPluginRegistrar) {
         let readWriter = MixpanelReaderWriter()
         let codec = FlutterStandardMethodCodec(readerWriter: readWriter)
@@ -26,7 +37,53 @@ public class SwiftMixpanelFlutterPlugin: NSObject, FlutterPlugin {
         let channel = FlutterMethodChannel(name: "mixpanel_flutter", binaryMessenger: registrar.messenger, codec: codec)
         #endif
         let instance = SwiftMixpanelFlutterPlugin()
+        instance.channel = channel
         registrar.addMethodCallDelegate(instance, channel: channel)
+
+        // The native EventBridge subscription is started lazily from Dart
+        // via `startEventBridge` when the first listener attaches to
+        // `MixpanelEventBridge.events`. Apps that never consume events
+        // never pay the cost of the AsyncStream consumer task.
+    }
+
+    deinit {
+        eventBridgeTask?.cancel()
+    }
+
+    // FlutterPlugin lifecycle hook — invoked when the engine releases the
+    // plugin. Tears down the EventBridge task promptly instead of waiting
+    // for ARC to deallocate the plugin instance, which mirrors Android's
+    // `onDetachedFromEngine` cleanup.
+    public func detachFromEngine(for registrar: FlutterPluginRegistrar) {
+        eventBridgeTask?.cancel()
+        eventBridgeTask = nil
+        channel = nil
+    }
+
+    private func handleStartEventBridge(_ result: @escaping FlutterResult) {
+        guard eventBridgeTask == nil, let channel = channel else {
+            result(nil)
+            return
+        }
+        if #available(iOS 13.0, macOS 10.15, *) {
+            eventBridgeTask = Task {
+                for await event in MixpanelEventBridge.shared.eventStream() {
+                    await MainActor.run {
+                        channel.invokeMethod("onMixpanelEvent", arguments: [
+                            "eventName": event.eventName,
+                            "properties": event.properties,
+                        ])
+                    }
+                }
+            }
+        }
+        result(nil)
+    }
+
+    private func handleStopEventBridge(_ result: @escaping FlutterResult) {
+        eventBridgeTask?.cancel()
+        eventBridgeTask = nil
+        result(nil)
     }
     
     public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
@@ -174,6 +231,12 @@ public class SwiftMixpanelFlutterPlugin: NSObject, FlutterPlugin {
             break
         case "getAllVariants":
             handleGetAllVariants(call, result: result)
+            break
+        case "startEventBridge":
+            handleStartEventBridge(result)
+            break
+        case "stopEventBridge":
+            handleStopEventBridge(result)
             break
         default:
             result(FlutterMethodNotImplemented)
