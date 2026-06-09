@@ -1,3 +1,8 @@
+// MixpanelEventBridge members are @internal — reserved for Mixpanel-authored
+// packages. This example ships inside the SDK as a manual test harness, so
+// the cross-package internal-use warning doesn't apply.
+// ignore_for_file: invalid_use_of_internal_member
+
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:mixpanel_flutter/mixpanel_flutter.dart';
