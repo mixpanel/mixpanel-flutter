@@ -10,9 +10,10 @@ PODS:
   - Mixpanel-swift/Complete (6.4.0):
     - jsonlogic (~> 1.2.0)
     - MixpanelSwiftCommon (~> 1.0.0)
-  - mixpanel_flutter (2.7.0):
+  - mixpanel_flutter (2.8.0):
     - Flutter
     - Mixpanel-swift (= 6.4.0)
+    - MixpanelSwiftCommon (~> 1.0.0)
   - MixpanelSwiftCommon (1.0.1)
 
 DEPENDENCIES:
@@ -37,7 +38,7 @@ SPEC CHECKSUMS:
   json-enum: 57ad746d2f0d7852796e9aa50267bd84a778222e
   jsonlogic: 006f892470384401b8ca5b5d8d4cdadb3a0d5c9b
   Mixpanel-swift: 9eb2ea2d0463970687c984e07040669f787b7a49
-  mixpanel_flutter: ab9b5c729fe429cd185832ceac24b11a91ef0da9
+  mixpanel_flutter: ee6f4b6940103f1c487d3ecbf351d97941328319
   MixpanelSwiftCommon: 6fc461403945422a2e1d0989d712c0db2c26ecdb
 
 PODFILE CHECKSUM: a57f30d18f102dd3ce366b1d62a55ecbef2158e5
