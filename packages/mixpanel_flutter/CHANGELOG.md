@@ -1,5 +1,14 @@
 # Changelog
 
+## [v2.9.0](https://github.com/mixpanel/mixpanel-flutter/tree/v2.9.0) (2026-06-09)
+
+### Features
+- wire mixpanel_flutter to MixpanelEventBridge ([#249](https://github.com/mixpanel/mixpanel-flutter/pull/249))
+- Add serverURL option for Mixpanel init ([#247](https://github.com/mixpanel/mixpanel-flutter/pull/247))
+- expose serverURL in Mixpanel.init() ([#245](https://github.com/mixpanel/mixpanel-flutter/pull/245))
+
+[Full Changelog](https://github.com/mixpanel/mixpanel-flutter/compare/v2.8.0...v2.9.0)
+
 ## [v2.8.0](https://github.com/mixpanel/mixpanel-flutter/tree/v2.8.0) (2026-05-08)
 
 ### Enhancements
