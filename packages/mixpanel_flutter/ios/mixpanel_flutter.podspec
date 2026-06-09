@@ -18,7 +18,7 @@ Pod::Spec.new do |s|
   s.dependency 'Mixpanel-swift', '6.4.0'
   # Explicit dependency (also pulled in transitively by Mixpanel-swift 6.4+)
   # so `import MixpanelSwiftCommon` in our plugin resolves reliably.
-  s.dependency 'MixpanelSwiftCommon', '~> 1.0.0'
+  s.dependency 'MixpanelSwiftCommon', '~> 1.0.1'
   s.platform = :ios, '13.0'
 
   # Flutter.framework does not contain a i386 slice.

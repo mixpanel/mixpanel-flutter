@@ -13,7 +13,7 @@ PODS:
   - mixpanel_flutter (2.8.0):
     - Flutter
     - Mixpanel-swift (= 6.4.0)
-    - MixpanelSwiftCommon (~> 1.0.0)
+    - MixpanelSwiftCommon (~> 1.0.1)
   - MixpanelSwiftCommon (1.0.1)
 
 DEPENDENCIES:
