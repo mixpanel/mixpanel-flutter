@@ -2,6 +2,7 @@ group 'com.mixpanel.mixpanel_flutter'
 version '1.0'
 
 buildscript {
+    ext.kotlin_version = '1.9.0'
     repositories {
         google()
         mavenCentral()
@@ -10,6 +11,7 @@ buildscript {
     dependencies {
         // Use a compatible version of Gradle Plugin
         classpath 'com.android.tools.build:gradle:8.1.0' // Updated to 8.1.0
+        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
     }
 }
 
@@ -21,6 +23,7 @@ rootProject.allprojects {
 }
 
 apply plugin: 'com.android.library'
+apply plugin: 'kotlin-android'
 
 android {
     // Safely handle 'namespace' property for new Android Gradle plugin versions
@@ -40,12 +43,35 @@ android {
         targetCompatibility JavaVersion.VERSION_17
     }
 
+    kotlinOptions {
+        jvmTarget = '17'
+        // mixpanel-android-common:1.0.1 is published with Kotlin 2.0
+        // metadata. Flutter's gradle integration picks a KGP version we
+        // can't reliably control from this module's buildscript, so a
+        // Kotlin 1.9.x compiler often ends up compiling this plugin and
+        // chokes on the newer metadata. The bytecode itself is
+        // forward-compatible (the consumed APIs are just a Flow and a
+        // data class), so suppressing the metadata version check is the
+        // canonical workaround.
+        freeCompilerArgs += ['-Xskip-metadata-version-check']
+    }
+
+    sourceSets {
+        main.kotlin.srcDirs += 'src/main/kotlin'
+    }
+
     lintOptions {
         disable 'InvalidPackage'
     }
 }
 
 dependencies {
-    // Use the Mixpanel Android SDK
     implementation "com.mixpanel.android:mixpanel-android:8.7.0"
+    // mixpanel-android:8.7.0 only declares mixpanel-android-common as a
+    // runtime dependency, so MixpanelEventBridge is not on the compile
+    // classpath unless we add it explicitly here. EventBridgeSubscriber.kt
+    // imports it directly.
+    implementation "com.mixpanel.android:mixpanel-android-common:1.0.1"
+    implementation "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
+    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.1"
 }
