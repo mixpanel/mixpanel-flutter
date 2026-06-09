@@ -1,0 +1,7 @@
+# Test fixtures and dev tooling don't need to ship to pub.dev.
+# Consumers of the published package run their own tests; ours stay in the repo.
+test/
+analysis_options.yaml
+pubspec.lock
+build/
+.dart_tool/
