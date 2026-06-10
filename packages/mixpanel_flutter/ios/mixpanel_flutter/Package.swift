@@ -16,13 +16,15 @@ let package = Package(
         .package(
             url: "https://github.com/mixpanel/mixpanel-swift.git",
             exact: "6.4.0"
-        )
+        ),
+        .package(name: "FlutterFramework", path: "../FlutterFramework")
     ],
     targets: [
         .target(
             name: "mixpanel_flutter",
             dependencies: [
-                .product(name: "Mixpanel", package: "mixpanel-swift")
+                .product(name: "Mixpanel", package: "mixpanel-swift"),
+                .product(name: "FlutterFramework", package: "FlutterFramework")
             ],
             path: "Sources/mixpanel_flutter",
             resources: []
