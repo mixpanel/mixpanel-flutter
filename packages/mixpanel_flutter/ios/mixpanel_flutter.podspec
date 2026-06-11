@@ -13,7 +13,7 @@ Pod::Spec.new do |s|
   s.license          = { :file => '../LICENSE' }
   s.author           = { 'Mixpanel, Inc' => 'support@mixpanel.com' }
   s.source           = { :path => '.' }
-  s.source_files = 'Classes/**/*'
+  s.source_files = 'mixpanel_flutter/Sources/mixpanel_flutter/**/*.swift'
   s.dependency 'Flutter'
   s.dependency 'Mixpanel-swift', '6.4.0'
   # Explicit dependency (also pulled in transitively by Mixpanel-swift 6.4+)
