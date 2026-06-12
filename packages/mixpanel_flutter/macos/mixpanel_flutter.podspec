@@ -13,9 +13,9 @@ Pod::Spec.new do |s|
   s.license          = { :file => '../LICENSE' }
   s.author           = { 'Mixpanel, Inc' => 'support@mixpanel.com' }
   s.source           = { :path => '.' }
-  s.source_files = 'Classes/**/*'
+  s.source_files = 'mixpanel_flutter/Sources/mixpanel_flutter/**/*.swift'
   s.dependency 'FlutterMacOS'
-  s.dependency 'Mixpanel-swift', '6.4.0'
+  s.dependency 'Mixpanel-swift', '6.4.1'
   # Explicit dependency (also pulled in transitively by Mixpanel-swift 6.4+)
   # so `import MixpanelSwiftCommon` in our plugin resolves reliably.
   s.dependency 'MixpanelSwiftCommon', '~> 1.0.1'

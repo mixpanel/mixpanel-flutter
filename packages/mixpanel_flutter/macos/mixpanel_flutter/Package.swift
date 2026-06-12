@@ -4,7 +4,7 @@ import PackageDescription
 let package = Package(
     name: "mixpanel_flutter",
     platforms: [
-        .iOS("13.0")
+        .macOS("10.15")
     ],
     products: [
         .library(

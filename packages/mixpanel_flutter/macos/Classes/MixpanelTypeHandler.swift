@@ -1,1 +1,0 @@
-../../swift/Classes/MixpanelTypeHandler.swift
