@@ -14,5 +14,13 @@
     "changelog": "packages/mixpanel_flutter_common/CHANGELOG.md",
     "readme": "packages/mixpanel_flutter_common/README.md",
     "package_name": "mixpanel_flutter_common"
+  },
+  "session-replay": {
+    "tag_prefix": "session-replay-v",
+    "pubspec": "packages/mixpanel_flutter_session_replay/pubspec.yaml",
+    "version_files": ["packages/mixpanel_flutter_session_replay/lib/src/version.dart"],
+    "changelog": "packages/mixpanel_flutter_session_replay/CHANGELOG.md",
+    "readme": "packages/mixpanel_flutter_session_replay/README.md",
+    "package_name": "mixpanel_flutter_session_replay"
   }
 }

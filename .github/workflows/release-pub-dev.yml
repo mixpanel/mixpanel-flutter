@@ -9,6 +9,7 @@ on:
     tags:
       - 'v*'
       - 'common-v*'
+      - 'session-replay-v*'
 
 concurrency:
   group: pub-publish
