@@ -1,5 +1,12 @@
 # Changelog
 
+## [v2.10.0](https://github.com/mixpanel/mixpanel-flutter/tree/v2.10.0) (2026-06-15)
+
+### Features
+- Add Swift Package Manager (SPM) support ([#235](https://github.com/mixpanel/mixpanel-flutter/pull/235))
+
+[Full Changelog](https://github.com/mixpanel/mixpanel-flutter/compare/v2.9.0...v2.10.0)
+
 ## [v2.9.0](https://github.com/mixpanel/mixpanel-flutter/tree/v2.9.0) (2026-06-09)
 
 ### Features
