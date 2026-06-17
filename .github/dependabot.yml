@@ -6,6 +6,12 @@ updates:
       interval: "weekly"
     cooldown:
       default-days: 30
+  - package-ecosystem: "pub"
+    directory: "/packages/mixpanel_flutter_session_replay"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 30
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:

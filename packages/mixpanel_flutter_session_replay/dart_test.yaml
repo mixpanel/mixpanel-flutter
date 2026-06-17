@@ -1,0 +1,3 @@
+tags:
+  golden:
+    description: "Golden image tests — skipped on older Flutter versions"

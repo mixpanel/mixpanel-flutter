@@ -1,0 +1,182 @@
+{
+  "version": "1.0",
+  "sections": [
+    {
+      "id": "text_variations",
+      "title": "Text Content Variations",
+      "description": "Testing text masking behavior with different content types",
+      "items": [
+        {
+          "type": "text",
+          "content": "This is normal unmasked text - publicly visible information",
+          "masked": false,
+          "fontSize": 16,
+          "fontWeight": "normal"
+        },
+        {
+          "type": "text",
+          "content": "Masked PII: SSN 123-45-6789, Phone: (555) 123-4567",
+          "masked": true,
+          "fontSize": 16,
+          "fontWeight": "bold",
+          "color": "#D32F2F"
+        },
+        {
+          "type": "text",
+          "content": "Email: user@example.com (should be masked)",
+          "masked": true,
+          "fontSize": 14,
+          "fontWeight": "normal",
+          "color": "#F57C00"
+        },
+        {
+          "type": "text",
+          "content": "Public product information - Model XYZ-2024",
+          "masked": false,
+          "fontSize": 18,
+          "fontWeight": "bold",
+          "color": "#388E3C"
+        }
+      ]
+    },
+    {
+      "id": "image_variations",
+      "title": "Image Masking Tests",
+      "description": "Colored container 'images' to test masking without asset files",
+      "items": [
+        {
+          "type": "image",
+          "color": "#4CAF50",
+          "width": 200,
+          "height": 150,
+          "label": "Unmasked Product",
+          "masked": false
+        },
+        {
+          "type": "image",
+          "color": "#FF5722",
+          "width": 200,
+          "height": 150,
+          "label": "Masked Profile Photo",
+          "masked": true
+        },
+        {
+          "type": "image",
+          "color": "#2196F3",
+          "width": 150,
+          "height": 150,
+          "label": "Public Icon",
+          "masked": false
+        },
+        {
+          "type": "image",
+          "color": "#9C27B0",
+          "width": 250,
+          "height": 100,
+          "label": "Sensitive Document",
+          "masked": true
+        }
+      ]
+    },
+    {
+      "id": "nested_containers",
+      "title": "Nested Container Tests",
+      "description": "Testing masking inheritance in nested layouts",
+      "items": [
+        {
+          "type": "container",
+          "masked": true,
+          "padding": 16,
+          "backgroundColor": "#F5F5F5",
+          "children": [
+            {
+              "type": "text",
+              "content": "This entire container is masked (parent level)",
+              "masked": false,
+              "fontSize": 14,
+              "fontWeight": "bold"
+            },
+            {
+              "type": "image",
+              "color": "#FFC107",
+              "width": 100,
+              "height": 100,
+              "label": "Child Image",
+              "masked": false
+            },
+            {
+              "type": "text",
+              "content": "All children inherit parent masking",
+              "masked": false,
+              "fontSize": 12
+            }
+          ]
+        },
+        {
+          "type": "container",
+          "masked": false,
+          "padding": 16,
+          "backgroundColor": "#E8F5E9",
+          "children": [
+            {
+              "type": "text",
+              "content": "Unmasked container with public content",
+              "masked": false,
+              "fontSize": 14,
+              "fontWeight": "bold"
+            },
+            {
+              "type": "text",
+              "content": "But this specific text is masked",
+              "masked": true,
+              "fontSize": 12,
+              "color": "#D32F2F"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "mixed_list",
+      "title": "Mixed Content List",
+      "description": "Scrollable list with varied content and masking",
+      "items": [
+        {
+          "type": "list_item",
+          "title": "Public Item #1 - Product",
+          "subtitle": "Available to all users",
+          "imageColor": "#4CAF50",
+          "masked": false
+        },
+        {
+          "type": "list_item",
+          "title": "Private Item #2 - Personal Data",
+          "subtitle": "Contains sensitive information",
+          "imageColor": "#FF5722",
+          "masked": true
+        },
+        {
+          "type": "list_item",
+          "title": "Public Item #3 - Service",
+          "subtitle": "Open information",
+          "imageColor": "#2196F3",
+          "masked": false
+        },
+        {
+          "type": "list_item",
+          "title": "Private Item #4 - Account Details",
+          "subtitle": "User-specific data",
+          "imageColor": "#9C27B0",
+          "masked": true
+        },
+        {
+          "type": "list_item",
+          "title": "Public Item #5 - Feature",
+          "subtitle": "General application feature",
+          "imageColor": "#FF9800",
+          "masked": false
+        }
+      ]
+    }
+  ]
+}

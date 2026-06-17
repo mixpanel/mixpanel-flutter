@@ -54,8 +54,12 @@ Future<void> methodName(parameters) async {
 
 ## Development Commands
 
-The publishable package lives at `packages/mixpanel_flutter/`. Run all
-package commands from that directory.
+Publishable packages live under `packages/`:
+- `packages/mixpanel_flutter/` — analytics SDK
+- `packages/mixpanel_flutter_common/` — shared utilities
+- `packages/mixpanel_flutter_session_replay/` — session replay SDK
+
+Run package commands from the relevant package directory.
 
 ```bash
 cd packages/mixpanel_flutter
@@ -85,6 +89,12 @@ dart format .
 flutter pub run dartdoc
 ```
 
+Session replay has its own package-local guidance — see
+[packages/mixpanel_flutter_session_replay/CLAUDE.md](packages/mixpanel_flutter_session_replay/CLAUDE.md)
+for testing principles, performance principles, and reviewed design
+decisions specific to that package. It pins Flutter 3.41.2 (vs. analytics'
+3.41.0) and uses `dart format --language-version=latest` for tall style.
+
 ## Testing Strategy
 
 - Unit tests are in `packages/mixpanel_flutter/test/mixpanel_flutter_test.dart`
@@ -94,10 +104,13 @@ flutter pub run dartdoc
 ## Release Process
 
 Releases are tag-driven. Pushing a tag matching a module's `tag_prefix`
-in `.github/modules.json` (today: `v*` for `mixpanel_flutter`) runs
-`.github/workflows/release-pub-dev.yml`, which validates the pubspec
-version, creates a draft GitHub release, and publishes to pub.dev via
-OIDC trusted publishing.
+in `.github/modules.json` runs `.github/workflows/release-pub-dev.yml`,
+which validates the pubspec version, creates a draft GitHub release,
+and publishes to pub.dev via OIDC trusted publishing. Tag prefixes:
+
+- `v*` — `mixpanel_flutter` (analytics)
+- `common-v*` — `mixpanel_flutter_common`
+- `session-replay-v*` — `mixpanel_flutter_session_replay`
 
 ## Important Implementation Notes
 

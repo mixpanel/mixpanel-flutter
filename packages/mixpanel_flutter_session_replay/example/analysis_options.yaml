@@ -1,0 +1,7 @@
+include: package:flutter_lints/flutter.yaml
+
+analyzer:
+  errors:
+    # Example app must work across min and latest Flutter versions,
+    # so some deprecated APIs are unavoidable.
+    deprecated_member_use: ignore

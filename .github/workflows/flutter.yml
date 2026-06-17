@@ -94,3 +94,210 @@ jobs:
       - name: Test macOS integration
         working-directory: packages/mixpanel_flutter/example
         run: flutter build macos --debug
+
+  # === mixpanel_flutter_session_replay jobs ===
+  # SR pins Flutter 3.41.2 (one minor newer than analytics' 3.41.0) because
+  # the package was developed and tested against 3.41.2 in its prior home and
+  # we keep that pin to match the SDK version SR ships against.
+
+  compat-check-session-replay:
+    name: SR Compatibility Check (Flutter 3.38.0)
+    runs-on: macos-26
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: packages/mixpanel_flutter_session_replay
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+      - uses: ./.github/actions/setup-flutter
+        with:
+          flutter-version: '3.38.0'
+      - run: flutter pub get
+      - name: Analyze library code
+        run: dart analyze --fatal-infos lib
+      - name: Run unit tests (excluding golden tests)
+        run: flutter test --exclude-tags=golden
+
+  test-session-replay:
+    name: SR Build & Unit Tests
+    runs-on: macos-26
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: packages/mixpanel_flutter_session_replay
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+      - uses: ./.github/actions/setup-flutter
+        with:
+          flutter-version: '3.41.2'
+      - run: flutter pub get
+      - name: Check formatting
+        run: |
+          dart format --language-version=latest .
+          if [ -n "$(git diff --name-only)" ]; then
+            echo "::error::The following files need formatting:"
+            git diff --name-only
+            echo ""
+            git diff
+            exit 1
+          fi
+      - name: Analyze
+        run: dart analyze --fatal-infos
+      - name: Run unit tests with coverage
+        run: flutter test --coverage
+      - name: Upload coverage
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
+        with:
+          name: session-replay-coverage
+          path: packages/mixpanel_flutter_session_replay/coverage/lcov.info
+
+  test-session-replay-ios-integration:
+    name: SR Integration Tests (iOS Simulator)
+    needs: [compat-check-session-replay, test-session-replay]
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+      - uses: ./.github/actions/setup-flutter
+        with:
+          flutter-version: '3.41.2'
+      - name: Install dependencies
+        run: flutter pub get
+        working-directory: packages/mixpanel_flutter_session_replay/example
+      - name: Boot iOS simulator
+        run: |
+          DEVICE_ID=$(xcrun simctl list devices available -j | \
+            python3 -c "
+          import json, sys
+          data = json.load(sys.stdin)
+          for runtime, devices in data['devices'].items():
+              if 'iOS' in runtime:
+                  for d in devices:
+                      if 'iPhone' in d['name'] and d['isAvailable']:
+                          print(d['udid'])
+                          sys.exit(0)
+          sys.exit(1)
+          ")
+          echo "DEVICE_ID=$DEVICE_ID" >> $GITHUB_ENV
+          xcrun simctl boot "$DEVICE_ID" 2>/dev/null || true
+          xcrun simctl bootstatus "$DEVICE_ID" -b
+          flutter devices
+      - name: Pre-build for iOS simulator
+        run: flutter build ios --simulator --target=integration_test/run_all_test.dart
+        working-directory: packages/mixpanel_flutter_session_replay/example
+      - name: Run integration tests on iOS
+        run: |
+          flutter test integration_test/run_all_test.dart \
+            --timeout 20m \
+            --ignore-timeouts \
+            --dart-define=MIXPANEL_TOKEN="${{ secrets.MIXPANEL_TOKEN }}" \
+            -d "$DEVICE_ID"
+        working-directory: packages/mixpanel_flutter_session_replay/example
+
+  test-session-replay-android-integration:
+    name: SR Integration Tests (Android API ${{ matrix.api-level }})
+    needs: [compat-check-session-replay, test-session-replay]
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - api-level: 24
+            target: default
+            arch: x86_64
+            profile: Nexus 6
+            name: "Android 7.0 (Nougat)"
+          - api-level: 34
+            target: google_apis
+            arch: x86_64
+            profile: pixel_6
+            name: "Android 14 (Latest)"
+    steps:
+      - name: Free up disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android/sdk/ndk
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /usr/local/share/boost
+          sudo rm -rf /usr/share/swift
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          sudo apt-get clean
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+      - uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9  # v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+      - uses: ./.github/actions/setup-flutter
+        with:
+          flutter-version: '3.41.2'
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@39e147cb9de83bb9910b8ef8bd7fff0ee20fcd6f  # v6.0.1
+      - name: Install dependencies
+        run: flutter pub get
+        working-directory: packages/mixpanel_flutter_session_replay/example
+      - name: AVD cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4
+        id: avd-cache
+        with:
+          path: |
+            ~/.android/avd/*
+            ~/.android/adb*
+          key: avd-${{ matrix.api-level }}-${{ matrix.target }}-${{ matrix.arch }}-${{ matrix.profile }}
+      - name: Create AVD and generate snapshot for caching
+        if: steps.avd-cache.outputs.cache-hit != 'true'
+        uses: reactivecircus/android-emulator-runner@5d6e86df22ab11632167a1a6b0c9ab0dc3469586  # v2
+        with:
+          api-level: ${{ matrix.api-level }}
+          target: ${{ matrix.target }}
+          arch: ${{ matrix.arch }}
+          profile: ${{ matrix.profile }}
+          force-avd-creation: false
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -accel on
+          disable-animations: false
+          script: echo "Generated AVD snapshot for caching."
+      - name: Run integration tests on Android
+        uses: reactivecircus/android-emulator-runner@5d6e86df22ab11632167a1a6b0c9ab0dc3469586  # v2
+        with:
+          api-level: ${{ matrix.api-level }}
+          target: ${{ matrix.target }}
+          arch: ${{ matrix.arch }}
+          profile: ${{ matrix.profile }}
+          force-avd-creation: false
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -accel on
+          disable-animations: true
+          working-directory: packages/mixpanel_flutter_session_replay/example
+          script: |
+            flutter devices
+            flutter build apk --target=integration_test/run_all_test.dart
+            flutter test integration_test/run_all_test.dart --timeout 20m --ignore-timeouts --dart-define=MIXPANEL_TOKEN="${{ secrets.MIXPANEL_TOKEN }}"
+
+  test-session-replay-macos-integration:
+    name: SR Integration Tests (macOS Desktop)
+    needs: [compat-check-session-replay, test-session-replay]
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+      - uses: ./.github/actions/setup-flutter
+        with:
+          flutter-version: '3.41.2'
+      - name: Install dependencies
+        run: flutter pub get
+        working-directory: packages/mixpanel_flutter_session_replay/example
+      - name: Pre-build for macOS
+        run: flutter build macos --target=integration_test/run_all_test.dart
+        working-directory: packages/mixpanel_flutter_session_replay/example
+      - name: Run integration tests on macOS
+        run: |
+          flutter test integration_test/run_all_test.dart \
+            --timeout 20m \
+            --ignore-timeouts \
+            --dart-define=MIXPANEL_TOKEN="${{ secrets.MIXPANEL_TOKEN }}" \
+            -d macos
+        working-directory: packages/mixpanel_flutter_session_replay/example
