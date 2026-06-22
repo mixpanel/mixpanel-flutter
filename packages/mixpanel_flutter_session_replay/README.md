@@ -2,9 +2,6 @@
 
 ##### _June 22, 2026_ - [session-replay-v1.0.0](https://github.com/mixpanel/mixpanel-flutter/releases/tag/session-replay-v1.0.0)
 
-> [!NOTE]
-> Flutter Session Replay is currently in Public Beta. Please reach out to your Account Manager or Support for any questions about Session Replay or the beta.
-
 ## Overview
 
 This developer guide will assist you in configuring your Flutter app for [Mixpanel Session Replay](https://docs.mixpanel.com/docs/session-replay). Learn more about viewing captured Replays in your project [here](https://docs.mixpanel.com/docs/session-replay).
