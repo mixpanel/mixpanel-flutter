@@ -358,10 +358,6 @@ For detailed scenarios showing how masking directives interact (nesting, overflo
 
 By default, Mixpanel retains Session Replays for 30 days from the date the replay is ingested and becomes available for viewing within Mixpanel. Customers on our [Enterprise plan](https://mixpanel.com/pricing/) can customize this retention period between 7 days and 360 days. Once a replay is expired, there is no way to view that replay.
 
-## Legal (Beta Terms)
-
-Our Session Replay Beta Service Addendum can be found [here](https://mixpanel.com/legal/session-replay-beta-service-addendum/).
-
 ## FAQ
 
 ### How does Session Replay work in Flutter?
