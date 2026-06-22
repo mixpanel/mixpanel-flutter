@@ -1,5 +1,10 @@
 # Changelog
 
+## [session-replay-v1.0.0](https://github.com/mixpanel/mixpanel-flutter/tree/session-replay-v1.0.0) (2026-06-22)
+
+* Official v1 release
+* No changes from 0.1.0-beta.4
+
 ## [v0.1.0-beta.4](https://github.com/mixpanel/mixpanel-flutter-session-replay/tree/v0.1.0-beta.4) (2026-06-12)
 
 ### Features

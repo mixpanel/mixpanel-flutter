@@ -1,9 +1,6 @@
 # Mixpanel Flutter Session Replay
 
-##### _June 12, 2026_ - [v0.1.0-beta.4](https://github.com/mixpanel/mixpanel-flutter-session-replay/releases/tag/v0.1.0-beta.4)
-
-> [!NOTE]
-> Flutter Session Replay is currently in Public Beta. Please reach out to your Account Manager or Support for any questions about Session Replay or the beta.
+##### _June 22, 2026_ - [session-replay-v1.0.0](https://github.com/mixpanel/mixpanel-flutter/releases/tag/session-replay-v1.0.0)
 
 ## Overview
 
@@ -32,7 +29,7 @@ Add to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  mixpanel_flutter_session_replay: 0.1.0-beta.4
+  mixpanel_flutter_session_replay: 1.0.0
 ```
 
 ## Initialize
@@ -360,10 +357,6 @@ For detailed scenarios showing how masking directives interact (nesting, overflo
 ## Retention
 
 By default, Mixpanel retains Session Replays for 30 days from the date the replay is ingested and becomes available for viewing within Mixpanel. Customers on our [Enterprise plan](https://mixpanel.com/pricing/) can customize this retention period between 7 days and 360 days. Once a replay is expired, there is no way to view that replay.
-
-## Legal (Beta Terms)
-
-Our Session Replay Beta Service Addendum can be found [here](https://mixpanel.com/legal/session-replay-beta-service-addendum/).
 
 ## FAQ
 
