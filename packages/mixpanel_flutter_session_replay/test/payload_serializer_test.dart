@@ -6,6 +6,7 @@ import 'package:clock/clock.dart';
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/upload/payload_serializer.dart';
+import 'package:mixpanel_flutter_session_replay/src/version.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/session.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/session_event.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/rrweb_types.dart';
@@ -305,7 +306,7 @@ void main() {
         expect(params['distinct_id'], expectedDistinctId);
         expect(params['seq'], expectedSequenceNumber);
         expect(params['replay_id'], expectedSessionId);
-        expect(params['\$lib_version'], endsWith('-flutter'));
+        expect(params['\$lib_version'], sdkVersion);
       });
 
       test('includes dynamic timestamp parameters', () {

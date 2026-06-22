@@ -10,6 +10,7 @@ import 'package:mixpanel_flutter_session_replay/src/internal/upload/upload_servi
 import 'package:mixpanel_flutter_session_replay/src/internal/upload/payload_serializer.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/settings/settings_service.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/logger.dart';
+import 'package:mixpanel_flutter_session_replay/src/version.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/configuration.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/session.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/session_event.dart';
@@ -687,7 +688,7 @@ void main() {
         expect(params['distinct_id'], testDistinctId);
         expect(params['seq'], '0');
         expect(params['replay_id'], testSessionId);
-        expect(params['\$lib_version'], endsWith('-flutter'));
+        expect(params['\$lib_version'], sdkVersion);
         expect(params['\$os'], anyOf('Android', 'iOS', 'Mac OS X'));
       });
 
