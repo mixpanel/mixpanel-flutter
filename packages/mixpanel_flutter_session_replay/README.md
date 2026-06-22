@@ -1,6 +1,6 @@
 # Mixpanel Flutter Session Replay
 
-##### _June 12, 2026_ - [v0.1.0-beta.4](https://github.com/mixpanel/mixpanel-flutter-session-replay/releases/tag/v0.1.0-beta.4)
+##### _June 22, 2026_ - [session-replay-v1.0.0](https://github.com/mixpanel/mixpanel-flutter/releases/tag/session-replay-v1.0.0)
 
 > [!NOTE]
 > Flutter Session Replay is currently in Public Beta. Please reach out to your Account Manager or Support for any questions about Session Replay or the beta.
@@ -32,7 +32,7 @@ Add to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  mixpanel_flutter_session_replay: 0.1.0-beta.4
+  mixpanel_flutter_session_replay: 1.0.0
 ```
 
 ## Initialize

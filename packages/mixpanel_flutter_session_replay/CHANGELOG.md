@@ -1,5 +1,13 @@
 # Changelog
 
+## [session-replay-v1.0.0](https://github.com/mixpanel/mixpanel-flutter/tree/session-replay-v1.0.0) (2026-06-22)
+
+### Features
+- loadFlags and setContext support on all platforms ([#210](https://github.com/mixpanel/mixpanel-flutter/pull/210))
+- add OSX desktop support ([#220](https://github.com/mixpanel/mixpanel-flutter/pull/220))
+- Add wasm support ([#167](https://github.com/mixpanel/mixpanel-flutter/pull/167))
+- support `DateTime` and `Uri`
+
 ## [v0.1.0-beta.4](https://github.com/mixpanel/mixpanel-flutter-session-replay/tree/v0.1.0-beta.4) (2026-06-12)
 
 ### Features
