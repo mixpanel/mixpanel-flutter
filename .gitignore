@@ -11,4 +11,5 @@ local.properties
 
 # Swift Package Manager
 .build/
+.swiftpm/
 Package.resolved
