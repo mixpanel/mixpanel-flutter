@@ -10,7 +10,7 @@ Pod::Spec.new do |s|
   s.license          = { :file => '../LICENSE' }
   s.author           = { 'Mixpanel' => 'support@mixpanel.com' }
   s.source           = { :path => '.' }
-  s.source_files     = 'Classes/**/*'
+  s.source_files     = 'mixpanel_flutter_session_replay/Sources/mixpanel_flutter_session_replay/**/*.swift'
   s.dependency 'Flutter'
   s.platform         = :ios, '12.0'
   s.swift_version    = '5.0'
