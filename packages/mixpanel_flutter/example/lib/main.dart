@@ -14,29 +14,6 @@ import 'profile.dart';
 class MixpanelNavigatorObserver extends NavigatorObserver {
   String? _previousRouteName;
 
-  String _formatRouteName(String? routeName) {
-    if (routeName == null || routeName.isEmpty) {
-      return '';
-    }
-
-    // Remove leading slash
-    String formatted = routeName.startsWith('/') ? routeName.substring(1) : routeName;
-
-    // Convert empty route to "Home"
-    if (formatted.isEmpty) {
-      formatted = 'Home';
-    }
-
-    // Capitalize first letter and replace underscores with spaces
-    formatted = formatted
-        .replaceAll('_', ' ')
-        .split(' ')
-        .map((word) => word.isEmpty ? word : word[0].toUpperCase() + word.substring(1))
-        .join(' ');
-
-    return formatted;
-  }
-
   @override
   void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
     super.didPush(route, previousRoute);
@@ -56,9 +33,7 @@ class MixpanelNavigatorObserver extends NavigatorObserver {
   }
 
   void _trackScreenChange(String? routeName) async {
-    final currentRouteName = _formatRouteName(routeName);
-
-    if (currentRouteName.isEmpty) {
+    if (routeName == null || routeName.isEmpty) {
       return;
     }
 
@@ -71,10 +46,10 @@ class MixpanelNavigatorObserver extends NavigatorObserver {
       }
 
       // Track screen view for current screen
-      mixpanel.trackScreenView(currentRouteName);
+      mixpanel.trackScreenView(routeName);
 
       // Update previous route name
-      _previousRouteName = currentRouteName;
+      _previousRouteName = routeName;
     } catch (e) {
       print('Error tracking screen change: $e');
     }
