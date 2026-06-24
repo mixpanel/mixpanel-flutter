@@ -1674,5 +1674,91 @@ void main() {
       expect(variant1 == variant2, true);
       expect(variant1.hashCode == variant2.hashCode, true);
     });
+
+    test('screenView sends correct event', () async {
+      await _mixpanel.screenView('HomeScreen', properties: {'extra_prop': 'extra_value'});
+
+      expect(
+        methodCall,
+        isMethodCall(
+          'track',
+          arguments: <String, dynamic>{
+            'eventName': '\$mp_page_view',
+            'properties': {
+              'current_page_title': 'HomeScreen',
+              'extra_prop': 'extra_value',
+            },
+          },
+        ),
+      );
+    });
+
+    test('screenView without properties', () async {
+      await _mixpanel.screenView('HomeScreen');
+
+      expect(
+        methodCall,
+        isMethodCall(
+          'track',
+          arguments: <String, dynamic>{
+            'eventName': '\$mp_page_view',
+            'properties': {
+              'current_page_title': 'HomeScreen',
+            },
+          },
+        ),
+      );
+    });
+
+    test('screenView does not track with empty screenName', () async {
+      final initialCall = methodCall;
+
+      await _mixpanel.screenView('');
+
+      expect(methodCall, initialCall);
+    });
+
+    test('screenLeave sends correct event', () async {
+      await _mixpanel.screenLeave('HomeScreen', properties: {'time_spent': 30});
+
+      expect(
+        methodCall,
+        isMethodCall(
+          'track',
+          arguments: <String, dynamic>{
+            'eventName': '\$mp_page_leave',
+            'properties': {
+              'current_page_title': 'HomeScreen',
+              'time_spent': 30,
+            },
+          },
+        ),
+      );
+    });
+
+    test('screenLeave without properties', () async {
+      await _mixpanel.screenLeave('HomeScreen');
+
+      expect(
+        methodCall,
+        isMethodCall(
+          'track',
+          arguments: <String, dynamic>{
+            'eventName': '\$mp_page_leave',
+            'properties': {
+              'current_page_title': 'HomeScreen',
+            },
+          },
+        ),
+      );
+    });
+
+    test('screenLeave does not track with empty screenName', () async {
+      final initialCall = methodCall;
+
+      await _mixpanel.screenLeave('');
+
+      expect(methodCall, initialCall);
+    });
   });
 }
