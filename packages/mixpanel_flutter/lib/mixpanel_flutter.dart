@@ -613,6 +613,7 @@ class Mixpanel {
 
     final mergedProperties = <String, dynamic>{
       'current_page_title': screenName,
+      '\$mp_autocapture': true,
       ...?properties,
     };
 
@@ -636,6 +637,7 @@ class Mixpanel {
 
     final mergedProperties = <String, dynamic>{
       'current_page_title': screenName,
+      '\$mp_autocapture': true,
       ...?properties,
     };
 
