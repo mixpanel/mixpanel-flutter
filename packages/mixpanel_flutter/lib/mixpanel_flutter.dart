@@ -602,15 +602,6 @@ class Mixpanel {
   /// * [screenName] The name of the screen/page being viewed
   /// * [properties] Optional additional properties to include with this event
   Future<void> trackScreenView(String screenName, {Map<String, dynamic>? properties}) async {
-    if (!_MixpanelHelper.isValidString(screenName)) {
-      developer.log(
-        'trackScreenView called with null or empty screenName. Event not tracked.',
-        name: 'Mixpanel',
-        level: 1000
-      );
-      return;
-    }
-
     final mergedProperties = <String, dynamic>{
       'current_page_title': screenName,
       '\$mp_autocapture': true,
@@ -626,15 +617,6 @@ class Mixpanel {
   /// * [screenName] The name of the screen/page being left
   /// * [properties] Optional additional properties to include with this event
   Future<void> trackScreenLeave(String screenName, {Map<String, dynamic>? properties}) async {
-    if (!_MixpanelHelper.isValidString(screenName)) {
-      developer.log(
-        'trackScreenLeave called with null or empty screenName. Event not tracked.',
-        name: 'Mixpanel',
-        level: 1000
-      );
-      return;
-    }
-
     final mergedProperties = <String, dynamic>{
       'current_page_title': screenName,
       '\$mp_autocapture': true,

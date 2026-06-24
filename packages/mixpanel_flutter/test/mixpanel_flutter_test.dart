@@ -1710,14 +1710,6 @@ void main() {
       );
     });
 
-    test('screenView does not track with empty screenName', () async {
-      final initialCall = methodCall;
-
-      await _mixpanel.trackScreenView('');
-
-      expect(methodCall, initialCall);
-    });
-
     test('screenLeave sends correct event', () async {
       await _mixpanel.trackScreenLeave('HomeScreen', properties: {'time_spent': 30});
 
@@ -1751,14 +1743,6 @@ void main() {
           },
         ),
       );
-    });
-
-    test('screenLeave does not track with empty screenName', () async {
-      final initialCall = methodCall;
-
-      await _mixpanel.trackScreenLeave('');
-
-      expect(methodCall, initialCall);
     });
   });
 }
