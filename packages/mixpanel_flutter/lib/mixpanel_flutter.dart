@@ -601,10 +601,10 @@ class Mixpanel {
   ///
   /// * [screenName] The name of the screen/page being viewed
   /// * [properties] Optional additional properties to include with this event
-  Future<void> screenView(String screenName, {Map<String, dynamic>? properties}) async {
+  Future<void> trackScreenView(String screenName, {Map<String, dynamic>? properties}) async {
     if (!_MixpanelHelper.isValidString(screenName)) {
       developer.log(
-        'screenView called with null or empty screenName. Event not tracked.',
+        'trackScreenView called with null or empty screenName. Event not tracked.',
         name: 'Mixpanel',
         level: 1000
       );
@@ -625,10 +625,10 @@ class Mixpanel {
   ///
   /// * [screenName] The name of the screen/page being left
   /// * [properties] Optional additional properties to include with this event
-  Future<void> screenLeave(String screenName, {Map<String, dynamic>? properties}) async {
+  Future<void> trackScreenLeave(String screenName, {Map<String, dynamic>? properties}) async {
     if (!_MixpanelHelper.isValidString(screenName)) {
       developer.log(
-        'screenLeave called with null or empty screenName. Event not tracked.',
+        'trackScreenLeave called with null or empty screenName. Event not tracked.',
         name: 'Mixpanel',
         level: 1000
       );

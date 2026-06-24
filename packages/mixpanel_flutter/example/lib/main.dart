@@ -67,11 +67,11 @@ class MixpanelNavigatorObserver extends NavigatorObserver {
 
       // Track screen leave for previous screen
       if (_previousRouteName != null && _previousRouteName!.isNotEmpty) {
-        mixpanel.screenLeave(_previousRouteName!);
+        mixpanel.trackScreenLeave(_previousRouteName!);
       }
 
       // Track screen view for current screen
-      mixpanel.screenView(currentRouteName);
+      mixpanel.trackScreenView(currentRouteName);
 
       // Update previous route name
       _previousRouteName = currentRouteName;

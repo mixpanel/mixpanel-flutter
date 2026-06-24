@@ -1676,7 +1676,7 @@ void main() {
     });
 
     test('screenView sends correct event', () async {
-      await _mixpanel.screenView('HomeScreen', properties: {'extra_prop': 'extra_value'});
+      await _mixpanel.trackScreenView('HomeScreen', properties: {'extra_prop': 'extra_value'});
 
       expect(
         methodCall,
@@ -1694,7 +1694,7 @@ void main() {
     });
 
     test('screenView without properties', () async {
-      await _mixpanel.screenView('HomeScreen');
+      await _mixpanel.trackScreenView('HomeScreen');
 
       expect(
         methodCall,
@@ -1713,13 +1713,13 @@ void main() {
     test('screenView does not track with empty screenName', () async {
       final initialCall = methodCall;
 
-      await _mixpanel.screenView('');
+      await _mixpanel.trackScreenView('');
 
       expect(methodCall, initialCall);
     });
 
     test('screenLeave sends correct event', () async {
-      await _mixpanel.screenLeave('HomeScreen', properties: {'time_spent': 30});
+      await _mixpanel.trackScreenLeave('HomeScreen', properties: {'time_spent': 30});
 
       expect(
         methodCall,
@@ -1737,7 +1737,7 @@ void main() {
     });
 
     test('screenLeave without properties', () async {
-      await _mixpanel.screenLeave('HomeScreen');
+      await _mixpanel.trackScreenLeave('HomeScreen');
 
       expect(
         methodCall,
@@ -1756,7 +1756,7 @@ void main() {
     test('screenLeave does not track with empty screenName', () async {
       final initialCall = methodCall;
 
-      await _mixpanel.screenLeave('');
+      await _mixpanel.trackScreenLeave('');
 
       expect(methodCall, initialCall);
     });
