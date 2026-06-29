@@ -317,10 +317,22 @@ class FeatureFlagsConfig {
   /// native SDK defaults and pre-persistence behavior.
   final VariantLookupPolicy variantLookupPolicy;
 
+  /// Whether to eagerly fetch flags during initialization.
+  /// When `true` (default), the SDK automatically calls `loadFlags()` during
+  /// initialization so flags are ready (or close to ready) when accessed.
+  /// When `false`, flags are fetched lazily on first access or manually via
+  /// `loadFlags()` or `identify()`.
+  ///
+  /// Setting this to `false` is useful when you want to defer the initial
+  /// fetch until after calling `identify()` to ensure flags evaluate against
+  /// the correct user identity.
+  final bool prefetchFlags;
+
   const FeatureFlagsConfig({
     this.enabled = true,
     this.context = const {},
     this.variantLookupPolicy = const VariantLookupPolicy.networkOnly(),
+    this.prefetchFlags = true,
   });
 
   /// Converts this config to a Map for serialization.
@@ -329,6 +341,7 @@ class FeatureFlagsConfig {
       'enabled': enabled,
       'context': context,
       'variantLookupPolicy': variantLookupPolicy.toMap(),
+      'prefetchFlags': prefetchFlags,
     };
   }
 }

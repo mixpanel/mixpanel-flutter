@@ -264,6 +264,7 @@ public class MixpanelFlutterPlugin implements FlutterPlugin, MethodCallHandler {
         Boolean featureFlagsEnabled = null;
         JSONObject featureFlagsContext = null;
         VariantLookupPolicy variantLookupPolicy = null;
+        Boolean prefetchFlags = null;
         if (featureFlagsMap != null) {
             Object enabledValue = featureFlagsMap.get("enabled");
             if (enabledValue instanceof Boolean) {
@@ -285,6 +286,10 @@ public class MixpanelFlutterPlugin implements FlutterPlugin, MethodCallHandler {
                 Map<String, Object> policyMap = (Map<String, Object>) policyValue;
                 variantLookupPolicy = parseVariantLookupPolicy(policyMap);
             }
+            Object prefetchValue = featureFlagsMap.get("prefetchFlags");
+            if (prefetchValue instanceof Boolean) {
+                prefetchFlags = (Boolean) prefetchValue;
+            }
         }
 
         // Build MixpanelOptions with feature flags configuration
@@ -303,6 +308,9 @@ public class MixpanelFlutterPlugin implements FlutterPlugin, MethodCallHandler {
             }
             if (variantLookupPolicy != null) {
                 ffBuilder.variantLookupPolicy(variantLookupPolicy);
+            }
+            if (prefetchFlags != null) {
+                ffBuilder.prefetchFlags(prefetchFlags);
             }
             optionsBuilder.featureFlagOptions(ffBuilder.build());
         }

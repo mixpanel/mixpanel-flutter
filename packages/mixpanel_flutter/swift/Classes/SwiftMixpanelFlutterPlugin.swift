@@ -264,9 +264,11 @@ public class SwiftMixpanelFlutterPlugin: NSObject, FlutterPlugin {
            let enabled = featureFlags["enabled"] as? Bool, enabled {
             let context = featureFlags["context"] as? [String: Any] ?? [:]
             let policy = parseVariantLookupPolicy(featureFlags["variantLookupPolicy"] as? [String: Any])
+            let prefetchFlags = featureFlags["prefetchFlags"] as? Bool ?? true
             featureFlagOptions = FeatureFlagOptions(
                 enabled: true,
                 context: context,
+                prefetchFlags: prefetchFlags,
                 variantLookupPolicy: policy
             )
         }
