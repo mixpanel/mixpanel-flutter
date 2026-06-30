@@ -1260,6 +1260,7 @@ void main() {
               'enabled': true,
               'context': {'user_tier': 'premium'},
               'variantLookupPolicy': {'policy': 'networkOnly'},
+              'prefetchFlags': true,
             },
           },
         ),
@@ -1291,6 +1292,7 @@ void main() {
               'enabled': true,
               'context': <String, dynamic>{},
               'variantLookupPolicy': {'policy': 'networkOnly'},
+              'prefetchFlags': true,
             },
           },
         ),
@@ -1325,6 +1327,7 @@ void main() {
               'enabled': false,
               'context': {'user_tier': 'premium'},
               'variantLookupPolicy': {'policy': 'networkOnly'},
+              'prefetchFlags': true,
             },
           },
         ),
@@ -1373,6 +1376,7 @@ void main() {
       expect(map['enabled'], true);
       expect(map['context'], {'key': 'value'});
       expect(map['variantLookupPolicy'], {'policy': 'networkOnly'});
+      expect(map['prefetchFlags'], true);
     });
 
     test('FeatureFlagsConfig default values', () {
@@ -1380,11 +1384,48 @@ void main() {
       expect(config.enabled, true);
       expect(config.context, <String, dynamic>{});
       expect(config.variantLookupPolicy, isA<NetworkOnlyPolicy>());
+      expect(config.prefetchFlags, true);
 
       final map = config.toMap();
       expect(map['enabled'], true);
       expect(map['context'], <String, dynamic>{});
       expect(map['variantLookupPolicy'], {'policy': 'networkOnly'});
+      expect(map['prefetchFlags'], true);
+    });
+
+    test('FeatureFlagsConfig with prefetchFlags false', () async {
+      _mixpanel = await Mixpanel.init(
+        "test token",
+        optOutTrackingDefault: false,
+        trackAutomaticEvents: true,
+        featureFlags: FeatureFlagsConfig(
+          enabled: true,
+          prefetchFlags: false,
+        ),
+      );
+      expect(
+        methodCall,
+        isMethodCall(
+          'initialize',
+          arguments: <String, dynamic>{
+            'token': "test token",
+            'optOutTrackingDefault': false,
+            'trackAutomaticEvents': true,
+            'mixpanelProperties': {
+              '\$lib_version': sdkVersion,
+              'mp_lib': 'flutter',
+            },
+            'superProperties': null,
+            'config': null,
+            'featureFlags': {
+              'enabled': true,
+              'context': <String, dynamic>{},
+              'variantLookupPolicy': {'policy': 'networkOnly'},
+              'prefetchFlags': false,
+            },
+          },
+        ),
+      );
     });
 
     test(

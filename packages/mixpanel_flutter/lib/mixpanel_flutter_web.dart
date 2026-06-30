@@ -238,6 +238,9 @@ class MixpanelFlutterPlugin {
         if (persistence != null) {
           flagsConfig['persistence'] = persistence;
         }
+        // Add prefetchFlags if provided, default to true
+        bool prefetchFlags = featureFlags['prefetchFlags'] ?? true;
+        flagsConfig['prefetchFlags'] = prefetchFlags;
         initConfig['flags'] = flagsConfig.isEmpty ? true : flagsConfig;
       }
     }
