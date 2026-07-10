@@ -1,5 +1,12 @@
 # Changelog
 
+## [session-replay-v1.1.0](https://github.com/mixpanel/mixpanel-flutter/tree/session-replay-v1.1.0) (2026-07-10)
+
+### Features
+- Swift package manager support ([#258](https://github.com/mixpanel/mixpanel-flutter/pull/258))
+
+[Full Changelog](https://github.com/mixpanel/mixpanel-flutter/compare/session-replay-v1.0.0...session-replay-v1.1.0)
+
 ## [session-replay-v1.0.0](https://github.com/mixpanel/mixpanel-flutter/tree/session-replay-v1.0.0) (2026-06-22)
 
 * Official v1 release
