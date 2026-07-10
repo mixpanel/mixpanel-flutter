@@ -1,5 +1,12 @@
 # Changelog
 
+## [v2.11.0](https://github.com/mixpanel/mixpanel-flutter/tree/v2.11.0) (2026-07-10)
+
+### Chores
+- Add prefetchFlags Option ([#259](https://github.com/mixpanel/mixpanel-flutter/pull/259))
+
+[Full Changelog](https://github.com/mixpanel/mixpanel-flutter/compare/v2.10.0...v2.11.0)
+
 ## [v2.10.0](https://github.com/mixpanel/mixpanel-flutter/tree/v2.10.0) (2026-06-15)
 
 ### Features
