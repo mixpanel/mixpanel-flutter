@@ -66,7 +66,7 @@ android {
 }
 
 dependencies {
-    implementation "com.mixpanel.android:mixpanel-android:8.7.0"
+    implementation "com.mixpanel.android:mixpanel-android:8.9.0"
     // mixpanel-android:8.7.0 only declares mixpanel-android-common as a
     // runtime dependency, so MixpanelEventBridge is not on the compile
     // classpath unless we add it explicitly here. EventBridgeSubscriber.kt

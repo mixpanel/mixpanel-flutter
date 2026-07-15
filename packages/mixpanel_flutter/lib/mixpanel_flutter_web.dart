@@ -203,6 +203,12 @@ class MixpanelFlutterPlugin {
         return handleLoadFlags();
       case 'getAllVariants':
         return handleGetAllVariants();
+      case 'trackScreenView':
+        handleTrackScreenView(call);
+        break;
+      case 'trackScreenLeave':
+        handleTrackScreenLeave(call);
+        break;
       default:
         throw PlatformException(
           code: 'Unimplemented',
@@ -469,6 +475,32 @@ class MixpanelFlutterPlugin {
 
   void handleOptOutTracking() {
     opt_out_tracking();
+  }
+
+  void handleTrackScreenView(MethodCall call) {
+    Map<Object?, Object?> args = call.arguments as Map<Object?, Object?>;
+    String screenName = args['screenName'] as String;
+    dynamic properties = args['properties'];
+    Map<String, dynamic> props = {
+      ...(properties ?? {}),
+      ..._mixpanelProperties,
+      'current_page_title': screenName,
+      '\$mp_autocapture': true,
+    };
+    track('\$mp_page_view', safeJsify(props));
+  }
+
+  void handleTrackScreenLeave(MethodCall call) {
+    Map<Object?, Object?> args = call.arguments as Map<Object?, Object?>;
+    String screenName = args['screenName'] as String;
+    dynamic properties = args['properties'];
+    Map<String, dynamic> props = {
+      ...(properties ?? {}),
+      ..._mixpanelProperties,
+      'current_page_title': screenName,
+      '\$mp_autocapture': true,
+    };
+    track('\$mp_page_leave', safeJsify(props));
   }
 
   void handleSetLoggingEnabled(MethodCall call) {

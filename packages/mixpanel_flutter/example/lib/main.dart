@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:mixpanel_flutter/mixpanel_flutter.dart';
 import 'package:mixpanel_flutter_example/widget.dart';
 
+import 'analytics.dart';
 import 'event.dart';
 import 'event_bridge.dart';
 import 'feature_flags.dart';
@@ -13,6 +15,44 @@ void main() {
   runApp(MyApp());
 }
 
+class MixpanelNavigatorObserver extends NavigatorObserver {
+  final Future<Mixpanel> _mixpanelFuture;
+
+  MixpanelNavigatorObserver(this._mixpanelFuture);
+
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    super.didPush(route, previousRoute);
+    final previousName = previousRoute?.settings.name;
+    final newName = route.settings.name;
+
+    _mixpanelFuture.then((mixpanel) {
+      if (previousName != null) {
+        mixpanel.autocapture.trackScreenLeave(previousName);
+      }
+      if (newName != null) {
+        mixpanel.autocapture.trackScreenView(newName);
+      }
+    });
+  }
+
+  @override
+  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    super.didPop(route, previousRoute);
+    final poppedName = route.settings.name;
+    final returnToName = previousRoute?.settings.name;
+
+    _mixpanelFuture.then((mixpanel) {
+      if (poppedName != null) {
+        mixpanel.autocapture.trackScreenLeave(poppedName);
+      }
+      if (returnToName != null) {
+        mixpanel.autocapture.trackScreenView(returnToName);
+      }
+    });
+  }
+}
+
 class MyApp extends StatefulWidget {
   const MyApp();
 
@@ -21,11 +61,22 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> {
+  late final Future<Mixpanel> _mixpanelFuture;
+  late final MixpanelNavigatorObserver _navigatorObserver;
+
+  @override
+  void initState() {
+    super.initState();
+    _mixpanelFuture = MixpanelManager.init();
+    _navigatorObserver = MixpanelNavigatorObserver(_mixpanelFuture);
+  }
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       initialRoute: '/',
+      navigatorObservers: [_navigatorObserver],
       routes: {
         '/': (context) => FirstScreen(),
         '/event': (context) => EventScreen(),
