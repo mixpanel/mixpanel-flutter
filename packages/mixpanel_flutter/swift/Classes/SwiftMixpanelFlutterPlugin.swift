@@ -455,7 +455,10 @@ public class SwiftMixpanelFlutterPlugin: NSObject, FlutterPlugin {
 
     private func handleTrackScreenView(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
         let arguments = call.arguments as? [String: Any] ?? [String: Any]()
-        let screenName = arguments["screenName"] as! String
+        guard let screenName = arguments["screenName"] as? String, !screenName.isEmpty else {
+            result(FlutterError(code: "INVALID_SCREEN_NAME", message: "screenName is required and cannot be empty", details: nil))
+            return
+        }
         let properties = arguments["properties"] as? [String: Any]
         let mpProperties = MixpanelTypeHandler.mixpanelProperties(properties: properties, mixpanelProperties: mixpanelProperties)
         instance?.autocapture.trackScreenView(screenName: screenName, properties: mpProperties)
@@ -464,7 +467,10 @@ public class SwiftMixpanelFlutterPlugin: NSObject, FlutterPlugin {
 
     private func handleTrackScreenLeave(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
         let arguments = call.arguments as? [String: Any] ?? [String: Any]()
-        let screenName = arguments["screenName"] as! String
+        guard let screenName = arguments["screenName"] as? String, !screenName.isEmpty else {
+            result(FlutterError(code: "INVALID_SCREEN_NAME", message: "screenName is required and cannot be empty", details: nil))
+            return
+        }
         let properties = arguments["properties"] as? [String: Any]
         let mpProperties = MixpanelTypeHandler.mixpanelProperties(properties: properties, mixpanelProperties: mixpanelProperties)
         instance?.autocapture.trackScreenLeave(screenName: screenName, properties: mpProperties)
