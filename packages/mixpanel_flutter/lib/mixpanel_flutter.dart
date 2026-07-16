@@ -8,6 +8,19 @@ import 'package:mixpanel_flutter/codec/mixpanel_message_codec.dart';
 import 'package:mixpanel_flutter/src/version.dart';
 import 'package:mixpanel_flutter_common/mixpanel_flutter_common.dart';
 
+/// Describes why the SDK returned a fallback variant.
+///
+/// - [FallbackReason.notReady]: Flags haven't finished loading yet.
+/// - [FallbackReason.flagNotFound]: The requested flag key is absent from
+///   loaded data.
+/// - [FallbackReason.backendError]: Network fetch failed with no cached or
+///   persisted flags available.
+enum FallbackReason {
+  notReady,
+  flagNotFound,
+  backendError,
+}
+
 /// Identifies where a served [MixpanelFlagVariant] came from. Non-null on
 /// every variant the SDK returns:
 /// - [NetworkSource]: the variant was assigned by the most recent successful
@@ -16,9 +29,10 @@ import 'package:mixpanel_flutter_common/mixpanel_flutter_common.dart';
 ///   layer; [PersistenceSource.persistedAt] is when the variant set was
 ///   originally written.
 /// - [FallbackSource]: the SDK could not produce a real variant and returned
-///   the developer-supplied fallback unchanged. Variants the developer
-///   constructs directly also default to this source, since the only reason
-///   to build one is to pass it as a fallback.
+///   the developer-supplied fallback unchanged. [FallbackSource.reason]
+///   indicates why (not ready, flag not found, or backend error). Variants
+///   the developer constructs directly also default to this source, since the
+///   only reason to build one is to pass it as a fallback.
 ///
 /// The persistence timestamp lives only on [PersistenceSource] so invalid
 /// combinations like "network with a timestamp" are unrepresentable.
@@ -28,7 +42,8 @@ abstract class MixpanelFlagVariantSource {
   const factory MixpanelFlagVariantSource.network() = NetworkSource;
   factory MixpanelFlagVariantSource.persistence(
       {required DateTime persistedAt}) = PersistenceSource;
-  const factory MixpanelFlagVariantSource.fallback() = FallbackSource;
+  const factory MixpanelFlagVariantSource.fallback(
+      {FallbackReason reason}) = FallbackSource;
 
   /// Decodes a source map produced by the platform handlers. Falls back to
   /// [FallbackSource] for missing, malformed, or unrecognized payloads.
@@ -36,7 +51,10 @@ abstract class MixpanelFlagVariantSource {
     if (map == null) return const FallbackSource();
     final kind = map['kind'];
     if (kind == 'network') return const NetworkSource();
-    if (kind == 'fallback') return const FallbackSource();
+    if (kind == 'fallback') {
+      final reasonStr = map['reason'] as String?;
+      return FallbackSource(reason: _parseFallbackReason(reasonStr));
+    }
     if (kind == 'persistence') {
       final raw = map['persistedAtMillis'];
       final millis = raw is int ? raw : (raw is num ? raw.toInt() : null);
@@ -50,6 +68,22 @@ abstract class MixpanelFlagVariantSource {
           persistedAt: DateTime.fromMillisecondsSinceEpoch(millis));
     }
     return const FallbackSource();
+  }
+
+  /// Parses a fallback reason string from the platform handlers.
+  /// Returns [FallbackReason.flagNotFound] as a safe default for
+  /// unrecognized or missing values.
+  static FallbackReason _parseFallbackReason(String? reasonStr) {
+    switch (reasonStr) {
+      case 'notReady':
+        return FallbackReason.notReady;
+      case 'flagNotFound':
+        return FallbackReason.flagNotFound;
+      case 'backendError':
+        return FallbackReason.backendError;
+      default:
+        return FallbackReason.flagNotFound;
+    }
   }
 }
 
@@ -87,16 +121,20 @@ class PersistenceSource extends MixpanelFlagVariantSource {
 
 /// The SDK returned the developer-supplied fallback unchanged.
 class FallbackSource extends MixpanelFlagVariantSource {
-  const FallbackSource();
+  /// Why the SDK returned the fallback instead of a real variant.
+  final FallbackReason reason;
+
+  const FallbackSource({this.reason = FallbackReason.flagNotFound});
 
   @override
-  String toString() => 'FallbackSource()';
+  String toString() => 'FallbackSource(reason: $reason)';
 
   @override
-  bool operator ==(Object other) => other is FallbackSource;
+  bool operator ==(Object other) =>
+      other is FallbackSource && other.reason == reason;
 
   @override
-  int get hashCode => 0xfa11; // arbitrary stable constant for the singleton-ish case
+  int get hashCode => reason.hashCode;
 }
 
 /// Represents a feature flag variant with metadata.

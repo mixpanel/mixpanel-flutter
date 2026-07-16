@@ -796,8 +796,22 @@ public class SwiftMixpanelFlutterPlugin: NSObject, FlutterPlugin {
                 "kind": "persistence",
                 "persistedAtMillis": Int64(persistedAt.timeIntervalSince1970 * 1000)
             ]
-        case .fallback:
-            return ["kind": "fallback"]
+        case .fallback(let reason):
+            return [
+                "kind": "fallback",
+                "reason": fallbackReasonToString(reason)
+            ]
+        }
+    }
+
+    private func fallbackReasonToString(_ reason: MixpanelFlagVariant.FallbackReason) -> String {
+        switch reason {
+        case .notReady:
+            return "notReady"
+        case .flagNotFound:
+            return "flagNotFound"
+        case .backendError:
+            return "backendError"
         }
     }
 
