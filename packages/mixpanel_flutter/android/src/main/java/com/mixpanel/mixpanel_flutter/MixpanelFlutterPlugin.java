@@ -404,7 +404,9 @@ public class MixpanelFlutterPlugin implements FlutterPlugin, MethodCallHandler {
             result.error("MixpanelFlutterException", e.getLocalizedMessage(), null);
             return;
         }
-        mixpanel.getAutocapture().trackScreenView(screenName, properties);
+        if (mixpanel.getAutocapture() != null) {
+            mixpanel.getAutocapture().trackScreenView(screenName, properties);
+        }
         result.success(null);
     }
 
@@ -419,7 +421,9 @@ public class MixpanelFlutterPlugin implements FlutterPlugin, MethodCallHandler {
             result.error("MixpanelFlutterException", e.getLocalizedMessage(), null);
             return;
         }
-        mixpanel.getAutocapture().trackScreenLeave(screenName, properties);
+        if (mixpanel.getAutocapture() != null) {
+            mixpanel.getAutocapture().trackScreenLeave(screenName, properties);
+        }
         result.success(null);
     }
 
