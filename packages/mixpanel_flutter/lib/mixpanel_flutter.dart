@@ -1335,9 +1335,7 @@ class Autocapture {
       : const MethodChannel(
           'mixpanel_flutter', StandardMethodCodec(MixpanelMessageCodec()));
 
-  final String _token;
-
-  Autocapture(String token) : _token = token;
+  Autocapture(String token);
 
   /// Tracks a screen view event (`$mp_page_view`) with autocapture metadata.
   ///
