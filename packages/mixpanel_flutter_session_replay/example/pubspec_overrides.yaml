@@ -1,0 +1,8 @@
+# This file overrides dependencies to use local packages during development and CI.
+# It ensures the session replay example uses the local analytics package with the
+# latest native SDK versions rather than the published version from pub.dev.
+dependency_overrides:
+  mixpanel_flutter:
+    path: ../../mixpanel_flutter
+  mixpanel_flutter_common:
+    path: ../../mixpanel_flutter_common
