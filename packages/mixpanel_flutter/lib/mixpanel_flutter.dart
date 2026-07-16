@@ -626,7 +626,7 @@ class Mixpanel {
   /// Returns an Autocapture object that can be used to manually track
   /// screen view and screen leave events with autocapture metadata.
   Autocapture get autocapture {
-    _autocapture ??= Autocapture(_token);
+    _autocapture ??= Autocapture();
     return _autocapture!;
   }
 
@@ -1335,7 +1335,7 @@ class Autocapture {
       : const MethodChannel(
           'mixpanel_flutter', StandardMethodCodec(MixpanelMessageCodec()));
 
-  Autocapture(String token);
+  Autocapture();
 
   /// Tracks a screen view event (`$mp_page_view`) with autocapture metadata.
   ///
