@@ -3,7 +3,7 @@
 ## [v2.12.0](https://github.com/mixpanel/mixpanel-flutter/tree/v2.12.0) (2026-07-17)
 
 ### Features
-- Added support to return the fallback reason for the feature flag varient  ([#267](https://github.com/mixpanel/mixpanel-flutter/pull/267))
+- Added support to return the fallback reason for the feature flag varient, bumped iOS and Android SDK versions to latest.  ([#267](https://github.com/mixpanel/mixpanel-flutter/pull/267))
 
 [Full Changelog](https://github.com/mixpanel/mixpanel-flutter/compare/v2.11.0...v2.12.0)
 
