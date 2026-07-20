@@ -1393,6 +1393,10 @@ class Autocapture {
         'screenName': screenName,
         'properties': _MixpanelHelper.ensureSerializableProperties(properties),
       });
+    } else {
+      developer.log(
+          '`trackScreenView` failed: screenName cannot be blank',
+          name: 'Mixpanel');
     }
   }
 
@@ -1414,6 +1418,10 @@ class Autocapture {
         'screenName': screenName,
         'properties': _MixpanelHelper.ensureSerializableProperties(properties),
       });
+    } else {
+      developer.log(
+          '`trackScreenLeave` failed: screenName cannot be blank',
+          name: 'Mixpanel');
     }
   }
 }
