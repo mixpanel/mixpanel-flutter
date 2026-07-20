@@ -1547,6 +1547,74 @@ void main() {
       expect(const FallbackSource(), const FallbackSource());
     });
 
+    test('FallbackSource with same reason are equal', () {
+      expect(
+          const FallbackSource(reason: FallbackReason.notReady),
+          const FallbackSource(reason: FallbackReason.notReady));
+    });
+
+    test('FallbackSource with different reasons are not equal', () {
+      expect(
+          const FallbackSource(reason: FallbackReason.notReady),
+          isNot(const FallbackSource(reason: FallbackReason.flagNotFound)));
+    });
+
+    test('FallbackSource defaults to flagNotFound reason', () {
+      const source = FallbackSource();
+      expect(source.reason, FallbackReason.flagNotFound);
+    });
+
+    test('MixpanelFlagVariant.fromMap parses fallback reason', () {
+      final variant = MixpanelFlagVariant.fromMap({
+        'key': 'flag_a',
+        'value': 'on',
+        'source': {'kind': 'fallback', 'reason': 'notReady'},
+      });
+      expect(variant.source, isA<FallbackSource>());
+      expect((variant.source as FallbackSource).reason,
+          FallbackReason.notReady);
+    });
+
+    test('MixpanelFlagVariant.fromMap handles all fallback reasons', () {
+      final reasons = {
+        'notReady': FallbackReason.notReady,
+        'flagNotFound': FallbackReason.flagNotFound,
+        'backendError': FallbackReason.backendError,
+      };
+
+      reasons.forEach((reasonStr, expectedReason) {
+        final variant = MixpanelFlagVariant.fromMap({
+          'key': 'flag_a',
+          'value': 'on',
+          'source': {'kind': 'fallback', 'reason': reasonStr},
+        });
+        expect((variant.source as FallbackSource).reason, expectedReason);
+      });
+    });
+
+    test(
+        'MixpanelFlagVariant.fromMap defaults to flagNotFound for unknown reason',
+        () {
+      final variant = MixpanelFlagVariant.fromMap({
+        'key': 'flag_a',
+        'value': 'on',
+        'source': {'kind': 'fallback', 'reason': 'unknownReason'},
+      });
+      expect((variant.source as FallbackSource).reason,
+          FallbackReason.flagNotFound);
+    });
+
+    test('MixpanelFlagVariant.fromMap defaults to flagNotFound when reason missing',
+        () {
+      final variant = MixpanelFlagVariant.fromMap({
+        'key': 'flag_a',
+        'value': 'on',
+        'source': {'kind': 'fallback'},
+      });
+      expect((variant.source as FallbackSource).reason,
+          FallbackReason.flagNotFound);
+    });
+
     test('PersistenceSource equality uses persistedAt', () {
       final t = DateTime.fromMillisecondsSinceEpoch(1700000000000);
       expect(PersistenceSource(persistedAt: t),

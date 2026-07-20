@@ -2,7 +2,7 @@
   <img src="https://user-images.githubusercontent.com/71290498/231855731-2d3774c3-dc41-4595-abfb-9c49f5f84103.png" alt="Mixpanel Flutter SDK" height="150"/>
 </div>
 
-##### _July 10, 2026_ - [v2.11.0](https://github.com/mixpanel/mixpanel-flutter/releases/tag/v2.11.0)
+##### _July 17, 2026_ - [v2.12.0](https://github.com/mixpanel/mixpanel-flutter/releases/tag/v2.12.0)
 
 # Table of Contents
 
@@ -41,7 +41,7 @@ Check out our **[official documentation](https://developer.mixpanel.com/docs/flu
 
 ```
    dependencies:
-      mixpanel_flutter: 2.11.0
+      mixpanel_flutter: 2.12.0
 ```
 
 2. Install it \

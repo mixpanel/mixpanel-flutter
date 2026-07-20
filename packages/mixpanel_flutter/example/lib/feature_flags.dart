@@ -13,10 +13,27 @@ class _FeatureFlagsScreenState extends State<FeatureFlagsScreen> {
   late final Mixpanel _mixpanel;
   late final FeatureFlags _flags;
 
+  // Text controllers for flag name inputs
+  final _boolFlagController = TextEditingController(text: 'sample-bool-flag');
+  final _variantValueController = TextEditingController(text: 'sample-flag');
+  final _fullVariantController =
+      TextEditingController(text: 'ww_advanced_experiments_qa_2');
+  final _fallbackTestController =
+      TextEditingController(text: 'non-existent-flag-12345');
+
   @override
   void initState() {
     super.initState();
     _initMixpanel();
+  }
+
+  @override
+  void dispose() {
+    _boolFlagController.dispose();
+    _variantValueController.dispose();
+    _fullVariantController.dispose();
+    _fallbackTestController.dispose();
+    super.dispose();
   }
 
   Future<void> _initMixpanel() async {
@@ -34,7 +51,7 @@ class _FeatureFlagsScreenState extends State<FeatureFlagsScreen> {
               ),
               actions: [
                 TextButton(
-                  child: Text("OK"),
+                  child: const Text("OK"),
                   onPressed: () {
                     Navigator.of(context).pop();
                   },
@@ -48,19 +65,44 @@ class _FeatureFlagsScreenState extends State<FeatureFlagsScreen> {
     return '$label:\n  Expected: $expected\n  Actual: $actual  $match';
   }
 
+  Widget _buildFlagInput(String label, TextEditingController controller) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(fontSize: 12, color: Colors.grey),
+          ),
+          const SizedBox(height: 4),
+          TextField(
+            controller: controller,
+            decoration: InputDecoration(
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+              hintText: 'Enter flag name',
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: Color(0xff4f44e0),
-        title: Text("Feature Flags"),
+        backgroundColor: const Color(0xff4f44e0),
+        title: const Text("Feature Flags"),
       ),
       body: Center(
           child: ListView(
         children: [
-          SizedBox(
-            height: 40,
-          ),
+          const SizedBox(height: 40),
           SizedBox(
             width: MediaQuery.of(context).size.width * 0.65,
             child: MixpanelButton(
@@ -71,91 +113,155 @@ class _FeatureFlagsScreenState extends State<FeatureFlagsScreen> {
               },
             ),
           ),
-          SizedBox(
-            height: 20,
+          const SizedBox(height: 30),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 40),
+            child: Divider(),
           ),
+          const SizedBox(height: 10),
+          _buildFlagInput('Test Fallback Flag Name:', _fallbackTestController),
+          const SizedBox(height: 10),
+          SizedBox(
+            width: MediaQuery.of(context).size.width * 0.65,
+            child: MixpanelButton(
+              text: 'Test Fallback Reasons',
+              onPressed: () async {
+                final flagName = _fallbackTestController.text.trim();
+                if (flagName.isEmpty) {
+                  _showAlert(context, "Error", "Please enter a flag name");
+                  return;
+                }
+
+                final fallback =
+                    MixpanelFlagVariant.fallback(flagName, 'default-value');
+                final variant = await _flags.getVariant(flagName, fallback);
+
+                final src = variant.source;
+                String reasonDetails = '';
+
+                if (src is FallbackSource) {
+                  reasonDetails =
+                      '''Fallback Reason: ${(src.reason)}''';
+                } else if (src is NetworkSource) {
+                  reasonDetails = 'Flag was loaded from network successfully';
+                } else if (src is PersistenceSource) {
+                  reasonDetails =
+                      'Flag was loaded from local cache (persisted at: ${src.persistedAt})';
+                }
+
+                final alertText = '''Flag: $flagName
+Value: ${variant.value}
+Source: ${src.runtimeType}
+
+$reasonDetails''';
+
+                _showAlert(context, "Fallback Reason Demo", alertText);
+              },
+            ),
+          ),
+          const SizedBox(height: 30),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 40),
+            child: Divider(),
+          ),
+          const SizedBox(height: 10),
+          _buildFlagInput('Boolean Flag Name:', _boolFlagController),
+          const SizedBox(height: 10),
           SizedBox(
             width: MediaQuery.of(context).size.width * 0.65,
             child: MixpanelButton(
               text: 'Get Boolean Flag (isEnabled)',
               onPressed: () async {
+                final flagName = _boolFlagController.text.trim();
+                if (flagName.isEmpty) {
+                  _showAlert(context, "Error", "Please enter a flag name");
+                  return;
+                }
+
                 const expected = true;
-                final actual = await _flags.isEnabled('sample-bool-flag', false);
-                _showAlert(
-                    context,
-                    "Boolean Flag: sample-bool-flag",
+                final actual = await _flags.isEnabled(flagName, false);
+                _showAlert(context, "Boolean Flag: $flagName",
                     _formatComparison('isEnabled', expected, actual));
               },
             ),
           ),
-          SizedBox(
-            height: 20,
+          const SizedBox(height: 30),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 40),
+            child: Divider(),
           ),
+          const SizedBox(height: 10),
+          _buildFlagInput('Variant Value Flag Name:', _variantValueController),
+          const SizedBox(height: 10),
           SizedBox(
             width: MediaQuery.of(context).size.width * 0.65,
             child: MixpanelButton(
               text: 'Get Variant Value',
               onPressed: () async {
+                final flagName = _variantValueController.text.trim();
+                if (flagName.isEmpty) {
+                  _showAlert(context, "Error", "Please enter a flag name");
+                  return;
+                }
+
                 const expected = 'test';
-                final actual =
-                    await _flags.getVariantValue('sample-flag', 'fallback');
-                _showAlert(
-                    context,
-                    "Variant Value: sample-flag",
+                final actual = await _flags.getVariantValue(flagName, 'fallback');
+                _showAlert(context, "Variant Value: $flagName",
                     _formatComparison('getVariantValue', expected, actual));
               },
             ),
           ),
-          SizedBox(
-            height: 20,
+          const SizedBox(height: 30),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 40),
+            child: Divider(),
           ),
+          const SizedBox(height: 10),
+          _buildFlagInput('Full Variant Flag Name:', _fullVariantController),
+          const SizedBox(height: 10),
           SizedBox(
             width: MediaQuery.of(context).size.width * 0.65,
             child: MixpanelButton(
               text: 'Get Full Variant',
               onPressed: () async {
-                const flagName = 'ww_advanced_experiments_qa_2';
-                const expectedKey = 'treatment';
-                const expectedExperimentId =
-                    'e6f697b4-2f23-4e9d-b772-49dd9103733c';
-                const expectedIsExperimentActive = true;
-                final fallback =
-                    MixpanelFlagVariant.fallback(flagName, 'control');
+                final flagName = _fullVariantController.text.trim();
+                if (flagName.isEmpty) {
+                  _showAlert(context, "Error", "Please enter a flag name");
+                  return;
+                }
+
+                final fallback = MixpanelFlagVariant.fallback(flagName, 'control');
                 final variant = await _flags.getVariant(flagName, fallback);
-                final keyMatch = variant.key == expectedKey ? '✓' : '✗';
-                final expIdMatch =
-                    variant.experimentId == expectedExperimentId ? '✓' : '✗';
-                final activeMatch =
-                    variant.isExperimentActive == expectedIsExperimentActive
-                        ? '✓'
-                        : '✗';
+
                 final src = variant.source;
                 final sourceLabel = src is PersistenceSource
                     ? 'persistence (persistedAt: ${src.persistedAt})'
                     : src is NetworkSource
                         ? 'network'
                         : src is FallbackSource
-                            ? 'fallback'
+                            ? 'fallback (reason: ${(src.reason)})'
                             : 'unknown';
-                final alertText = '''Expected:
-  key: $expectedKey
-  experimentId: $expectedExperimentId
-  isExperimentActive: $expectedIsExperimentActive
 
-Actual:
-  key: ${variant.key}  $keyMatch
+                final alertText = '''Flag: $flagName
+
+Details:
+  key: ${variant.key}
   value: ${variant.value}
-  experimentId: ${variant.experimentId}  $expIdMatch
-  isExperimentActive: ${variant.isExperimentActive}  $activeMatch
-  isQaTester: ${variant.isQaTester}
+  experimentId: ${variant.experimentId ?? 'null'}
+  isExperimentActive: ${variant.isExperimentActive ?? 'null'}
+  isQaTester: ${variant.isQaTester ?? 'null'}
   source: $sourceLabel''';
+
                 _showAlert(context, "Full Variant: $flagName", alertText);
               },
             ),
           ),
-          SizedBox(
-            height: 20,
+          const SizedBox(height: 30),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 40),
+            child: Divider(),
           ),
+          const SizedBox(height: 10),
           SizedBox(
             width: MediaQuery.of(context).size.width * 0.65,
             child: MixpanelButton(
@@ -170,23 +276,19 @@ Actual:
               },
             ),
           ),
-          SizedBox(
-            height: 20,
-          ),
+          const SizedBox(height: 20),
           SizedBox(
             width: MediaQuery.of(context).size.width * 0.65,
             child: MixpanelButton(
               text: 'Load Flags',
               onPressed: () async {
                 await _flags.loadFlags();
-                _showAlert(context, "Load Flags",
-                    "Flags reload triggered successfully");
+                _showAlert(
+                    context, "Load Flags", "Flags reload triggered successfully");
               },
             ),
           ),
-          SizedBox(
-            height: 40,
-          ),
+          const SizedBox(height: 40),
         ],
       )),
     );

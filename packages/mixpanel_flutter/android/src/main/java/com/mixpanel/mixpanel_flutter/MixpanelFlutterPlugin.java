@@ -819,10 +819,31 @@ public class MixpanelFlutterPlugin implements FlutterPlugin, MethodCallHandler {
             map.put("persistedAtMillis", ((MixpanelFlagVariant.Source.Persistence) source).persistedAtMillis);
         } else if (source instanceof MixpanelFlagVariant.Source.Network) {
             map.put("kind", "network");
-        } else {
+        } else if (source instanceof MixpanelFlagVariant.Source.Fallback) {
             map.put("kind", "fallback");
+            map.put("reason", fallbackReasonToString(((MixpanelFlagVariant.Source.Fallback) source).reason));
+        } else {
+            // Defensive fallback for unknown source types
+            map.put("kind", "fallback");
+            map.put("reason", "flagNotFound");
         }
         return map;
+    }
+
+    private String fallbackReasonToString(MixpanelFlagVariant.Source.Fallback.Reason reason) {
+        if (reason == null) {
+            return "flagNotFound"; // safe default
+        }
+        switch (reason) {
+            case NOT_READY:
+                return "notReady";
+            case FLAG_NOT_FOUND:
+                return "flagNotFound";
+            case BACKEND_ERROR:
+                return "backendError";
+            default:
+                return "flagNotFound";
+        }
     }
 
     private VariantLookupPolicy parseVariantLookupPolicy(Map<String, Object> policyMap) {
