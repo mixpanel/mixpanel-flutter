@@ -786,6 +786,91 @@ void main() {
         ),
       );
     });
+
+    test('check trackScreenView call', () async {
+      _mixpanel.autocapture.trackScreenView('HomeScreen');
+      expect(
+        methodCall,
+        isMethodCall(
+          'trackScreenView',
+          arguments: <String, dynamic>{
+            'screenName': 'HomeScreen',
+            'properties': null,
+          },
+        ),
+      );
+    });
+
+    test('check trackScreenView with properties call', () async {
+      _mixpanel.autocapture
+          .trackScreenView('HomeScreen', properties: {'prop1': 'value1'});
+      expect(
+        methodCall,
+        isMethodCall(
+          'trackScreenView',
+          arguments: <String, dynamic>{
+            'screenName': 'HomeScreen',
+            'properties': {'prop1': 'value1'},
+          },
+        ),
+      );
+    });
+
+    test('check trackScreenView with empty screenName is not called', () async {
+      methodCall = null;
+      _mixpanel.autocapture.trackScreenView('');
+      expect(methodCall, isNull);
+    });
+
+    test('check trackScreenView with whitespace screenName is not called',
+        () async {
+      methodCall = null;
+      _mixpanel.autocapture.trackScreenView('   ');
+      expect(methodCall, isNull);
+    });
+
+    test('check trackScreenLeave call', () async {
+      _mixpanel.autocapture.trackScreenLeave('HomeScreen');
+      expect(
+        methodCall,
+        isMethodCall(
+          'trackScreenLeave',
+          arguments: <String, dynamic>{
+            'screenName': 'HomeScreen',
+            'properties': null,
+          },
+        ),
+      );
+    });
+
+    test('check trackScreenLeave with properties call', () async {
+      _mixpanel.autocapture
+          .trackScreenLeave('HomeScreen', properties: {'prop1': 'value1'});
+      expect(
+        methodCall,
+        isMethodCall(
+          'trackScreenLeave',
+          arguments: <String, dynamic>{
+            'screenName': 'HomeScreen',
+            'properties': {'prop1': 'value1'},
+          },
+        ),
+      );
+    });
+
+    test('check trackScreenLeave with empty screenName is not called',
+        () async {
+      methodCall = null;
+      _mixpanel.autocapture.trackScreenLeave('');
+      expect(methodCall, isNull);
+    });
+
+    test('check trackScreenLeave with whitespace screenName is not called',
+        () async {
+      methodCall = null;
+      _mixpanel.autocapture.trackScreenLeave('   ');
+      expect(methodCall, isNull);
+    });
   });
 
   group('Helper validation tests (via public API)', () {

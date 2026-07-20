@@ -1421,7 +1421,7 @@ class Autocapture {
 class _MixpanelHelper {
   static isValidString(String input) {
     // ignore: unnecessary_null_comparison
-    return input != null && input.isNotEmpty;
+    return input != null && input.trim().isNotEmpty;
   }
 
   /// Converts complex types to basic types for web platform
