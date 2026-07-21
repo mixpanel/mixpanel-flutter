@@ -441,6 +441,7 @@ class Mixpanel {
   final String _token;
   final People _people;
   final FeatureFlags _featureFlags;
+  Autocapture? _autocapture;
 
   Mixpanel(String token)
       : _token = token,
@@ -658,6 +659,13 @@ class Mixpanel {
   /// Returns a FeatureFlags object that can be used to access feature flag values and metadata.
   FeatureFlags getFeatureFlags() {
     return _featureFlags;
+  }
+
+  /// Returns an Autocapture object that can be used to manually track
+  /// screen view and screen leave events with autocapture metadata.
+  Autocapture get autocapture {
+    _autocapture ??= Autocapture();
+    return _autocapture!;
   }
 
   ///  Track an event with specific groups.
@@ -1354,10 +1362,74 @@ class FeatureFlags {
   }
 }
 
+/// Provides methods to manually track screen view and screen leave events
+/// with autocapture metadata.
+///
+/// Access via `mixpanel.autocapture`.
+class Autocapture {
+  // ignore: prefer_const_declarations
+  static final MethodChannel _channel = kIsWeb
+      ? const MethodChannel('mixpanel_flutter')
+      : const MethodChannel(
+          'mixpanel_flutter', StandardMethodCodec(MixpanelMessageCodec()));
+
+  Autocapture();
+
+  /// Tracks a screen view event (`$mp_page_view`) with autocapture metadata.
+  ///
+  /// The event automatically includes `current_page_title` set to [screenName]
+  /// and `$mp_autocapture` set to `true`. These SDK properties override any
+  /// user-provided properties with the same keys.
+  ///
+  /// If [screenName] is empty or whitespace-only, the call is silently ignored.
+  ///
+  /// * [screenName] The name of the screen being viewed
+  /// * [properties] Optional additional properties to include with the event
+  Future<void> trackScreenView(String screenName,
+      {Map<String, dynamic>? properties}) async {
+    if (_MixpanelHelper.isValidString(screenName)) {
+      await _channel.invokeMethod<void>(
+          'trackScreenView', <String, dynamic>{
+        'screenName': screenName,
+        'properties': _MixpanelHelper.ensureSerializableProperties(properties),
+      });
+    } else {
+      developer.log(
+          '`trackScreenView` failed: screenName cannot be blank',
+          name: 'Mixpanel');
+    }
+  }
+
+  /// Tracks a screen leave event (`$mp_page_leave`) with autocapture metadata.
+  ///
+  /// The event automatically includes `current_page_title` set to [screenName]
+  /// and `$mp_autocapture` set to `true`. These SDK properties override any
+  /// user-provided properties with the same keys.
+  ///
+  /// If [screenName] is empty or whitespace-only, the call is silently ignored.
+  ///
+  /// * [screenName] The name of the screen being left
+  /// * [properties] Optional additional properties to include with the event
+  Future<void> trackScreenLeave(String screenName,
+      {Map<String, dynamic>? properties}) async {
+    if (_MixpanelHelper.isValidString(screenName)) {
+      await _channel.invokeMethod<void>(
+          'trackScreenLeave', <String, dynamic>{
+        'screenName': screenName,
+        'properties': _MixpanelHelper.ensureSerializableProperties(properties),
+      });
+    } else {
+      developer.log(
+          '`trackScreenLeave` failed: screenName cannot be blank',
+          name: 'Mixpanel');
+    }
+  }
+}
+
 class _MixpanelHelper {
   static isValidString(String input) {
     // ignore: unnecessary_null_comparison
-    return input != null && input.isNotEmpty;
+    return input != null && input.trim().isNotEmpty;
   }
 
   /// Converts complex types to basic types for web platform

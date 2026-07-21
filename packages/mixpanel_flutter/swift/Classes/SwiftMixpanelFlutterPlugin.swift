@@ -232,6 +232,12 @@ public class SwiftMixpanelFlutterPlugin: NSObject, FlutterPlugin {
         case "getAllVariants":
             handleGetAllVariants(call, result: result)
             break
+        case "trackScreenView":
+            handleTrackScreenView(call, result: result)
+            break
+        case "trackScreenLeave":
+            handleTrackScreenLeave(call, result: result)
+            break
         case "startEventBridge":
             handleStartEventBridge(result)
             break
@@ -445,6 +451,26 @@ public class SwiftMixpanelFlutterPlugin: NSObject, FlutterPlugin {
         result(nil)
     }
     
+    // MARK: - Autocapture
+
+    private func handleTrackScreenView(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+        let arguments = call.arguments as? [String: Any] ?? [String: Any]()
+        let screenName = arguments["screenName"] as! String
+        let properties = arguments["properties"] as? [String: Any]
+        let mpProperties = MixpanelTypeHandler.mixpanelProperties(properties: properties, mixpanelProperties: mixpanelProperties)
+        instance?.autocapture.trackScreenView(screenName: screenName, properties: mpProperties)
+        result(nil)
+    }
+
+    private func handleTrackScreenLeave(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+        let arguments = call.arguments as? [String: Any] ?? [String: Any]()
+        let screenName = arguments["screenName"] as! String
+        let properties = arguments["properties"] as? [String: Any]
+        let mpProperties = MixpanelTypeHandler.mixpanelProperties(properties: properties, mixpanelProperties: mixpanelProperties)
+        instance?.autocapture.trackScreenLeave(screenName: screenName, properties: mpProperties)
+        result(nil)
+    }
+
     // MARK: - People
     func handleSet(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
         let arguments = call.arguments as? [String: Any] ?? [String: Any]()

@@ -201,6 +201,12 @@ public class MixpanelFlutterPlugin implements FlutterPlugin, MethodCallHandler {
             case "getAllVariants":
                 handleGetAllVariants(call, result);
                 break;
+            case "trackScreenView":
+                handleTrackScreenView(call, result);
+                break;
+            case "trackScreenLeave":
+                handleTrackScreenLeave(call, result);
+                break;
             case "startEventBridge":
                 handleStartEventBridge(result);
                 break;
@@ -384,6 +390,40 @@ public class MixpanelFlutterPlugin implements FlutterPlugin, MethodCallHandler {
             return;
         }
         mixpanel.track(eventName, properties);
+        result.success(null);
+    }
+
+    private void handleTrackScreenView(MethodCall call, Result result) {
+        String screenName = call.argument("screenName");
+        Map<String, Object> mapProperties = call.<HashMap<String, Object>>argument("properties");
+        JSONObject properties;
+        try {
+            properties = new JSONObject(mapProperties == null ? EMPTY_HASHMAP : mapProperties);
+            properties = MixpanelFlutterHelper.getMergedProperties(properties, mixpanelProperties);
+        } catch (JSONException e) {
+            result.error("MixpanelFlutterException", e.getLocalizedMessage(), null);
+            return;
+        }
+        if (mixpanel.getAutocapture() != null) {
+            mixpanel.getAutocapture().trackScreenView(screenName, properties);
+        }
+        result.success(null);
+    }
+
+    private void handleTrackScreenLeave(MethodCall call, Result result) {
+        String screenName = call.argument("screenName");
+        Map<String, Object> mapProperties = call.<HashMap<String, Object>>argument("properties");
+        JSONObject properties;
+        try {
+            properties = new JSONObject(mapProperties == null ? EMPTY_HASHMAP : mapProperties);
+            properties = MixpanelFlutterHelper.getMergedProperties(properties, mixpanelProperties);
+        } catch (JSONException e) {
+            result.error("MixpanelFlutterException", e.getLocalizedMessage(), null);
+            return;
+        }
+        if (mixpanel.getAutocapture() != null) {
+            mixpanel.getAutocapture().trackScreenLeave(screenName, properties);
+        }
         result.success(null);
     }
 
