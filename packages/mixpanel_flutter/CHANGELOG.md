@@ -1,5 +1,12 @@
 # Changelog
 
+## [v2.13.0](https://github.com/mixpanel/mixpanel-flutter/tree/v2.13.0) (2026-07-27)
+
+### Features
+- add trackScreenView and trackScreenLeave public APIs ([#265](https://github.com/mixpanel/mixpanel-flutter/pull/265))
+
+[Full Changelog](https://github.com/mixpanel/mixpanel-flutter/compare/v2.12.0...v2.13.0)
+
 ## [v2.12.0](https://github.com/mixpanel/mixpanel-flutter/tree/v2.12.0) (2026-07-17)
 
 ### Features
