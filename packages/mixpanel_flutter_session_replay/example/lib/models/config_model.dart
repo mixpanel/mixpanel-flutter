@@ -15,6 +15,7 @@ class ConfigModel extends ChangeNotifier {
   bool _showDebugMaskOverlay = false;
   bool _autoMaskText = true;
   bool _autoMaskImage = true;
+  bool _enableWireframes = false;
 
   String? _tokenError;
   String? _distinctIdError;
@@ -34,6 +35,7 @@ class ConfigModel extends ChangeNotifier {
   bool get showDebugMaskOverlay => _showDebugMaskOverlay;
   bool get autoMaskText => _autoMaskText;
   bool get autoMaskImage => _autoMaskImage;
+  bool get enableWireframes => _enableWireframes;
 
   String? get tokenError => _tokenError;
   String? get distinctIdError => _distinctIdError;
@@ -102,6 +104,11 @@ class ConfigModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  void setEnableWireframes(bool value) {
+    _enableWireframes = value;
+    notifyListeners();
+  }
+
   /// Validate all fields
   bool validate() {
     bool isValid = true;
@@ -159,6 +166,7 @@ class ConfigModel extends ChangeNotifier {
       showDebugMaskOverlay: _showDebugMaskOverlay,
       autoMaskText: _autoMaskText,
       autoMaskImage: _autoMaskImage,
+      enableWireframes: _enableWireframes,
     );
   }
 }

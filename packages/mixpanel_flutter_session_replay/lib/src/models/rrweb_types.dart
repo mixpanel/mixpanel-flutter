@@ -4,6 +4,14 @@ class RRWebEventType {
   static const int fullSnapshot = 2;
   static const int incrementalSnapshot = 3;
   static const int meta = 4;
+  static const int custom = 5;
+}
+
+/// Tag names for rrweb Custom events (type 5) emitted by this SDK.
+class RRWebCustomTags {
+  /// Wireframe frame — structured list of visible UI elements piggybacked
+  /// on the screenshot pass.
+  static const String wireframe = 'mp_wireframe';
 }
 
 /// rrweb DOM node types

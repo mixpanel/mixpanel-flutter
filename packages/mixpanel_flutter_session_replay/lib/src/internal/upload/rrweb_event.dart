@@ -32,10 +32,47 @@ class RRWebEvent {
     } else if (event.payload is InteractionPayload) {
       final interaction = event.payload as InteractionPayload;
       return _buildInteractionEvent(interaction, event.timestamp);
+    } else if (event.payload is WireframePayload) {
+      final wireframe = event.payload as WireframePayload;
+      return _buildWireframeEvent(wireframe, event.timestamp);
     }
 
     throw UnsupportedError(
       'Unsupported payload type: ${event.payload.runtimeType}',
+    );
+  }
+
+  /// Build rrweb Custom event (type 5) carrying a wireframe frame.
+  ///
+  /// Payload schema is defined by the Mixpanel wireframes spec:
+  /// `{"tag": "mp_wireframe", "payload": {"viewport": [w, h], "elements": [...]}}`
+  static RRWebEvent _buildWireframeEvent(
+    WireframePayload wireframe,
+    DateTime timestamp,
+  ) {
+    return RRWebEvent(
+      type: RRWebEventType.custom,
+      timestamp: timestamp.millisecondsSinceEpoch,
+      data: {
+        'tag': RRWebCustomTags.wireframe,
+        'payload': {
+          'viewport': [wireframe.viewportWidth, wireframe.viewportHeight],
+          'elements': wireframe.elements
+              .map(
+                (e) => {
+                  'role': e.role.wireName,
+                  'text': e.text,
+                  'bounds': [
+                    e.bounds.left.round(),
+                    e.bounds.top.round(),
+                    e.bounds.width.round(),
+                    e.bounds.height.round(),
+                  ],
+                },
+              )
+              .toList(),
+        },
+      },
     );
   }
 

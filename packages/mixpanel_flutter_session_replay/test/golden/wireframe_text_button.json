@@ -1,0 +1,19 @@
+{
+  "viewport": [
+    800,
+    600
+  ],
+  "elements": [
+    {
+      "role": "button",
+      "text": "Cancel",
+      "bounds": [
+        366,
+        276,
+        67,
+        48
+      ],
+      "maskDecision": "none"
+    }
+  ]
+}

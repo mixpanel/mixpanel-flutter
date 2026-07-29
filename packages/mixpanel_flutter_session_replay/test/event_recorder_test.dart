@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import 'dart:ui';
 
 import 'package:clock/clock.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -8,6 +9,9 @@ import 'package:mixpanel_flutter_session_replay/src/internal/logger.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/configuration.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/session.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/session_event.dart';
+import 'package:mixpanel_flutter_session_replay/src/models/wireframe.dart';
+import 'package:mixpanel_flutter_session_replay/src/models/wireframes_options.dart'
+    show MaskDecision;
 
 import 'helpers/in_memory_event_queue.dart';
 
@@ -312,6 +316,71 @@ void main() {
 
         // WHEN / THEN - should not throw
         await recorder.recordInteraction(1, Offset(10, 20));
+      });
+    });
+
+    group('recordWireframe', () {
+      test('saves wireframe event to queue with supplied timestamp', () async {
+        // GIVEN
+        final expectedTimestamp = DateTime.fromMillisecondsSinceEpoch(
+          9000,
+          isUtc: true,
+        );
+        final payload = WireframePayload(
+          viewportWidth: 400,
+          viewportHeight: 800,
+          elements: [
+            WireframeElement(
+              role: WireframeRole.text,
+              text: 'Hello',
+              bounds: const Rect.fromLTWH(0, 0, 40, 20),
+              maskDecision: MaskDecision.none,
+            ),
+          ],
+        );
+
+        // WHEN
+        await recorder.recordWireframe(
+          payload: payload,
+          timestamp: expectedTimestamp,
+        );
+
+        // THEN
+        final oldest = await eventQueue.fetchOldest();
+        final events = await eventQueue.fetchBatch(
+          sessionId: oldest!.sessionId,
+          distinctId: oldest.distinctId,
+          maxBytes: 100000,
+          maxCount: 10,
+        );
+
+        expect(events, hasLength(1));
+        final saved = events.single;
+        expect(saved.type, EventType.wireframe);
+        expect(saved.timestamp, expectedTimestamp);
+        expect(saved.sessionId, session.id);
+        expect(saved.distinctId, defaultDistinctId);
+
+        final wireframe = saved.payload as WireframePayload;
+        expect(wireframe.viewportWidth, 400);
+        expect(wireframe.viewportHeight, 800);
+        expect(wireframe.elements.single.text, 'Hello');
+      });
+
+      test('does not throw on storage error', () async {
+        // GIVEN
+        await eventQueue.dispose();
+        final payload = WireframePayload(
+          viewportWidth: 100,
+          viewportHeight: 100,
+          elements: const [],
+        );
+
+        // WHEN / THEN — should not throw
+        await recorder.recordWireframe(
+          payload: payload,
+          timestamp: clock.now(),
+        );
       });
     });
 

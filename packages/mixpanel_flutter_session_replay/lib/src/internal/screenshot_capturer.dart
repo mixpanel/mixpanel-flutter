@@ -14,6 +14,7 @@ import '../models/masking_directive.dart';
 import 'masking/mask_detector.dart';
 import 'masking/mask_painter.dart';
 import 'native_image_compressor.dart';
+import 'wireframe/wireframe_emitter.dart';
 import 'logger.dart';
 
 /// Compression strategy for captured screenshots.
@@ -46,6 +47,10 @@ class ScreenshotCapturer {
   /// Native image compressor for platform-accelerated JPEG encoding
   final NativeImageCompressor? _nativeCompressor;
 
+  /// Optional wireframe emitter. When non-null, wireframes are collected on
+  /// the same walk as mask detection and enqueued alongside each screenshot.
+  final WireframeEmitter? _wireframeEmitter;
+
   /// Compression strategy to use for production captures.
   /// Change this value to compare performance between strategies.
   CompressionMode compressionMode;
@@ -58,10 +63,12 @@ class ScreenshotCapturer {
     required MixpanelLogger logger,
     required bool debugOverlayEnabled,
     NativeImageCompressor? nativeCompressor,
+    WireframeEmitter? wireframeEmitter,
     this.compressionMode = CompressionMode.nativeJpeg,
   }) : _logger = logger,
        _debugOverlayEnabled = debugOverlayEnabled,
-       _nativeCompressor = nativeCompressor {
+       _nativeCompressor = nativeCompressor,
+       _wireframeEmitter = wireframeEmitter {
     _maskPainter = MaskPainter();
   }
 
@@ -85,6 +92,7 @@ class ScreenshotCapturer {
             ? MaskingDirective(autoMaskTypes: maskTypes)
             : directive,
         trackUnmaskBounds: _debugOverlayEnabled,
+        collectWireframes: _wireframeEmitter != null,
       );
 
       // Using endOfFrame ensures both detectMaskRegions() and toImage() see the same painted state
@@ -191,6 +199,17 @@ class ScreenshotCapturer {
         );
       }
 
+      final rawWireframes = maskResult.rawWireframes;
+      final wireframePayload =
+          (_wireframeEmitter != null && rawWireframes != null)
+          ? _wireframeEmitter.emit(
+              rawElements: rawWireframes,
+              maskRegions: maskRegions,
+              viewport: boundary.size,
+              timestamp: captureTimestamp,
+            )
+          : null;
+
       final totalTime = clock.now().difference(captureStart);
       _logger.debug(
         'Total capture time: ${totalTime.inMilliseconds}ms (${imageWidth}x$imageHeight, ${(compressedBytes.length / 1024).toStringAsFixed(1)}KB)',
@@ -203,6 +222,7 @@ class ScreenshotCapturer {
         maskCount: imageMaskCount,
         timestamp: captureTimestamp,
         maskRegions: maskRegions,
+        wireframes: wireframePayload,
       );
     } catch (e) {
       final totalTime = clock.now().difference(captureStart);

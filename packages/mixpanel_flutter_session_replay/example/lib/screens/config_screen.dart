@@ -245,6 +245,18 @@ class _ConfigScreenState extends State<ConfigScreen> {
                           ? null
                           : configVm.setShowDebugMaskOverlay,
                     ),
+                    const SizedBox(height: 16),
+                    _buildSwitch(
+                      label: 'Enable Wireframes',
+                      value: configVm.enableWireframes,
+                      onChanged: _isInitializing
+                          ? null
+                          : configVm.setEnableWireframes,
+                      subtitle:
+                          'Emit structured element frames alongside screenshots. '
+                          'Sample rules redact SSN/email and strip Bearer tokens; '
+                          'snapshots printed via debugPrint.',
+                    ),
                   ],
                 ),
               ),

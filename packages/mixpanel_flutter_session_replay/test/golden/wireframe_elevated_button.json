@@ -1,0 +1,19 @@
+{
+  "viewport": [
+    800,
+    600
+  ],
+  "elements": [
+    {
+      "role": "button",
+      "text": "Submit",
+      "bounds": [
+        354,
+        276,
+        93,
+        48
+      ],
+      "maskDecision": "none"
+    }
+  ]
+}

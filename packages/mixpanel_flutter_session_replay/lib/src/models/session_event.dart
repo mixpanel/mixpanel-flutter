@@ -1,5 +1,9 @@
 import 'dart:convert';
 import 'dart:typed_data';
+import 'dart:ui' show Rect;
+
+import 'wireframe.dart';
+import 'wireframes_options.dart' show MaskDecision;
 
 /// Event type enum
 enum EventType {
@@ -11,6 +15,9 @@ enum EventType {
 
   /// User tap/click interaction
   interaction,
+
+  /// Wireframe frame (structured list of visible UI elements)
+  wireframe,
 }
 
 /// Sealed base class for event payload (type-safe union)
@@ -42,6 +49,48 @@ class ScreenshotPayload extends EventPayload {
 
   @override
   Map<String, dynamic> toJson() => {'screenshot_data': base64Encode(imageData)};
+}
+
+/// Payload for wireframe events.
+///
+/// Carries a viewport size and an ordered list of visible UI elements
+/// (role/text/bounds/maskDecision). Serialized into a metadata JSON blob;
+/// no binary column.
+class WireframePayload extends EventPayload {
+  WireframePayload({
+    required this.viewportWidth,
+    required this.viewportHeight,
+    required this.elements,
+  });
+
+  /// Viewport width in logical pixels.
+  final int viewportWidth;
+
+  /// Viewport height in logical pixels.
+  final int viewportHeight;
+
+  /// Elements in traversal order.
+  final List<WireframeElement> elements;
+
+  @override
+  Map<String, dynamic> toJson() => {
+    'viewport': [viewportWidth, viewportHeight],
+    'elements': elements
+        .map(
+          (e) => {
+            'role': e.role.wireName,
+            'text': e.text,
+            'bounds': [
+              e.bounds.left.round(),
+              e.bounds.top.round(),
+              e.bounds.width.round(),
+              e.bounds.height.round(),
+            ],
+            'maskDecision': e.maskDecision.index,
+          },
+        )
+        .toList(),
+  };
 }
 
 /// Payload for interaction events
@@ -134,6 +183,29 @@ class SessionReplayEvent {
         }),
         'binary': null,
       };
+    } else if (payload is WireframePayload) {
+      return {
+        'metadata': jsonEncode({
+          'viewport': [payload.viewportWidth, payload.viewportHeight],
+          'elements': payload.elements
+              .map(
+                (e) => {
+                  'role': e.role.index,
+                  'text': e.text,
+                  'bounds': [
+                    e.bounds.left,
+                    e.bounds.top,
+                    e.bounds.width,
+                    e.bounds.height,
+                  ],
+                  'maskDecision': e.maskDecision.index,
+                },
+              )
+              .toList(),
+          'version': 1,
+        }),
+        'binary': null,
+      };
     }
 
     throw UnsupportedError('Unknown payload type: ${payload.runtimeType}');
@@ -156,6 +228,30 @@ class SessionReplayEvent {
       );
     } else if (type == EventType.screenshot) {
       return ScreenshotPayload(imageData: binary!);
+    } else if (type == EventType.wireframe) {
+      final viewport = (json['viewport'] as List).cast<num>();
+      final elements = (json['elements'] as List)
+          .cast<Map<String, dynamic>>()
+          .map((e) {
+            final bounds = (e['bounds'] as List).cast<num>();
+            return WireframeElement(
+              role: WireframeRole.values[e['role'] as int],
+              text: e['text'] as String?,
+              bounds: Rect.fromLTWH(
+                bounds[0].toDouble(),
+                bounds[1].toDouble(),
+                bounds[2].toDouble(),
+                bounds[3].toDouble(),
+              ),
+              maskDecision: MaskDecision.values[e['maskDecision'] as int],
+            );
+          })
+          .toList(growable: false);
+      return WireframePayload(
+        viewportWidth: viewport[0].toInt(),
+        viewportHeight: viewport[1].toInt(),
+        elements: elements,
+      );
     } else {
       // Interaction
       return InteractionPayload(

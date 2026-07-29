@@ -1,5 +1,5 @@
 import 'dart:io' show Platform;
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:mixpanel_flutter_session_replay/mixpanel_flutter_session_replay.dart';
 
 /// Configuration data for SDK initialization
@@ -16,6 +16,7 @@ class SdkConfig {
     required this.showDebugMaskOverlay,
     required this.autoMaskText,
     required this.autoMaskImage,
+    required this.enableWireframes,
   });
 
   final String token;
@@ -29,6 +30,7 @@ class SdkConfig {
   final bool showDebugMaskOverlay;
   final bool autoMaskText;
   final bool autoMaskImage;
+  final bool enableWireframes;
 
   /// Default configuration
   factory SdkConfig.defaultConfig() {
@@ -44,6 +46,7 @@ class SdkConfig {
       showDebugMaskOverlay: false,
       autoMaskText: true,
       autoMaskImage: true,
+      enableWireframes: false,
     );
   }
 
@@ -71,6 +74,22 @@ class SdkConfig {
         mobile: MobileOptions(wifiOnly: wifiOnly),
       ),
       debugOptions: showDebugMaskOverlay ? const DebugOptions() : null,
+      wireframesOptions: enableWireframes
+          ? WireframesOptions(
+              // Sample rules so testers see redact/strip in action.
+              sensitiveRules: [
+                // Redacts SSN-style patterns.
+                RedactRegexRule(RegExp(r'\d{3}-\d{2}-\d{4}'), replacement: '[SSN]'),
+                // Redacts any emails.
+                RedactRegexRule(RegExp(r'\S+@\S+\.\S+'), replacement: '[EMAIL]'),
+                // Drop any text mentioning bearer tokens entirely.
+                const StripRule('Bearer '),
+              ],
+              debugEmitter: (snapshot) {
+                debugPrint('[wireframe] ${snapshot.toJson()}');
+              },
+            )
+          : null,
     );
   }
 }

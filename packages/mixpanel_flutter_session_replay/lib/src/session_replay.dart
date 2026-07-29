@@ -19,6 +19,7 @@ import 'internal/upload/payload_serializer.dart';
 import 'internal/settings/settings_service.dart';
 import 'internal/settings/settings_storage_provider.dart';
 import 'internal/session_replay_coordinator.dart';
+import 'internal/wireframe/wireframe_emitter.dart';
 import 'internal/logger.dart';
 
 /// Mixpanel Session Replay for Flutter
@@ -202,12 +203,23 @@ class MixpanelSessionReplay {
         autoMaskTypes: options.autoMaskedViews,
       );
 
+      // Build wireframe emitter if opted in. One instance per SDK lifetime.
+      final wireframesOptions = options.wireframesOptions;
+      final wireframeEmitter = wireframesOptions != null
+          ? WireframeEmitter(
+              sensitiveRules: wireframesOptions.sensitiveRules,
+              debugEmitter: wireframesOptions.debugEmitter,
+              logger: logger,
+            )
+          : null;
+
       // Create screenshot capturer with native JPEG compression
       final screenshotCapturer = ScreenshotCapturer(
         directive: directive,
         logger: logger,
         debugOverlayEnabled: options.debugOptions?.overlayColors != null,
         nativeCompressor: NativeImageCompressor(),
+        wireframeEmitter: wireframeEmitter,
       );
 
       // Create instance first (before components) so we can reference it in closures

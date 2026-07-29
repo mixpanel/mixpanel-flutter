@@ -97,6 +97,26 @@ class EventRecorder {
     }
   }
 
+  /// Record a wireframe event.
+  ///
+  /// Callers pass the same [timestamp] used for the accompanying screenshot
+  /// so the wireframe and screenshot align in the replay stream.
+  Future<void> recordWireframe({
+    required WireframePayload payload,
+    required DateTime timestamp,
+  }) async {
+    _logger.debug('Recording wireframe (${payload.elements.length} elements)');
+    try {
+      await _saveEventToQueue(
+        type: EventType.wireframe,
+        payload: payload,
+        timestamp: timestamp,
+      );
+    } catch (e) {
+      _logger.error('Failed to record wireframe: $e');
+    }
+  }
+
   /// Record metadata event (screen dimensions)
   ///
   /// Should be called once at the start of a session with the first screenshot dimensions,

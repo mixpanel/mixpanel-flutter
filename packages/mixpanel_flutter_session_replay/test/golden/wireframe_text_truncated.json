@@ -1,0 +1,19 @@
+{
+  "viewport": [
+    800,
+    600
+  ],
+  "elements": [
+    {
+      "role": "text",
+      "text": "This is a long piece of text that should exceed sixty charac…",
+      "bounds": [
+        250,
+        270,
+        300,
+        60
+      ],
+      "maskDecision": "none"
+    }
+  ]
+}

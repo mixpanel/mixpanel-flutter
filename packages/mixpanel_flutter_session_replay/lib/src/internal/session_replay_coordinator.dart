@@ -193,6 +193,7 @@ class SessionReplayCoordinator implements WidgetCoordinator {
         :final height,
         :final timestamp,
         :final maskRegions,
+        :final wireframes,
       ):
         // Update mask regions for debug overlay (only if overlay is enabled)
         // Diff check prevents feedback loop: overlay rebuild → new frame → capture → repeat
@@ -208,6 +209,16 @@ class SessionReplayCoordinator implements WidgetCoordinator {
           height: height,
           timestamp: timestamp,
         );
+
+        // Emit wireframe alongside the screenshot with the same timestamp
+        // so downstream ordering by ID aligns wireframe → matching screenshot.
+        // Null when wireframes are disabled or the emitter deduped this frame.
+        if (wireframes != null) {
+          await _eventRecorder.recordWireframe(
+            payload: wireframes,
+            timestamp: timestamp,
+          );
+        }
       case CaptureFailure(:final error, :final errorMessage):
         _logger.debug(
           'Capture failed: $error - $errorMessage',

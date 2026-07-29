@@ -1,0 +1,85 @@
+{
+  "viewport": [
+    800,
+    600
+  ],
+  "elements": [
+    {
+      "role": "text",
+      "text": null,
+      "bounds": [
+        343,
+        204,
+        113,
+        20
+      ],
+      "maskDecision": "auto"
+    },
+    {
+      "role": "text",
+      "text": "Explicitly unmasked",
+      "bounds": [
+        336,
+        280,
+        128,
+        20
+      ],
+      "maskDecision": "none"
+    },
+    {
+      "role": "image",
+      "text": null,
+      "bounds": [
+        380,
+        308,
+        40,
+        40
+      ],
+      "maskDecision": "explicit"
+    },
+    {
+      "role": "text",
+      "text": null,
+      "bounds": [
+        287,
+        366,
+        25,
+        20
+      ],
+      "maskDecision": "auto"
+    },
+    {
+      "role": "text",
+      "text": "Middle",
+      "bounds": [
+        369,
+        366,
+        44,
+        20
+      ],
+      "maskDecision": "none"
+    },
+    {
+      "role": "text",
+      "text": null,
+      "bounds": [
+        420,
+        366,
+        51,
+        20
+      ],
+      "maskDecision": "explicit"
+    },
+    {
+      "role": "text",
+      "text": null,
+      "bounds": [
+        479,
+        366,
+        33,
+        20
+      ],
+      "maskDecision": "auto"
+    }
+  ]
+}

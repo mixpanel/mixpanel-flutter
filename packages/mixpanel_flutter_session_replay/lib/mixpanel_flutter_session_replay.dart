@@ -17,3 +17,14 @@ export 'src/models/debug_overlay_colors.dart'
     show DebugOptions, DebugOverlayColors;
 export 'src/models/results.dart'
     show InitializationResult, InitializationError, FlushResult, RecordingState;
+export 'src/models/wireframes_options.dart'
+    show
+        WireframesOptions,
+        SensitiveRule,
+        RedactRule,
+        StripRule,
+        RedactRegexRule,
+        StripRegexRule,
+        WireframeSnapshot,
+        WireframeSnapshotElement,
+        MaskDecision;

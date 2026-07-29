@@ -1,7 +1,10 @@
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 
+import '../../models/configuration.dart' show AutoMaskedView;
 import '../../models/masking_directive.dart';
+import '../../models/wireframe.dart';
+import '../../models/wireframes_options.dart' show MaskDecision;
 import '../../widgets/widgets.dart';
 
 /// Mask context propagated down the tree during traversal.
@@ -25,9 +28,16 @@ class MaskDetectionResult {
   /// would cause mask coordinate mismatch (route transitions, overscroll stretch).
   final bool shouldSkipCapture;
 
+  /// Raw wireframe elements collected during the walk. Non-null only when
+  /// `MaskDetector.collectWireframes` was true. Elements carry the initial
+  /// mask decision from the detector; geometric leak prevention and user
+  /// sensitive rules are applied downstream by `WireframeEmitter`.
+  final List<WireframeElement>? rawWireframes;
+
   MaskDetectionResult({
     required this.maskRegions,
     this.shouldSkipCapture = false,
+    this.rawWireframes,
   });
 }
 
@@ -39,20 +49,36 @@ class MaskDetector {
   /// Whether to track unmask region bounds for debug overlay
   final bool trackUnmaskBounds;
 
-  MaskDetector({required this.directive, this.trackUnmaskBounds = false});
+  /// Whether to collect wireframe elements during the walk. When true, the
+  /// result's `rawWireframes` field is populated with the detector's
+  /// initial mask decision per element.
+  final bool collectWireframes;
+
+  MaskDetector({
+    required this.directive,
+    this.trackUnmaskBounds = false,
+    this.collectWireframes = false,
+  });
 
   /// Traverse widget tree and collect mask regions
   ///
   /// Returns MaskDetectionResult with regions and bounds snapshot, or throws on error
   MaskDetectionResult detectMaskRegions(RenderRepaintBoundary boundary) {
     final maskRegions = <MaskRegionInfo>[];
+    final wireframes = collectWireframes ? <WireframeElement>[] : null;
+    // Dedup wireframe emission by RenderObject identity. Non-RenderObjectElements
+    // (Text, MixpanelMask, etc.) return the same descendant render object from
+    // element.renderObject, so without this a single Text emits 2-3 duplicates.
+    final wireframeVisited = collectWireframes
+        ? Set<RenderObject>.identity()
+        : null;
     bool shouldSkipCapture = false;
 
     try {
       // Find the element that owns this boundary
       final boundaryElement = _findElementForRenderObject(boundary);
       if (boundaryElement == null) {
-        return MaskDetectionResult(maskRegions: []);
+        return MaskDetectionResult(maskRegions: [], rawWireframes: wireframes);
       }
 
       // Check for conditions that would cause mask coordinate mismatch
@@ -63,6 +89,8 @@ class MaskDetector {
         boundaryElement,
         boundary,
         maskRegions,
+        wireframes: wireframes,
+        wireframeVisited: wireframeVisited,
         maskContext: MaskContext.none,
         tickerEnabled: true, // Start with enabled (active route)
         viewportBounds: null, // Will be detected and cached during traversal
@@ -75,6 +103,7 @@ class MaskDetector {
     return MaskDetectionResult(
       maskRegions: maskRegions,
       shouldSkipCapture: shouldSkipCapture,
+      rawWireframes: wireframes,
     );
   }
 
@@ -105,6 +134,8 @@ class MaskDetector {
     required bool tickerEnabled,
     Rect?
     viewportBounds, // Cached viewport bounds (detected once, reused for all children)
+    List<WireframeElement>? wireframes,
+    Set<RenderObject>? wireframeVisited,
   }) {
     final widget = element.widget;
 
@@ -233,6 +264,20 @@ class MaskDetector {
       }
     }
 
+    // Wireframe collection — piggyback on the same walk. Uses the same
+    // MaskContext as masking. The detector's initial mask decision is
+    // derived here; geometric leak prevention and user sensitive rules
+    // are applied later by WireframeEmitter.
+    if (wireframes != null && wireframeVisited != null) {
+      _collectWireframeElement(
+        element,
+        boundary,
+        wireframes,
+        maskContext: currentContext,
+        visited: wireframeVisited,
+      );
+    }
+
     // ALWAYS continue traversal to children (traversal never stops early)
     // Using debugVisitOnstageChildren to automatically skip Offstage, hidden Overlays, and inactive IndexedStack children
     element.debugVisitOnstageChildren((child) {
@@ -243,6 +288,8 @@ class MaskDetector {
         maskContext: currentContext,
         tickerEnabled: currentTickerEnabled,
         viewportBounds: currentViewportBounds,
+        wireframes: wireframes,
+        wireframeVisited: wireframeVisited,
       );
     });
   }
@@ -456,6 +503,232 @@ class MaskDetector {
     }
 
     return null;
+  }
+
+  /// Widget type name substrings identifying button-like widgets. Detection
+  /// is intentionally string-based to match the existing idiom in this file
+  /// (see the RenderParagraph / RenderImage / RenderViewport checks) and to
+  /// keep buttons opt-in for common Material/Cupertino types without pulling
+  /// in a semantics tree walk.
+  static const List<String> _buttonWidgetPatterns = [
+    'ElevatedButton',
+    'TextButton',
+    'OutlinedButton',
+    'FilledButton',
+    'IconButton',
+    'FloatingActionButton',
+    'MaterialButton',
+    'CupertinoButton',
+    'RawMaterialButton',
+  ];
+
+  /// Collect at most one wireframe element for [element], with initial
+  /// [MaskDecision] derived from [maskContext] plus widget type.
+  ///
+  /// Elements that don't map to a wireframe role (containers, layout
+  /// widgets, etc.) contribute nothing here — but traversal continues into
+  /// their children so descendants can still emit.
+  void _collectWireframeElement(
+    Element element,
+    RenderRepaintBoundary boundary,
+    List<WireframeElement> out, {
+    required MaskContext maskContext,
+    required Set<RenderObject> visited,
+  }) {
+    final renderObject = element.renderObject;
+    if (renderObject == null || visited.contains(renderObject)) return;
+
+    // Input fields — always masked, cannot be overridden.
+    if (renderObject is RenderEditable) {
+      final bounds = _boundaryRelativeBounds(renderObject, boundary);
+      if (bounds == null) return;
+      visited.add(renderObject);
+      out.add(
+        WireframeElement(
+          role: WireframeRole.input,
+          text: null,
+          bounds: bounds,
+          maskDecision: MaskDecision.textEntry,
+        ),
+      );
+      return;
+    }
+
+    // Buttons — role identified by widget type name. Descendant paragraphs
+    // are absorbed into the button label and marked visited so they don't
+    // re-emit as standalone text elements.
+    if (_isButtonWidget(element.widget)) {
+      final bounds = _boundaryRelativeBounds(renderObject, boundary);
+      if (bounds == null) return;
+      final label = _collectDescendantParagraphText(element, visited);
+      final decision = _wireframeDecision(
+        role: WireframeRole.button,
+        maskContext: maskContext,
+      );
+      visited.add(renderObject);
+      out.add(
+        WireframeElement(
+          role: WireframeRole.button,
+          text: decision == MaskDecision.none ? label : null,
+          bounds: bounds,
+          maskDecision: decision,
+        ),
+      );
+      return;
+    }
+
+    // Text — RenderParagraph.
+    final typeName = renderObject.runtimeType.toString();
+    if (typeName.contains('RenderParagraph')) {
+      final bounds = _boundaryRelativeBounds(renderObject, boundary);
+      if (bounds == null) return;
+      final text = _extractParagraphText(renderObject);
+      final decision = _wireframeDecision(
+        role: WireframeRole.text,
+        maskContext: maskContext,
+      );
+      visited.add(renderObject);
+      out.add(
+        WireframeElement(
+          role: WireframeRole.text,
+          text: decision == MaskDecision.none ? text : null,
+          bounds: bounds,
+          maskDecision: decision,
+        ),
+      );
+      return;
+    }
+
+    // Image — RenderImage.
+    if (typeName.contains('RenderImage')) {
+      final bounds = _boundaryRelativeBounds(renderObject, boundary);
+      if (bounds == null) return;
+      final label = _extractImageLabel(renderObject);
+      final decision = _wireframeDecision(
+        role: WireframeRole.image,
+        maskContext: maskContext,
+      );
+      visited.add(renderObject);
+      out.add(
+        WireframeElement(
+          role: WireframeRole.image,
+          text: decision == MaskDecision.none ? label : null,
+          bounds: bounds,
+          maskDecision: decision,
+        ),
+      );
+      return;
+    }
+  }
+
+  /// Compute bounds relative to the capture boundary. Returns null if the
+  /// element has no size / not attached / doesn't overlap the boundary, or
+  /// if the effective bounds are sub-pixel (nothing meaningful to emit).
+  Rect? _boundaryRelativeBounds(
+    RenderObject node,
+    RenderRepaintBoundary boundary,
+  ) {
+    if (node is! RenderBox) return null;
+    if (!node.hasSize || !node.attached) return null;
+    try {
+      final transform = node.getTransformTo(boundary);
+      final bounds = MatrixUtils.transformRect(transform, node.paintBounds);
+      final boundaryBounds = Rect.fromLTWH(
+        0,
+        0,
+        boundary.size.width,
+        boundary.size.height,
+      );
+      if (!boundaryBounds.overlaps(bounds)) return null;
+      final clipped = bounds.intersect(boundaryBounds);
+      if (clipped.width < 1 || clipped.height < 1) return null;
+      return clipped;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Initial mask decision for a wireframe element. Buttons/text/images
+  /// inside a `MixpanelMask` subtree are `explicit`. Text/image widgets are
+  /// further evaluated against `autoMaskTypes`. `MaskContext.unmask`
+  /// cascades safety down — descendants use `none`.
+  MaskDecision _wireframeDecision({
+    required WireframeRole role,
+    required MaskContext maskContext,
+  }) {
+    if (maskContext == MaskContext.mask) return MaskDecision.explicit;
+    if (maskContext == MaskContext.unmask) return MaskDecision.none;
+    // MaskContext.none — apply auto-mask rules.
+    switch (role) {
+      case WireframeRole.text:
+        return directive.autoMaskTypes.contains(AutoMaskedView.text)
+            ? MaskDecision.auto
+            : MaskDecision.none;
+      case WireframeRole.image:
+        return directive.autoMaskTypes.contains(AutoMaskedView.image)
+            ? MaskDecision.auto
+            : MaskDecision.none;
+      case WireframeRole.button:
+      case WireframeRole.input:
+        return MaskDecision.none;
+    }
+  }
+
+  bool _isButtonWidget(Widget widget) {
+    final name = widget.runtimeType.toString();
+    for (final pattern in _buttonWidgetPatterns) {
+      if (name.contains(pattern)) return true;
+    }
+    return false;
+  }
+
+  /// Walk descendants of [buttonElement] and join text from any
+  /// `RenderParagraph` found. Skips `RenderEditable` so a masked text field
+  /// nested in a button never leaks into the button's label. Marks each
+  /// consumed paragraph in [visited] so it doesn't re-emit as a standalone
+  /// text element.
+  String? _collectDescendantParagraphText(
+    Element buttonElement,
+    Set<RenderObject> visited,
+  ) {
+    final buffer = <String>[];
+    void visit(Element child) {
+      final renderObject = child.renderObject;
+      if (renderObject != null &&
+          renderObject is! RenderEditable &&
+          !visited.contains(renderObject)) {
+        final typeName = renderObject.runtimeType.toString();
+        if (typeName.contains('RenderParagraph')) {
+          visited.add(renderObject);
+          final text = _extractParagraphText(renderObject);
+          if (text.isNotEmpty) buffer.add(text);
+        }
+      }
+      child.debugVisitOnstageChildren(visit);
+    }
+
+    buttonElement.debugVisitOnstageChildren(visit);
+    if (buffer.isEmpty) return null;
+    return buffer.join(' ');
+  }
+
+  String _extractParagraphText(RenderObject node) {
+    try {
+      final text = (node as dynamic).text as InlineSpan?;
+      return text?.toPlainText() ?? '';
+    } catch (_) {
+      return '';
+    }
+  }
+
+  String? _extractImageLabel(RenderObject node) {
+    try {
+      final label = (node as dynamic).semanticLabel as String?;
+      if (label == null || label.isEmpty) return null;
+      return label;
+    } catch (_) {
+      return null;
+    }
   }
 }
 

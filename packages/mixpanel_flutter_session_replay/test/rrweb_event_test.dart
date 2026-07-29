@@ -1,10 +1,14 @@
 import 'dart:convert';
 import 'dart:typed_data';
+import 'dart:ui';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/upload/rrweb_event.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/rrweb_types.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/session_event.dart';
+import 'package:mixpanel_flutter_session_replay/src/models/wireframe.dart';
+import 'package:mixpanel_flutter_session_replay/src/models/wireframes_options.dart'
+    show MaskDecision;
 
 void main() {
   group('RRWebEvent', () {
@@ -133,6 +137,114 @@ void main() {
           imgNode!['attributes']['src'],
           'data:image/png;base64,$expectedBase64',
         );
+      });
+
+      test('converts wireframe event to rrweb Custom event', () {
+        // GIVEN — Notion spec sample payload
+        final timestampMs = 1_749_317_600_000;
+        final event = SessionReplayEvent(
+          sessionId: 'session-1',
+          distinctId: 'user-1',
+          timestamp: DateTime.fromMillisecondsSinceEpoch(
+            timestampMs,
+            isUtc: true,
+          ),
+          type: EventType.wireframe,
+          payload: WireframePayload(
+            viewportWidth: 1080,
+            viewportHeight: 1920,
+            elements: [
+              WireframeElement(
+                role: WireframeRole.text,
+                text: 'Welcome',
+                bounds: const Rect.fromLTWH(24, 120, 400, 40),
+                maskDecision: MaskDecision.none,
+              ),
+              WireframeElement(
+                role: WireframeRole.input,
+                text: null,
+                bounds: const Rect.fromLTWH(40, 600, 400, 48),
+                maskDecision: MaskDecision.textEntry,
+              ),
+              WireframeElement(
+                role: WireframeRole.button,
+                text: 'Continue',
+                bounds: const Rect.fromLTWH(40, 800, 300, 56),
+                maskDecision: MaskDecision.none,
+              ),
+              WireframeElement(
+                role: WireframeRole.image,
+                text: 'avatar',
+                bounds: const Rect.fromLTWH(24, 40, 64, 64),
+                maskDecision: MaskDecision.none,
+              ),
+            ],
+          ),
+        );
+
+        // WHEN
+        final rrweb = RRWebEvent.fromSessionReplayEvent(event);
+
+        // THEN — Custom event with wireframe tag
+        expect(rrweb.type, RRWebEventType.custom);
+        expect(rrweb.timestamp, timestampMs);
+        expect(rrweb.data['tag'], RRWebCustomTags.wireframe);
+        final payload = rrweb.data['payload'] as Map<String, dynamic>;
+        expect(payload['viewport'], [1080, 1920]);
+        final elements = payload['elements'] as List;
+        expect(elements, hasLength(4));
+        expect(elements[0], {
+          'role': 'text',
+          'text': 'Welcome',
+          'bounds': [24, 120, 400, 40],
+        });
+        expect(elements[1], {
+          'role': 'input',
+          'text': null,
+          'bounds': [40, 600, 400, 48],
+        });
+        expect(elements[2], {
+          'role': 'button',
+          'text': 'Continue',
+          'bounds': [40, 800, 300, 56],
+        });
+        expect(elements[3], {
+          'role': 'image',
+          'text': 'avatar',
+          'bounds': [24, 40, 64, 64],
+        });
+      });
+
+      test('wireframe event preserves null text as JSON null', () {
+        // GIVEN — element with masked (null) text
+        final event = SessionReplayEvent(
+          sessionId: 'session-1',
+          distinctId: 'user-1',
+          timestamp: DateTime.fromMillisecondsSinceEpoch(1000, isUtc: true),
+          type: EventType.wireframe,
+          payload: WireframePayload(
+            viewportWidth: 100,
+            viewportHeight: 100,
+            elements: [
+              WireframeElement(
+                role: WireframeRole.text,
+                text: null,
+                bounds: const Rect.fromLTWH(0, 0, 10, 10),
+                maskDecision: MaskDecision.geometric,
+              ),
+            ],
+          ),
+        );
+
+        // WHEN — round-trip through JSON to verify null survives
+        final rrweb = RRWebEvent.fromSessionReplayEvent(event);
+        final encoded = jsonEncode(rrweb.toJson());
+        final decoded = jsonDecode(encoded) as Map<String, dynamic>;
+
+        // THEN
+        final payload = decoded['data']['payload'] as Map<String, dynamic>;
+        final elements = payload['elements'] as List;
+        expect(elements.single['text'], isNull);
       });
 
       test('screenshot DOM structure has expected node IDs', () {
