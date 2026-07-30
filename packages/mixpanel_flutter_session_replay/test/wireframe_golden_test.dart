@@ -390,6 +390,77 @@ void main() {
     );
   });
 
+  group('WireframeGolden — declared wireframe text', () {
+    testWidgets(
+      'MixpanelMask(wireframeText:) survives masking on the direct child',
+      (tester) async {
+        // Declared text is orthogonal to masking: the pixels are grayed but the
+        // authored label is emitted on the direct child (the image here) with
+        // MaskDecision.none + declared. It rides the child's real role + bounds,
+        // so the RawImage must be the DIRECT child to classify as role image (a
+        // SizedBox wrapper would classify as role text).
+        final testImage = await createColoredSquareImage(size: 80);
+        await captureWireframeGolden(
+          tester,
+          MixpanelMask(
+            wireframeText: 'profile photo',
+            child: RawImage(image: testImage, width: 80, height: 80),
+          ),
+          'wireframe_declared_mask_image.json',
+          {},
+        );
+      },
+    );
+
+    testWidgets('MixpanelUnmask(wireframeText:) labels custom-drawn content', (
+      tester,
+    ) async {
+      // CustomPaint has no scrapeable text; the declared label describes it.
+      // Not a button, not an image → role text.
+      await captureWireframeGolden(
+        tester,
+        const MixpanelUnmask(
+          wireframeText: 'monthly spend',
+          child: SizedBox(width: 120, height: 60, child: Placeholder()),
+        ),
+        'wireframe_declared_unmask_custom.json',
+        {},
+      );
+    });
+
+    testWidgets('declared text on a button child adopts the button role', (
+      tester,
+    ) async {
+      // The declared text replaces the scraped "Submit" label and the element
+      // is classified against the button child (role button), not the marker.
+      await captureWireframeGolden(
+        tester,
+        MixpanelMask(
+          wireframeText: 'checkout action',
+          child: ElevatedButton(onPressed: () {}, child: const Text('Submit')),
+        ),
+        'wireframe_declared_button.json',
+        {},
+      );
+    });
+
+    testWidgets('declared text still runs through SensitiveRules', (
+      tester,
+    ) async {
+      // Layer 3 safety net: a StripRule matching the authored label nulls it.
+      await captureWireframeGolden(
+        tester,
+        const MixpanelUnmask(
+          wireframeText: 'card 4111 secret',
+          child: Text('anything'),
+        ),
+        'wireframe_declared_rule_stripped.json',
+        {},
+        sensitiveRules: const [StripRule('secret')],
+      );
+    });
+  });
+
   group('WireframeGolden — truncation', () {
     testWidgets('text longer than 60 chars is truncated with ellipsis', (
       tester,

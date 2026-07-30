@@ -137,6 +137,8 @@ class MaskDetector {
     List<WireframeElement>? wireframes,
     Set<RenderObject>? wireframeVisited,
     String? enclosingImageLabel,
+    String?
+    declaredText, // Developer-declared wireframe text handed down from an enclosing marker to its DIRECT child (one level only)
   }) {
     final widget = element.widget;
 
@@ -278,11 +280,31 @@ class MaskDetector {
       }
     }
 
+    // Developer-declared wireframe text rides on MixpanelMask/MixpanelUnmask
+    // via their `wireframeText`. It is handed to the marker's DIRECT child (one
+    // level only — unlike mask context, it does NOT cascade further down) so
+    // the declared element carries the child's real role + bounds.
+    //
+    // When a marker declares text we suppress its OWN wireframe emission: a
+    // marker is a `StatelessWidget` with no render object of its own, so
+    // `element.renderObject` resolves to the child's render object. Letting the
+    // marker collect would consume (and mark visited) that shared render object
+    // first, and the direct child — which knows its true role (e.g. button) —
+    // could never apply the declared text.
+    final String? childDeclaredText = widget is MixpanelMask
+        ? widget.wireframeText
+        : widget is MixpanelUnmask
+        ? widget.wireframeText
+        : null;
+    final bool declaresChildText = childDeclaredText != null;
+
     // Wireframe collection — piggyback on the same walk. Uses the same
     // MaskContext as masking. The detector's initial mask decision is
     // derived here; geometric leak prevention and user sensitive rules
-    // are applied later by WireframeEmitter.
-    if (wireframes != null && wireframeVisited != null) {
+    // are applied later by WireframeEmitter. `declaredText` (from an enclosing
+    // declaring marker, i.e. this element is that marker's direct child) is
+    // applied to this element's role + bounds.
+    if (wireframes != null && wireframeVisited != null && !declaresChildText) {
       _collectWireframeElement(
         element,
         boundary,
@@ -290,6 +312,7 @@ class MaskDetector {
         maskContext: currentContext,
         visited: wireframeVisited,
         imageLabel: currentImageLabel,
+        declaredText: declaredText,
       );
     }
 
@@ -306,6 +329,9 @@ class MaskDetector {
         wireframes: wireframes,
         wireframeVisited: wireframeVisited,
         enclosingImageLabel: currentImageLabel,
+        // Only a declaring marker passes text down (to its direct child); every
+        // other node passes null so declared text never cascades past one level.
+        declaredText: childDeclaredText,
       );
     });
   }
@@ -551,9 +577,51 @@ class MaskDetector {
     required MaskContext maskContext,
     required Set<RenderObject> visited,
     String? imageLabel,
+    String? declaredText,
   }) {
     final renderObject = element.renderObject;
     if (renderObject == null || visited.contains(renderObject)) return;
+
+    // Developer-declared text (from an enclosing MixpanelMask/MixpanelUnmask
+    // `wireframeText`) is applied to this element — the marker's direct child —
+    // with the child's real role + bounds. Declared text is authored, not
+    // scraped: it is emitted with `MaskDecision.none` and `declared: true`, so
+    // downstream it bypasses the geometric strip (surviving even when the marker
+    // masks the pixels) but still runs through user SensitiveRules.
+    //
+    // Input fields are exempt — RenderEditable security masking can never be
+    // overridden — so they fall through to the normal input handling below.
+    if (declaredText != null && renderObject is! RenderEditable) {
+      final bounds = _boundaryRelativeBounds(renderObject, boundary);
+      if (bounds == null) return;
+      final WireframeRole role;
+      if (_isButtonWidget(element.widget)) {
+        role = WireframeRole.button;
+        // Consume descendant paragraphs / nested buttons so the button's own
+        // label doesn't re-emit as standalone elements — same as the normal
+        // button path, but the declared text replaces the scraped label.
+        _collectDescendantParagraphText(element, visited);
+        _markNestedButtonsVisited(element, visited);
+      } else {
+        final typeName = renderObject.runtimeType.toString();
+        role = typeName.contains('RenderImage')
+            ? WireframeRole.image
+            // RenderParagraph, custom-drawn content (CustomPaint/Canvas), or any
+            // other opaque render object the developer explicitly labeled.
+            : WireframeRole.text;
+      }
+      visited.add(renderObject);
+      out.add(
+        WireframeElement(
+          role: role,
+          text: declaredText,
+          bounds: bounds,
+          maskDecision: MaskDecision.none,
+          declared: true,
+        ),
+      );
+      return;
+    }
 
     // Input fields — always masked, cannot be overridden.
     if (renderObject is RenderEditable) {

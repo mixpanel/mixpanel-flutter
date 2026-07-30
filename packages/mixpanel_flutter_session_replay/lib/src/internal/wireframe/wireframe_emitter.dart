@@ -83,6 +83,12 @@ class WireframeEmitter {
     WireframeElement el,
     List<MaskRegionInfo> maskRegions,
   ) {
+    // Developer-declared text is authored, not scraped from the pixels, so it
+    // is exempt from the geometric strip — including its own mask region. It
+    // survives even when the element is masked (the pixels are still grayed by
+    // that region; the label still describes the element for the AI summary).
+    // User rules below still run over it as a safety net.
+    if (el.declared) return el;
     if (el.maskDecision != MaskDecision.none) return el;
     for (final region in maskRegions) {
       if (region.bounds.overlaps(el.bounds)) {
@@ -152,6 +158,10 @@ class WireframeEmitter {
   /// Elements already masked (`maskDecision != none`) have null text and
   /// pass through untouched.
   WireframeElement _cleanText(WireframeElement el) {
+    // Declared text is authored by the developer, not scraped, so it is taken
+    // verbatim — no blank/glyph normalization. (An empty declared string is
+    // simply passed through; developers who want no text omit `wireframeText`.)
+    if (el.declared) return el;
     final text = el.text;
     if (text == null) return el;
     if (text.trim().isEmpty) return el.copyWith(clearText: true);

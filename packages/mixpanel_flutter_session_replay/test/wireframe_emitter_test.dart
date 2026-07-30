@@ -21,11 +21,13 @@ void main() {
     String? text = 'hello',
     Rect bounds = const Rect.fromLTWH(0, 0, 100, 20),
     MaskDecision maskDecision = MaskDecision.none,
+    bool declared = false,
   }) => WireframeElement(
     role: role,
     text: text,
     bounds: bounds,
     maskDecision: maskDecision,
+    declared: declared,
   );
 
   group('WireframeEmitter — passthrough', () {
@@ -443,6 +445,137 @@ void main() {
 
       // THEN
       expect(payload!.elements, hasLength(1));
+    });
+  });
+
+  group('WireframeEmitter — declared text', () {
+    test('declared text survives geometric overlap with a mask region', () {
+      // GIVEN — a declared element fully covered by a mask region. Masking grays
+      // the pixels via that region, but authored text is exempt from the strip.
+      final emitter = WireframeEmitter(
+        sensitiveRules: const [],
+        debugEmitter: null,
+        logger: logger,
+      );
+      final input = [
+        el(
+          role: WireframeRole.image,
+          text: 'profile photo',
+          bounds: const Rect.fromLTWH(0, 0, 100, 100),
+          declared: true,
+        ),
+      ];
+      final masks = [
+        MaskRegionInfo(const Rect.fromLTWH(0, 0, 100, 100), MaskSource.manual),
+      ];
+
+      // WHEN
+      final payload = emitter.emit(
+        rawElements: input,
+        maskRegions: masks,
+        viewport: defaultViewport,
+        timestamp: defaultTimestamp,
+      );
+
+      // THEN — text preserved, decision stays none (not geometric)
+      expect(payload!.elements.single.text, 'profile photo');
+      expect(payload.elements.single.maskDecision, MaskDecision.none);
+    });
+
+    test('declared text is not glyph/blank-cleaned (taken verbatim)', () {
+      // GIVEN — authored text that _cleanText would normally reject if scraped
+      final emitter = WireframeEmitter(
+        sensitiveRules: const [],
+        debugEmitter: null,
+        logger: logger,
+      );
+      final glyph = String.fromCharCode(0xe57f);
+      final input = [
+        el(role: WireframeRole.button, text: glyph, declared: true),
+      ];
+
+      // WHEN
+      final payload = emitter.emit(
+        rawElements: input,
+        maskRegions: const [],
+        viewport: defaultViewport,
+        timestamp: defaultTimestamp,
+      );
+
+      // THEN — authored glyph string kept verbatim (developer's responsibility)
+      expect(payload!.elements.single.text, glyph);
+    });
+
+    test('declared text is still stripped by a matching StripRule', () {
+      // GIVEN — Layer 3 safety net still applies to declared text
+      final emitter = WireframeEmitter(
+        sensitiveRules: const [StripRule('secret')],
+        debugEmitter: null,
+        logger: logger,
+      );
+      final input = [el(text: 'top secret label', declared: true)];
+
+      // WHEN
+      final payload = emitter.emit(
+        rawElements: input,
+        maskRegions: const [],
+        viewport: defaultViewport,
+        timestamp: defaultTimestamp,
+      );
+
+      // THEN
+      expect(payload!.elements.single.text, isNull);
+      expect(payload.elements.single.maskDecision, MaskDecision.ruleStrip);
+    });
+
+    test('declared text is still redacted by a matching RedactRule', () {
+      // GIVEN
+      final emitter = WireframeEmitter(
+        sensitiveRules: const [
+          RedactRule('foo@bar.com', replacement: '[EMAIL]'),
+        ],
+        debugEmitter: null,
+        logger: logger,
+      );
+      final input = [el(text: 'ping foo@bar.com', declared: true)];
+
+      // WHEN
+      final payload = emitter.emit(
+        rawElements: input,
+        maskRegions: const [],
+        viewport: defaultViewport,
+        timestamp: defaultTimestamp,
+      );
+
+      // THEN
+      expect(payload!.elements.single.text, 'ping [EMAIL]');
+      expect(payload.elements.single.maskDecision, MaskDecision.ruleRedact);
+    });
+
+    test('declared text is still truncated when over the max length', () {
+      // GIVEN — 70-char authored label
+      final emitter = WireframeEmitter(
+        sensitiveRules: const [],
+        debugEmitter: null,
+        logger: logger,
+      );
+      final long = 'a' * 70;
+      final input = [el(text: long, declared: true)];
+
+      // WHEN
+      final payload = emitter.emit(
+        rawElements: input,
+        maskRegions: const [],
+        viewport: defaultViewport,
+        timestamp: defaultTimestamp,
+      );
+
+      // THEN
+      expect(
+        payload!.elements.single.text!.length,
+        WireframeConstants.maxTextLength + 1,
+      );
+      expect(payload.elements.single.text!.endsWith('…'), isTrue);
     });
   });
 

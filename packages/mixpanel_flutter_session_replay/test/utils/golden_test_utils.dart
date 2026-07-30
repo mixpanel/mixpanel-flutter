@@ -300,6 +300,9 @@ String _wireframePayloadToPrettyJson(WireframePayload payload) {
               e.bounds.height.round(),
             ],
             'maskDecision': e.maskDecision.name,
+            // Emitted only when set so existing (non-declared) goldens are
+            // unchanged; declared goldens surface the developer-authored intent.
+            if (e.declared) 'declared': true,
           },
         )
         .toList(),

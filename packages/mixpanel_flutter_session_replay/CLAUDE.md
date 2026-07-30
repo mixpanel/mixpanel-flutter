@@ -170,4 +170,49 @@ must all follow it — see the same section in the Android session-replay
   `wireframe_floating_action_button_unlabeled.json`, plus new label-fallback
   goldens `wireframe_icon_button_tooltip_label.json`,
   `wireframe_icon_button_semantic_label.json`,
-  `wireframe_image_semantic_label.json`.
+  `wireframe_image_semantic_label.json`. Declared wireframe text is supported
+  via `MixpanelMask(wireframeText:)` / `MixpanelUnmask(wireframeText:)` — see
+  the decision record below.
+
+## Declared wireframe text vs. masking (decided 2026-07-30)
+
+Masking and developer-declared text are **orthogonal**. This mirrors the
+Android/iOS `mpReplay(sensitive:wireframeText:)` design and must stay in parity;
+Flutter has no view/modifier extension, so the entry point is a parameter on the
+existing masking widgets instead.
+
+- Entry points: `MixpanelMask(wireframeText: String?, child:)` and
+  `MixpanelUnmask(wireframeText: String?, child:)`. No new wrapper widget — the
+  declared text rides the marker the developer already reaches for.
+- **Applied to the marker's DIRECT CHILD, not a synthetic node at the wrapper.**
+  A `MixpanelMask`/`MixpanelUnmask` `StatelessElement` has no render object of
+  its own — `element.renderObject` resolves to the child's. The walk visits the
+  marker before its children, so a declaring marker's own
+  `_collectWireframeElement` is **suppressed** and the text is threaded one level
+  down (`_traverseElementTree(declaredText:)` → `_collectWireframeElement`), where
+  the child's real render geometry and role are used. Role is classified from the
+  child: button widgets → `button` (nested paragraphs/buttons marked visited so
+  the scraped label doesn't double-emit), `RenderImage` → `image`, otherwise
+  `text`.
+- `WireframeElement.declared` marks text authored by the developer rather than
+  scraped. Declared elements are emitted with `maskDecision: none` + `declared:
+  true` and are **exempt from the Layer 2 geometric strip** (including their own
+  mask region) and from `_cleanText` blank/glyph normalization in
+  `WireframeEmitter` — the text is taken verbatim. It survives even when the
+  child is masked (the pixels are still grayed by the mask region; the label
+  still describes the element for the AI summary). **Layer 3 `SensitiveRules`
+  still run** over declared text as a safety net, and truncation still applies.
+- **`RenderEditable` children are never labeled.** `wireframeText` is ignored for
+  `TextField`/`CupertinoTextField` — inputs stay masked/textless (`textEntry`)
+  by security design; declared text cannot override that.
+- Rationale: masking is an opaque rectangle over the pixels, not a blur — the
+  pixels are never captured. Declared text is not read from those pixels, so
+  masking has no bearing on it. It is the developer's responsibility to ensure
+  `wireframeText` is not itself sensitive; if it could be, omit it.
+- Tests: `WireframeEmitter — declared text` unit group (survives geometric
+  overlap; not glyph/blank-cleaned; still stripped/redacted by rules; still
+  truncated) and the `WireframeGolden — declared wireframe text` goldens
+  (`wireframe_declared_mask_image.json`, `wireframe_declared_unmask_custom.json`,
+  `wireframe_declared_button.json`, `wireframe_declared_rule_stripped.json`).
+  Golden JSON carries `declared: true` only when set, so pre-existing goldens are
+  byte-identical.

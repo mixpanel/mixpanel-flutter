@@ -25,6 +25,7 @@ class WireframeElement {
     required this.text,
     required this.bounds,
     required this.maskDecision,
+    this.declared = false,
   });
 
   /// Element role.
@@ -43,6 +44,17 @@ class WireframeElement {
   /// Which layer produced this element's text state.
   final MaskDecision maskDecision;
 
+  /// Whether [text] was authored by the developer (via
+  /// `MixpanelMask(wireframeText:)` / `MixpanelUnmask(wireframeText:)`) rather
+  /// than scraped from the widget.
+  ///
+  /// Declared text is orthogonal to masking: it is **exempt from the geometric
+  /// strip** (including its own mask region), so it survives even when the
+  /// pixels are masked — masking hides the pixels while the declared text still
+  /// describes the element for the AI summary. User `SensitiveRule`s still run
+  /// over it as a safety net.
+  final bool declared;
+
   /// Return a copy with the given fields replaced.
   WireframeElement copyWith({
     WireframeRole? role,
@@ -50,12 +62,14 @@ class WireframeElement {
     bool clearText = false,
     Rect? bounds,
     MaskDecision? maskDecision,
+    bool? declared,
   }) {
     return WireframeElement(
       role: role ?? this.role,
       text: clearText ? null : (text ?? this.text),
       bounds: bounds ?? this.bounds,
       maskDecision: maskDecision ?? this.maskDecision,
+      declared: declared ?? this.declared,
     );
   }
 
@@ -66,10 +80,11 @@ class WireframeElement {
           role == other.role &&
           text == other.text &&
           bounds == other.bounds &&
-          maskDecision == other.maskDecision;
+          maskDecision == other.maskDecision &&
+          declared == other.declared;
 
   @override
-  int get hashCode => Object.hash(role, text, bounds, maskDecision);
+  int get hashCode => Object.hash(role, text, bounds, maskDecision, declared);
 }
 
 /// Shared wireframe constants.

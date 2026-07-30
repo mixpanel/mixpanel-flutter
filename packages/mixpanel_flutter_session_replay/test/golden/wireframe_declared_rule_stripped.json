@@ -1,0 +1,20 @@
+{
+  "viewport": [
+    800,
+    600
+  ],
+  "elements": [
+    {
+      "role": "text",
+      "text": null,
+      "bounds": [
+        372,
+        290,
+        55,
+        20
+      ],
+      "maskDecision": "ruleStrip",
+      "declared": true
+    }
+  ]
+}

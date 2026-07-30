@@ -1,0 +1,20 @@
+{
+  "viewport": [
+    800,
+    600
+  ],
+  "elements": [
+    {
+      "role": "text",
+      "text": "monthly spend",
+      "bounds": [
+        340,
+        270,
+        120,
+        60
+      ],
+      "maskDecision": "none",
+      "declared": true
+    }
+  ]
+}
