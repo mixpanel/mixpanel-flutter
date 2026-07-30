@@ -1,8 +1,6 @@
 @Tags(['golden'])
 library;
 
-import 'dart:typed_data';
-
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -118,15 +116,49 @@ void main() {
       );
     });
 
-    testWidgets('IconButton without a label is dropped as noise', (
+    testWidgets('IconButton without a label emits a textless button shell', (
       tester,
     ) async {
-      // The icon renders as a Material Icons private-use codepoint, which
-      // carries no useful text for the AI. Noise-drop removes it entirely.
+      // The icon renders as a Material Icons private-use codepoint, which is
+      // not human-readable text. Per the Wireframe Capture Contract the glyph
+      // is nulled but the button shell (role + bounds) is still emitted.
       await captureWireframeGolden(
         tester,
         IconButton(onPressed: () {}, icon: const Icon(Icons.settings)),
-        'wireframe_icon_button_dropped.json',
+        'wireframe_icon_button_unlabeled.json',
+        {},
+      );
+    });
+
+    testWidgets('IconButton falls back to its tooltip as the button label', (
+      tester,
+    ) async {
+      // No visible text, but the Tooltip message is an accessibility label the
+      // AI can use. Unmasked → the shell carries the tooltip text.
+      await captureWireframeGolden(
+        tester,
+        IconButton(
+          onPressed: () {},
+          tooltip: 'Open settings',
+          icon: const Icon(Icons.settings),
+        ),
+        'wireframe_icon_button_tooltip_label.json',
+        {},
+      );
+    });
+
+    testWidgets('IconButton falls back to the Icon semanticLabel', (
+      tester,
+    ) async {
+      // The icon exposes a semanticLabel; with no visible text and no tooltip
+      // it becomes the button label.
+      await captureWireframeGolden(
+        tester,
+        IconButton(
+          onPressed: () {},
+          icon: const Icon(Icons.add, semanticLabel: 'Add item'),
+        ),
+        'wireframe_icon_button_semantic_label.json',
         {},
       );
     });
@@ -140,30 +172,54 @@ void main() {
       );
     });
 
-    testWidgets('FloatingActionButton with only an icon is dropped as noise', (
-      tester,
-    ) async {
-      await captureWireframeGolden(
-        tester,
-        FloatingActionButton(onPressed: () {}, child: const Icon(Icons.add)),
-        'wireframe_floating_action_button_dropped.json',
-        {},
-      );
-    });
+    testWidgets(
+      'FloatingActionButton with only an icon emits a textless button shell',
+      (tester) async {
+        await captureWireframeGolden(
+          tester,
+          FloatingActionButton(onPressed: () {}, child: const Icon(Icons.add)),
+          'wireframe_floating_action_button_unlabeled.json',
+          {},
+        );
+      },
+    );
   });
 
   group('WireframeGolden — images', () {
-    testWidgets('Image without a semantic label is dropped as noise', (
+    testWidgets('Image without a semantic label emits a textless image shell', (
       tester,
     ) async {
+      // No semantics label → text is null, but the image shell (role + bounds)
+      // is still emitted as meaningful structure. RawImage with a synchronously
+      // created ui.Image keeps the golden deterministic (no async decode).
+      final testImage = await createColoredSquareImage(size: 80);
       await captureWireframeGolden(
         tester,
-        SizedBox(
-          width: 80,
-          height: 80,
-          child: Image(image: MemoryImage(_transparentPng)),
+        SizedBox(width: 80, height: 80, child: RawImage(image: testImage)),
+        'wireframe_image_unlabeled.json',
+        {},
+      );
+    });
+
+    testWidgets('Image falls back to its semanticLabel as the image text', (
+      tester,
+    ) async {
+      // Mirrors the runtime structure Image(semanticLabel:) produces — the
+      // label lives on an enclosing Semantics(image: true), not on RenderImage.
+      // Unmasked → the label populates the image element's text.
+      final testImage = await createColoredSquareImage(size: 80);
+      await captureWireframeGolden(
+        tester,
+        Semantics(
+          image: true,
+          label: 'Company logo',
+          child: SizedBox(
+            width: 80,
+            height: 80,
+            child: RawImage(image: testImage),
+          ),
         ),
-        'wireframe_image_unlabeled_dropped.json',
+        'wireframe_image_semantic_label.json',
         {},
       );
     });
@@ -350,17 +406,3 @@ void main() {
     });
   });
 }
-
-/// 1x1 transparent PNG used to test Image widget wireframing without
-/// depending on real asset loading.
-final _transparentPng = Uint8List.fromList(const [
-  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, //
-  0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52, //
-  0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, //
-  0x08, 0x06, 0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4, //
-  0x89, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x44, 0x41, //
-  0x54, 0x78, 0x9c, 0x63, 0x00, 0x01, 0x00, 0x00, //
-  0x05, 0x00, 0x01, 0x0d, 0x0a, 0x2d, 0xb4, 0x00, //
-  0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44, 0xae, //
-  0x42, 0x60, 0x82,
-]);

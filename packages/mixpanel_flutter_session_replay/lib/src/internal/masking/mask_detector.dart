@@ -136,6 +136,7 @@ class MaskDetector {
     viewportBounds, // Cached viewport bounds (detected once, reused for all children)
     List<WireframeElement>? wireframes,
     Set<RenderObject>? wireframeVisited,
+    String? enclosingImageLabel,
   }) {
     final widget = element.widget;
 
@@ -208,6 +209,19 @@ class MaskDetector {
       return; // Skip this widget and all children
     }
 
+    // Track the nearest enclosing image accessibility label so a descendant
+    // `RenderImage` can adopt it. The `Image` widget applies `semanticLabel`
+    // by wrapping its `RawImage` in `Semantics(image: true, label: ...)` — the
+    // label is NOT on `RenderImage` itself — so we thread it DOWN the walk
+    // (never walking up). Gating on `image == true` targets image semantics
+    // only, so a generic `Semantics(label:)` around other content doesn't leak
+    // onto images. Cleared by a nested image-Semantics with an empty label.
+    String? currentImageLabel = enclosingImageLabel;
+    if (widget is Semantics && widget.properties.image == true) {
+      final label = widget.properties.label;
+      currentImageLabel = (label != null && label.isNotEmpty) ? label : null;
+    }
+
     // --- Masking decision ---
     MaskContext currentContext = maskContext;
 
@@ -275,6 +289,7 @@ class MaskDetector {
         wireframes,
         maskContext: currentContext,
         visited: wireframeVisited,
+        imageLabel: currentImageLabel,
       );
     }
 
@@ -290,6 +305,7 @@ class MaskDetector {
         viewportBounds: currentViewportBounds,
         wireframes: wireframes,
         wireframeVisited: wireframeVisited,
+        enclosingImageLabel: currentImageLabel,
       );
     });
   }
@@ -534,6 +550,7 @@ class MaskDetector {
     List<WireframeElement> out, {
     required MaskContext maskContext,
     required Set<RenderObject> visited,
+    String? imageLabel,
   }) {
     final renderObject = element.renderObject;
     if (renderObject == null || visited.contains(renderObject)) return;
@@ -556,20 +573,32 @@ class MaskDetector {
 
     // Buttons — role identified by widget type name. Descendant paragraphs
     // are absorbed into the button label and marked visited so they don't
-    // re-emit as standalone text elements.
+    // re-emit as standalone text elements. An icon-only button carries no
+    // visible text, so when unmasked we fall back to an accessibility label
+    // (tooltip / semanticLabel). The descendant walk always runs — even
+    // when masked — so its paragraphs are consumed and never re-emit as
+    // separate shells.
     if (_isButtonWidget(element.widget)) {
       final bounds = _boundaryRelativeBounds(renderObject, boundary);
       if (bounds == null) return;
-      final label = _collectDescendantParagraphText(element, visited);
       final decision = _wireframeDecision(
         role: WireframeRole.button,
         maskContext: maskContext,
       );
+      final visibleLabel = _collectDescendantParagraphText(element, visited);
+      final label = decision == MaskDecision.none
+          ? (visibleLabel ?? _collectDescendantSemanticLabel(element))
+          : null;
       visited.add(renderObject);
+      // Composite buttons build on inner buttons (e.g. FloatingActionButton
+      // wraps a RawMaterialButton). Mark those nested button render objects
+      // visited so the ongoing top-down walk doesn't emit them as duplicate
+      // shells now that textless shells are kept.
+      _markNestedButtonsVisited(element, visited);
       out.add(
         WireframeElement(
           role: WireframeRole.button,
-          text: decision == MaskDecision.none ? label : null,
+          text: label,
           bounds: bounds,
           maskDecision: decision,
         ),
@@ -599,11 +628,13 @@ class MaskDetector {
       return;
     }
 
-    // Image — RenderImage.
+    // Image — RenderImage. The accessibility label comes from the enclosing
+    // `Semantics(image: true, label: ...)` threaded down as [imageLabel] (the
+    // `Image` widget puts the label there, not on `RenderImage`).
     if (typeName.contains('RenderImage')) {
       final bounds = _boundaryRelativeBounds(renderObject, boundary);
       if (bounds == null) return;
-      final label = _extractImageLabel(renderObject);
+      final label = imageLabel;
       final decision = _wireframeDecision(
         role: WireframeRole.image,
         maskContext: maskContext,
@@ -687,6 +718,12 @@ class MaskDetector {
   /// nested in a button never leaks into the button's label. Marks each
   /// consumed paragraph in [visited] so it doesn't re-emit as a standalone
   /// text element.
+  ///
+  /// Bare icon glyphs (an [Icon] renders as a `RenderParagraph` holding a
+  /// single private-use codepoint) are still consumed and marked visited —
+  /// so they never re-emit — but are NOT added to the label, since a glyph
+  /// is not human-readable text. Such buttons fall back to
+  /// [_collectDescendantSemanticLabel].
   String? _collectDescendantParagraphText(
     Element buttonElement,
     Set<RenderObject> visited,
@@ -701,7 +738,9 @@ class MaskDetector {
         if (typeName.contains('RenderParagraph')) {
           visited.add(renderObject);
           final text = _extractParagraphText(renderObject);
-          if (text.isNotEmpty) buffer.add(text);
+          if (text.isNotEmpty && wireframeTextIsHumanReadable(text)) {
+            buffer.add(text);
+          }
         }
       }
       child.debugVisitOnstageChildren(visit);
@@ -712,22 +751,85 @@ class MaskDetector {
     return buffer.join(' ');
   }
 
+  /// Best-effort human-readable label for an icon-only [buttonElement],
+  /// pulled from accessibility metadata in its subtree. Priority order
+  /// (first non-empty match in traversal order wins): a `Tooltip` message,
+  /// an [Icon]/[ImageIcon] `semanticLabel`, then a `Semantics(label:)`.
+  /// Returns null when none is set.
+  ///
+  /// Only descendants are inspected — never walks up — consistent with the
+  /// traversal performance rules. Callers must gate this on an unmasked
+  /// decision so a masked button stays textless. `Tooltip` is matched by
+  /// runtime-type name (it lives in the Material library, which this file
+  /// intentionally does not import) with a dynamic property read.
+  String? _collectDescendantSemanticLabel(Element buttonElement) {
+    String? found;
+    void visit(Element child) {
+      if (found != null) return;
+      final widget = child.widget;
+      if (widget is Icon) {
+        final label = widget.semanticLabel;
+        if (label != null && label.isNotEmpty) {
+          found = label;
+          return;
+        }
+      } else if (widget is ImageIcon) {
+        final label = widget.semanticLabel;
+        if (label != null && label.isNotEmpty) {
+          found = label;
+          return;
+        }
+      } else if (widget is Semantics) {
+        final label = widget.properties.label;
+        if (label != null && label.isNotEmpty) {
+          found = label;
+          return;
+        }
+      } else if (widget.runtimeType.toString() == 'Tooltip') {
+        try {
+          final message = (widget as dynamic).message as String?;
+          if (message != null && message.isNotEmpty) {
+            found = message;
+            return;
+          }
+        } catch (_) {
+          // Not the Material Tooltip we expected — ignore and keep walking.
+        }
+      }
+      child.debugVisitOnstageChildren(visit);
+    }
+
+    buttonElement.debugVisitOnstageChildren(visit);
+    return found;
+  }
+
+  /// Mark the render objects of any nested button-like widgets in
+  /// [buttonElement]'s subtree as visited so the ongoing top-down traversal
+  /// skips them. Composite buttons (e.g. `FloatingActionButton` →
+  /// `RawMaterialButton`) are built from inner button widgets that would
+  /// otherwise emit as duplicate shells now that textless shells are kept.
+  /// Descendants only — never walks up.
+  void _markNestedButtonsVisited(
+    Element buttonElement,
+    Set<RenderObject> visited,
+  ) {
+    void visit(Element child) {
+      if (_isButtonWidget(child.widget)) {
+        final renderObject = child.renderObject;
+        if (renderObject != null) visited.add(renderObject);
+      }
+      child.debugVisitOnstageChildren(visit);
+    }
+
+    buttonElement.debugVisitOnstageChildren(visit);
+  }
+
   String _extractParagraphText(RenderObject node) {
     try {
       final text = (node as dynamic).text as InlineSpan?;
       return text?.toPlainText() ?? '';
     } catch (_) {
       return '';
-    }
-  }
-
-  String? _extractImageLabel(RenderObject node) {
-    try {
-      final label = (node as dynamic).semanticLabel as String?;
-      if (label == null || label.isEmpty) return null;
-      return label;
-    } catch (_) {
-      return null;
     }
   }
 }

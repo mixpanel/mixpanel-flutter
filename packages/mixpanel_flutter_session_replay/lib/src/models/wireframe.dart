@@ -81,3 +81,19 @@ class WireframeConstants {
   /// Ellipsis appended to truncated text.
   static const String ellipsis = '…';
 }
+
+/// True if [text] contains at least one character outside the Unicode
+/// private-use area (U+E000–U+F8FF), where icon fonts place their glyphs.
+///
+/// A string that fails this check is a bare icon glyph (e.g. a Material
+/// Icons codepoint), not human-readable content. Two callers rely on this:
+/// the mask detector, which refuses to treat an icon glyph as a button
+/// label, and the emitter, which nulls such text on the wire so the AI
+/// never receives a garbage glyph. The element's role + bounds shell is
+/// kept regardless — see the Wireframe Capture Contract.
+bool wireframeTextIsHumanReadable(String text) {
+  for (final rune in text.runes) {
+    if (rune < 0xE000 || rune > 0xF8FF) return true;
+  }
+  return false;
+}

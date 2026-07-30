@@ -16,6 +16,17 @@
       "maskDecision": "auto"
     },
     {
+      "role": "image",
+      "text": null,
+      "bounds": [
+        380,
+        232,
+        40,
+        40
+      ],
+      "maskDecision": "none"
+    },
+    {
       "role": "text",
       "text": "Explicitly unmasked",
       "bounds": [
@@ -47,6 +58,17 @@
         20
       ],
       "maskDecision": "auto"
+    },
+    {
+      "role": "image",
+      "text": null,
+      "bounds": [
+        321,
+        356,
+        40,
+        40
+      ],
+      "maskDecision": "none"
     },
     {
       "role": "text",

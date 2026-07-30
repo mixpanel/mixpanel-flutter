@@ -119,3 +119,55 @@ These concerns have been reviewed and resolved. Do not re-raise them in code rev
 12. **Silent failures in EventRecorder** — Graceful degradation pattern. Session replay SDK should never crash the host app.
 
 13. **No double-dispose protection** — Fixed. Both `UploadService` and `SettingsService` have `_isDisposed` guards.
+
+## Wireframe Capture Contract (decided 2026-07-29)
+
+Cross-platform contract for the `mp_wireframe` event. Android, Flutter, and iOS
+must all follow it — see the same section in the Android session-replay
+`CLAUDE.md`. The Notion design doc should be updated to match.
+
+- **Only four semantic roles are emitted:** `text`, `button`, `input`, `image`.
+  Layout/containers (`Row`/`Column`/`Container`/`Padding`, and their Android/iOS
+  equivalents) are never emitted. The payload is a flat list of
+  `{role, text?, bounds}`, not a view hierarchy.
+- **Every collected element is emitted, even when textless.** A textless
+  `button`/`input`/`image` is meaningful structure — e.g. two textless `input`
+  shells + a `Log in` button reads as a login form. Existence + position + role
+  is not customer content, so an element is never dropped merely for lacking
+  text. (Input fields are always textless by security design — `textEntry`.)
+- **Text population depends on screenshot masking, not element type:**
+  - *Not screenshot-masked* → `text` = visible text; if absent, fall back to the
+    platform accessibility label (Flutter `semanticLabel` / `Tooltip` /
+    `Semantics(label:)`; Android `contentDescription`). Then run user
+    `SensitiveRules` over the result. Rationale: if it's visible it's already in
+    the unmasked screenshot; the customer's lever is masking the view.
+  - *Screenshot-masked* (explicit `MixpanelMask`, auto text/image mask,
+    geometric overlap, input `textEntry`) → keep the `role + bounds` shell with
+    `text = null`. Nothing hidden on the screenshot leaves the device.
+- **Never ship raw icon glyphs.** Private-use-area codepoints (U+E000–U+F8FF,
+  icon fonts) are not human text — null them; resolve to a real accessibility
+  label when one exists.
+- **Masking vs. rules are distinct.** A *screenshot mask* grays pixels → drop
+  text (shell kept). *SensitiveRules* are a wireframe-only text filter (pixels
+  still visible) → element kept; strip nulls text, redact rewrites it.
+- **Accepted residual risk:** an accessibility label can describe more than
+  what's visible (an icon whose `contentDescription` holds PII), and the
+  customer gets no visual cue to mask it. Mitigation: `SensitiveRules` run over
+  label text, and customer docs note that labels are captured. Screenshot-masked
+  views never expose labels.
+
+**Platform alignment status (2026-07-30):**
+- Android — aligned: emits textless shells and reads `contentDescription`.
+- Flutter — aligned: the emitter keeps every collected element as a
+  `role + bounds` shell (no drop stage; blank/glyph-only text is nulled but the
+  shell is kept — see `WireframeEmitter._cleanText`). Buttons fall back to a
+  descendant `Icon.semanticLabel` / `Tooltip.message` / `Semantics(label:)`, and
+  images read the label from the enclosing `Semantics(image: true)` threaded
+  down the walk (`_traverseElementTree(enclosingImageLabel:)`), since
+  `RenderImage` carries no `semanticLabel`. Goldens updated to the emitted-shell
+  form: `wireframe_icon_button_unlabeled.json`,
+  `wireframe_image_unlabeled.json`,
+  `wireframe_floating_action_button_unlabeled.json`, plus new label-fallback
+  goldens `wireframe_icon_button_tooltip_label.json`,
+  `wireframe_icon_button_semantic_label.json`,
+  `wireframe_image_semantic_label.json`.

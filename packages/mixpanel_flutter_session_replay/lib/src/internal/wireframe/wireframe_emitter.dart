@@ -7,9 +7,14 @@ import '../../models/wireframes_options.dart';
 import '../logger.dart';
 
 /// Post-processes raw wireframe elements (from the [MaskDetector] walk)
-/// by applying geometric leak prevention and user rules, then truncation,
-/// noise-drop and dedup, invokes the optional debug callback, and returns
-/// a [WireframePayload] ready to enqueue.
+/// by applying geometric leak prevention and user rules, then text cleaning
+/// (null bare icon glyphs / blank text) and truncation, dedup, invokes the
+/// optional debug callback, and returns a [WireframePayload] ready to
+/// enqueue.
+///
+/// Per the Wireframe Capture Contract, every collected semantic element is
+/// emitted — a textless `button`/`input`/`image` is meaningful structure
+/// (role + bounds), so elements are never dropped merely for lacking text.
 ///
 /// One instance per SDK lifetime; dedup state is per-emitter (not per
 /// session).
@@ -38,15 +43,18 @@ class WireframeEmitter {
     required Size viewport,
     required DateTime timestamp,
   }) {
-    // Geometric masking → user rules → truncation → noise-drop, per element.
+    // Geometric masking → user rules → text cleaning → truncation, per
+    // element. No drop stage: textless elements are kept as role + bounds
+    // shells (see [_cleanText] and the Wireframe Capture Contract).
     final processed = rawElements
         .map((el) => _applyGeometricMasking(el, maskRegions))
         .map(_applyRules)
+        .map(_cleanText)
         .map(_truncate)
-        .where(_isMeaningful)
         .toList(growable: false);
 
-    // Nothing meaningful survived; skip emit rather than shipping empty payload.
+    // No elements were collected at all; skip rather than shipping an empty
+    // payload. (Individual textless elements are NOT dropped.)
     if (processed.isEmpty) return null;
 
     // Dedup check against previous emit. Both must be unchanged to skip.
@@ -132,28 +140,25 @@ class WireframeEmitter {
     return el;
   }
 
-  /// True if [el] carries information the AI or a human reviewer can't
-  /// already glean from the accompanying screenshot. Elements with any
-  /// mask decision other than [MaskDecision.none] always qualify — the
-  /// decision itself explains a masked area. Otherwise, the element must
-  /// carry at least one non-glyph character of text; a bare `role`+`bounds`
-  /// entry (e.g. an icon-only button rendered as a private-use codepoint
-  /// or an image with no semantic label) adds nothing beyond what's
-  /// visible in the screenshot.
-  static bool _isMeaningful(WireframeElement el) {
-    if (el.maskDecision != MaskDecision.none) return true;
+  /// Normalizes an unmasked element's text for the wire without dropping the
+  /// element:
+  /// - blank / whitespace-only text → null
+  /// - bare icon-font glyphs (private-use codepoints only) → null
+  ///
+  /// Text carrying any human-readable character is kept verbatim (e.g. a
+  /// button labeled "Settings ⚙" keeps its label). The element itself is
+  /// always retained — a textless `button`/`input`/`image` is meaningful
+  /// structure (role + bounds), per the Wireframe Capture Contract.
+  /// Elements already masked (`maskDecision != none`) have null text and
+  /// pass through untouched.
+  WireframeElement _cleanText(WireframeElement el) {
     final text = el.text;
-    if (text == null || text.isEmpty) return false;
-    return _hasNonGlyphChar(text);
-  }
-
-  /// True if [text] contains at least one character outside the Unicode
-  /// private-use area (U+E000–U+F8FF), where icon fonts live.
-  static bool _hasNonGlyphChar(String text) {
-    for (final rune in text.runes) {
-      if (rune < 0xE000 || rune > 0xF8FF) return true;
+    if (text == null) return el;
+    if (text.trim().isEmpty) return el.copyWith(clearText: true);
+    if (!wireframeTextIsHumanReadable(text)) {
+      return el.copyWith(clearText: true);
     }
-    return false;
+    return el;
   }
 
   /// Truncate long text to [WireframeConstants.maxTextLength] chars plus

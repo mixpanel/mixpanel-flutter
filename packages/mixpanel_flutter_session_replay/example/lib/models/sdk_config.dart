@@ -79,9 +79,15 @@ class SdkConfig {
               // Sample rules so testers see redact/strip in action.
               sensitiveRules: [
                 // Redacts SSN-style patterns.
-                RedactRegexRule(RegExp(r'\d{3}-\d{2}-\d{4}'), replacement: '[SSN]'),
+                RedactRegexRule(
+                  RegExp(r'\d{3}-\d{2}-\d{4}'),
+                  replacement: '[SSN]',
+                ),
                 // Redacts any emails.
-                RedactRegexRule(RegExp(r'\S+@\S+\.\S+'), replacement: '[EMAIL]'),
+                RedactRegexRule(
+                  RegExp(r'\S+@\S+\.\S+'),
+                  replacement: '[EMAIL]',
+                ),
                 // Drop any text mentioning bearer tokens entirely.
                 const StripRule('Bearer '),
               ],

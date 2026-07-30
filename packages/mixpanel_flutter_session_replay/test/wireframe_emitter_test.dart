@@ -354,7 +354,7 @@ void main() {
     });
   });
 
-  group('WireframeEmitter — noise drop', () {
+  group('WireframeEmitter — text cleaning keeps textless shells', () {
     WireframeEmitter freshEmitter() => WireframeEmitter(
       sensitiveRules: const [],
       debugEmitter: null,
@@ -380,7 +380,7 @@ void main() {
       expect(payload!.elements, hasLength(1));
     });
 
-    test('drops element with mask decision none and null text', () {
+    test('keeps unmasked null-text element as a textless shell', () {
       // GIVEN — unmasked image with no semantic label
       final payload = freshEmitter().emit(
         rawElements: [el(role: WireframeRole.image, text: null)],
@@ -389,11 +389,14 @@ void main() {
         timestamp: defaultTimestamp,
       );
 
-      // THEN — deduped to null (only element was noise)
-      expect(payload, isNull);
+      // THEN — the image shell (role + bounds) is emitted with null text
+      expect(payload!.elements, hasLength(1));
+      expect(payload.elements.single.role, WireframeRole.image);
+      expect(payload.elements.single.text, isNull);
+      expect(payload.elements.single.maskDecision, MaskDecision.none);
     });
 
-    test('drops element with mask decision none and empty text', () {
+    test('keeps element with empty text, nulling the text', () {
       // GIVEN
       final payload = freshEmitter().emit(
         rawElements: [el(text: '')],
@@ -402,11 +405,12 @@ void main() {
         timestamp: defaultTimestamp,
       );
 
-      // THEN
-      expect(payload, isNull);
+      // THEN — shell kept; blank text normalized to null
+      expect(payload!.elements, hasLength(1));
+      expect(payload.elements.single.text, isNull);
     });
 
-    test('drops element whose text is only unicode private-use glyphs', () {
+    test('keeps icon-glyph-only element as a shell, nulling the glyph', () {
       // GIVEN — icon-only button rendered as a Material Icons codepoint
       final payload = freshEmitter().emit(
         rawElements: [
@@ -417,8 +421,10 @@ void main() {
         timestamp: defaultTimestamp,
       );
 
-      // THEN
-      expect(payload, isNull);
+      // THEN — button shell kept; unreadable glyph nulled
+      expect(payload!.elements, hasLength(1));
+      expect(payload.elements.single.role, WireframeRole.button);
+      expect(payload.elements.single.text, isNull);
     });
 
     test('keeps element with mixed glyph + regular text', () {
