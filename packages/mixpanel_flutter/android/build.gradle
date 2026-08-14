@@ -25,8 +25,11 @@ rootProject.allprojects {
 apply plugin: 'com.android.library'
 
 def agpMajor = com.android.Version.ANDROID_GRADLE_PLUGIN_VERSION.tokenize('.')[0].toInteger()
+// android.builtInKotlin lets a project opt out of AGP 9's built-in Kotlin and fall back to the
+// standalone plugin, so it must be honored in addition to the AGP version.
+def builtInKotlin = agpMajor >= 9 && project.findProperty('android.builtInKotlin') != 'false'
 
-if (agpMajor < 9) {
+if (!builtInKotlin) {
     apply plugin: 'kotlin-android'
 }
 
@@ -48,18 +51,24 @@ android {
         targetCompatibility JavaVersion.VERSION_17
     }
 
-    kotlin {
-        compilerOptions {
-            jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
-            // mixpanel-android-common:1.0.1 is published with Kotlin 2.0
-            // metadata. Flutter's gradle integration picks a KGP version we
-            // can't reliably control from this module's buildscript, so a
-            // Kotlin 1.9.x compiler often ends up compiling this plugin and
-            // chokes on the newer metadata. The bytecode itself is
-            // forward-compatible (the consumed APIs are just a Flow and a
-            // data class), so suppressing the metadata version check is the
-            // canonical workaround.
-            freeCompilerArgs.add('-Xskip-metadata-version-check')
+    // mixpanel-android-common:1.0.1 is published with Kotlin 2.0 metadata. Flutter's gradle
+    // integration picks a KGP version we can't reliably control from this module's buildscript,
+    // so a Kotlin 1.9.x compiler often ends up compiling this plugin and chokes on the newer
+    // metadata. The bytecode itself is forward-compatible (the consumed APIs are just a Flow and
+    // a data class), so suppressing the metadata version check is the canonical workaround.
+    if (builtInKotlin) {
+        // JvmTarget.JVM_17 needs KGP 1.8.0+; only safe here because AGP 9's built-in Kotlin
+        // doesn't use this module's own (older) pinned kotlin_version.
+        kotlin {
+            compilerOptions {
+                jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
+                freeCompilerArgs.add('-Xskip-metadata-version-check')
+            }
+        }
+    } else {
+        kotlinOptions {
+            jvmTarget = '17'
+            freeCompilerArgs += ['-Xskip-metadata-version-check']
         }
     }
 
