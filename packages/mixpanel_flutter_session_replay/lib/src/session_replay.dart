@@ -208,7 +208,7 @@ class MixpanelSessionReplay {
       final wireframeEmitter = wireframesOptions != null
           ? WireframeEmitter(
               sensitiveRules: wireframesOptions.sensitiveRules,
-              debugEmitter: wireframesOptions.debugEmitter,
+              debugEmitter: options.debugOptions?.wireframeEmitter,
               logger: logger,
             )
           : null;
@@ -220,6 +220,8 @@ class MixpanelSessionReplay {
         debugOverlayEnabled: options.debugOptions?.overlayColors != null,
         nativeCompressor: NativeImageCompressor(),
         wireframeEmitter: wireframeEmitter,
+        useAccessibilityLabelFallback:
+            wireframesOptions?.useAccessibilityLabelFallback ?? true,
       );
 
       // Create instance first (before components) so we can reference it in closures

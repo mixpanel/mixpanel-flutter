@@ -73,7 +73,18 @@ class SdkConfig {
       platformOptions: PlatformOptions(
         mobile: MobileOptions(wifiOnly: wifiOnly),
       ),
-      debugOptions: showDebugMaskOverlay ? const DebugOptions() : null,
+      debugOptions: (showDebugMaskOverlay || enableWireframes)
+          ? DebugOptions(
+              overlayColors: showDebugMaskOverlay
+                  ? const DebugOverlayColors()
+                  : null,
+              wireframeEmitter: enableWireframes
+                  ? (snapshot) {
+                      debugPrint('[wireframe] ${snapshot.toJson()}');
+                    }
+                  : null,
+            )
+          : null,
       wireframesOptions: enableWireframes
           ? WireframesOptions(
               // Sample rules so testers see redact/strip in action.
@@ -91,9 +102,6 @@ class SdkConfig {
                 // Drop any text mentioning bearer tokens entirely.
                 const StripRule('Bearer '),
               ],
-              debugEmitter: (snapshot) {
-                debugPrint('[wireframe] ${snapshot.toJson()}');
-              },
             )
           : null,
     );

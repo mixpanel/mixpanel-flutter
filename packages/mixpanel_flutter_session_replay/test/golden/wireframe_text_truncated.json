@@ -6,12 +6,12 @@
   "elements": [
     {
       "role": "text",
-      "text": "This is a long piece of text that should exceed sixty charac…",
+      "text": "This is a long piece of text that should exceed t…",
       "bounds": [
         250,
-        270,
+        280,
         300,
-        60
+        40
       ],
       "maskDecision": "none"
     }

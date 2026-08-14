@@ -199,6 +199,7 @@ Future<void> captureWireframeGolden(
   String goldenFileName,
   Set<AutoMaskedView> maskTypes, {
   List<SensitiveRule> sensitiveRules = const [],
+  bool useAccessibilityLabelFallback = true,
   double width = 300,
   double height = 200,
 }) async {
@@ -234,6 +235,7 @@ Future<void> captureWireframeGolden(
     directive: MaskingDirective(autoMaskTypes: maskTypes),
     trackUnmaskBounds: false,
     collectWireframes: true,
+    useAccessibilityLabelFallback: useAccessibilityLabelFallback,
   );
   final maskResult = detector.detectMaskRegions(boundary);
   if (maskResult.shouldSkipCapture) {
@@ -300,9 +302,6 @@ String _wireframePayloadToPrettyJson(WireframePayload payload) {
               e.bounds.height.round(),
             ],
             'maskDecision': e.maskDecision.name,
-            // Emitted only when set so existing (non-declared) goldens are
-            // unchanged; declared goldens surface the developer-authored intent.
-            if (e.declared) 'declared': true,
           },
         )
         .toList(),

@@ -289,6 +289,7 @@ void main() {
         coordinator.captureInteraction(
           expectedInteractionType,
           Offset(expectedX, expectedY),
+          DateTime.now(),
         );
         // Wait for async event recording
         await pumpEventQueue();
@@ -320,7 +321,7 @@ void main() {
         // Don't start recording
 
         // WHEN
-        coordinator.captureInteraction(7, Offset(100, 200));
+        coordinator.captureInteraction(7, Offset(100, 200), DateTime.now());
         await pumpEventQueue();
 
         // THEN
@@ -336,11 +337,60 @@ void main() {
         await coordinator.dispose();
 
         // WHEN
-        coordinator.captureInteraction(7, Offset(100, 200));
+        coordinator.captureInteraction(7, Offset(100, 200), DateTime.now());
         await pumpEventQueue();
 
         // THEN - queue is disposed, operations should throw
         expect(() => eventQueue.fetchOldest(), throwsA(anything));
+      });
+    });
+
+    group('captureTouchMove', () {
+      test('records a position batch when recording is active', () async {
+        // GIVEN
+        final expectedPositions = const [
+          TouchPosition(x: 10.0, y: 20.0, timeOffset: -100),
+          TouchPosition(x: 30.0, y: 40.0, timeOffset: 0),
+        ];
+        final coordinator = createCoordinator();
+        coordinator.startRecording(sessionsPercent: 100.0);
+        await pumpEventQueue();
+
+        // WHEN
+        coordinator.captureTouchMove(expectedPositions, DateTime.now());
+        await pumpEventQueue();
+
+        // THEN
+        final oldest = await eventQueue.fetchOldest();
+        final events = await eventQueue.fetchBatch(
+          sessionId: oldest!.sessionId,
+          distinctId: oldest.distinctId,
+          maxBytes: 100000,
+          maxCount: 10,
+        );
+        final touchMoves = events
+            .where((e) => e.type == EventType.touchMove)
+            .toList();
+        expect(touchMoves.length, 1);
+        expect(
+          (touchMoves[0].payload as TouchMovePayload).positions,
+          expectedPositions,
+        );
+      });
+
+      test('skips touch move when not recording', () async {
+        // GIVEN
+        final coordinator = createCoordinator();
+        // Don't start recording
+
+        // WHEN
+        coordinator.captureTouchMove(const [
+          TouchPosition(x: 1, y: 2, timeOffset: 0),
+        ], DateTime.now());
+        await pumpEventQueue();
+
+        // THEN
+        expect(await eventQueue.fetchOldest(), isNull);
       });
     });
 
@@ -504,7 +554,7 @@ void main() {
         await coordinator.dispose();
 
         // THEN - captureInteraction is a no-op
-        coordinator.captureInteraction(7, Offset(100, 200));
+        coordinator.captureInteraction(7, Offset(100, 200), DateTime.now());
         // Event queue is disposed so we can't check it,
         // but the call should not throw
       });

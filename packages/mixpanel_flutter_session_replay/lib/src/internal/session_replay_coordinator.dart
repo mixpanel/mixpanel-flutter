@@ -7,6 +7,7 @@ import '../models/configuration.dart';
 import '../models/debug_overlay_colors.dart';
 import '../models/masking_directive.dart';
 import '../models/results.dart';
+import '../models/session_event.dart' show TouchPosition;
 import 'background_task_manager.dart';
 import 'event_recorder.dart';
 import 'screenshot_capturer.dart';
@@ -227,34 +228,63 @@ class SessionReplayCoordinator implements WidgetCoordinator {
     }
   }
 
-  /// Capture an interaction event with a specific type
+  /// Capture a gesture boundary with a specific type
   ///
-  /// [interactionType] - The RRWeb interaction type (e.g., touchStart, touchEnd, click)
+  /// [interactionType] - The RRWeb interaction type (touchStart, touchEnd,
+  /// touchCancel)
   /// [position] - The position where the interaction occurred
+  /// [timestamp] - When the pointer event happened
   @override
-  void captureInteraction(int interactionType, Offset position) {
-    // Check if disposed first (prevents captures during shutdown)
-    if (_isDisposed) {
-      _logger.debug(
-        'Coordinator disposed, skipping interaction capture',
-        tag: 'coordinator',
-      );
-      return;
-    }
-
-    if (_recordingState != RecordingState.recording) {
-      _logger.debug(
-        'Recording not active, skipping interaction capture',
-        tag: 'coordinator',
-      );
-      return;
-    }
+  void captureInteraction(
+    int interactionType,
+    Offset position,
+    DateTime timestamp,
+  ) {
+    if (!_canRecordTouch('interaction')) return;
 
     _logger.debug(
       'recordInteraction called with type: $interactionType, position: $position',
       tag: 'coordinator',
     );
-    _eventRecorder.recordInteraction(interactionType, position);
+    _eventRecorder.recordInteraction(interactionType, position, timestamp);
+  }
+
+  /// Capture a batch of sampled drag positions
+  ///
+  /// [positions] - Sampled positions, oldest first
+  /// [timestamp] - When the final position happened
+  @override
+  void captureTouchMove(List<TouchPosition> positions, DateTime timestamp) {
+    if (!_canRecordTouch('touch move')) return;
+
+    _logger.debug(
+      'recordTouchMove called with ${positions.length} positions',
+      tag: 'coordinator',
+    );
+    _eventRecorder.recordTouchMove(positions: positions, timestamp: timestamp);
+  }
+
+  /// Shared gate for the touch stream: never record while disposed or while
+  /// recording is inactive.
+  bool _canRecordTouch(String what) {
+    // Check if disposed first (prevents captures during shutdown)
+    if (_isDisposed) {
+      _logger.debug(
+        'Coordinator disposed, skipping $what capture',
+        tag: 'coordinator',
+      );
+      return false;
+    }
+
+    if (_recordingState != RecordingState.recording) {
+      _logger.debug(
+        'Recording not active, skipping $what capture',
+        tag: 'coordinator',
+      );
+      return false;
+    }
+
+    return true;
   }
 
   /// Flush queued events to server

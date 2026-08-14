@@ -6,14 +6,14 @@
   "elements": [
     {
       "role": "button",
-      "text": "checkout action",
+      "text": "Continue",
       "bounds": [
-        354,
+        348,
         276,
-        93,
+        104,
         48
       ],
-      "maskDecision": "declared"
+      "maskDecision": "none"
     }
   ]
 }

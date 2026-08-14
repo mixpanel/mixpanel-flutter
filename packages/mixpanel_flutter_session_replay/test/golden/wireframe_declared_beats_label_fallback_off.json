@@ -5,13 +5,13 @@
   ],
   "elements": [
     {
-      "role": "text",
-      "text": "monthly spend",
+      "role": "button",
+      "text": "Open settings",
       "bounds": [
-        340,
-        270,
-        120,
-        60
+        376,
+        276,
+        48,
+        48
       ],
       "maskDecision": "declared"
     }

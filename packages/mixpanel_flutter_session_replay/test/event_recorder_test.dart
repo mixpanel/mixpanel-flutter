@@ -281,11 +281,16 @@ void main() {
         final expectedInteractionType = 1;
         final expectedX = 150.5;
         final expectedY = 300.75;
+        final expectedTimestamp = DateTime.fromMillisecondsSinceEpoch(
+          4200,
+          isUtc: true,
+        );
 
         // WHEN
         await recorder.recordInteraction(
           expectedInteractionType,
           Offset(expectedX, expectedY),
+          expectedTimestamp,
         );
 
         // THEN
@@ -303,6 +308,7 @@ void main() {
         expect(event.type, EventType.interaction);
         expect(event.sessionId, session.id);
         expect(event.distinctId, defaultDistinctId);
+        expect(event.timestamp, expectedTimestamp);
 
         final payload = event.payload as InteractionPayload;
         expect(payload.interactionType, expectedInteractionType);
@@ -315,7 +321,68 @@ void main() {
         await eventQueue.dispose();
 
         // WHEN / THEN - should not throw
-        await recorder.recordInteraction(1, Offset(10, 20));
+        await recorder.recordInteraction(1, Offset(10, 20), DateTime.now());
+      });
+    });
+
+    group('recordTouchMove', () {
+      test(
+        'saves touch move event with supplied positions and timestamp',
+        () async {
+          // GIVEN
+          final expectedPositions = const [
+            TouchPosition(x: 10.0, y: 20.0, timeOffset: -100),
+            TouchPosition(x: 30.0, y: 40.0, timeOffset: 0),
+          ];
+          final expectedTimestamp = DateTime.fromMillisecondsSinceEpoch(
+            7100,
+            isUtc: true,
+          );
+
+          // WHEN
+          await recorder.recordTouchMove(
+            positions: expectedPositions,
+            timestamp: expectedTimestamp,
+          );
+
+          // THEN
+          final oldest = await eventQueue.fetchOldest();
+          final events = await eventQueue.fetchBatch(
+            sessionId: oldest!.sessionId,
+            distinctId: oldest.distinctId,
+            maxBytes: 100000,
+            maxCount: 10,
+          );
+
+          expect(events.length, 1);
+          expect(events[0].type, EventType.touchMove);
+          expect(events[0].timestamp, expectedTimestamp);
+
+          final payload = events[0].payload as TouchMovePayload;
+          expect(payload.positions, expectedPositions);
+        },
+      );
+
+      test('skips empty position batches', () async {
+        // WHEN
+        await recorder.recordTouchMove(
+          positions: const [],
+          timestamp: DateTime.now(),
+        );
+
+        // THEN - nothing queued
+        expect(await eventQueue.fetchOldest(), isNull);
+      });
+
+      test('does not throw on storage error', () async {
+        // GIVEN
+        await eventQueue.dispose();
+
+        // WHEN / THEN - should not throw
+        await recorder.recordTouchMove(
+          positions: const [TouchPosition(x: 1, y: 2, timeOffset: 0)],
+          timestamp: DateTime.now(),
+        );
       });
     });
 
@@ -429,13 +496,21 @@ void main() {
         );
 
         // WHEN - record with first distinctId
-        await dynamicRecorder.recordInteraction(1, Offset(10, 20));
+        await dynamicRecorder.recordInteraction(
+          1,
+          Offset(10, 20),
+          DateTime.now(),
+        );
 
         // Change distinctId
         currentDistinctId = 'user-B';
 
         // Record with second distinctId
-        await dynamicRecorder.recordInteraction(2, Offset(30, 40));
+        await dynamicRecorder.recordInteraction(
+          2,
+          Offset(30, 40),
+          DateTime.now(),
+        );
 
         // THEN - first event uses original distinctId
         final oldest = await eventQueue.fetchOldest();

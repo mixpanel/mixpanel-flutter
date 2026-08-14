@@ -5,29 +5,32 @@ import 'package:mixpanel_flutter_session_replay/src/models/wireframes_options.da
 
 void main() {
   group('WireframesOptions', () {
-    test('has empty rules and null callback by default', () {
+    test('has empty rules and label fallback on by default', () {
       // WHEN
       const options = WireframesOptions();
 
       // THEN
       expect(options.sensitiveRules, isEmpty);
-      expect(options.debugEmitter, isNull);
+      expect(options.useAccessibilityLabelFallback, isTrue);
     });
 
-    test('carries provided rules and callback', () {
+    test('carries provided rules', () {
       // GIVEN
       final rules = [const StripRule('password'), const RedactRule('email')];
-      void callback(WireframeSnapshot _) {}
 
       // WHEN
-      final options = WireframesOptions(
-        sensitiveRules: rules,
-        debugEmitter: callback,
-      );
+      final options = WireframesOptions(sensitiveRules: rules);
 
       // THEN
       expect(options.sensitiveRules, same(rules));
-      expect(options.debugEmitter, same(callback));
+    });
+
+    test('label fallback can be turned off', () {
+      // WHEN
+      const options = WireframesOptions(useAccessibilityLabelFallback: false);
+
+      // THEN
+      expect(options.useAccessibilityLabelFallback, isFalse);
     });
   });
 
@@ -132,6 +135,7 @@ void main() {
           .toList();
       expect(names, [
         'NONE',
+        'DECLARED',
         'EXPLICIT',
         'AUTO',
         'TEXT_ENTRY',

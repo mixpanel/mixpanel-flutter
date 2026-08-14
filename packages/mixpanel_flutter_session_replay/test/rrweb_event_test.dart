@@ -77,6 +77,43 @@ void main() {
         expect(rrweb.data['y'], expectedY);
       });
 
+      test('converts touch move event to rrweb touch move positions', () {
+        // GIVEN
+        final expectedTimestampMs = 3500;
+        final event = SessionReplayEvent(
+          sessionId: 'session-1',
+          distinctId: 'user-1',
+          timestamp: DateTime.fromMillisecondsSinceEpoch(
+            expectedTimestampMs,
+            isUtc: true,
+          ),
+          type: EventType.touchMove,
+          payload: TouchMovePayload(
+            positions: const [
+              TouchPosition(x: 150.6, y: 300.2, timeOffset: -120),
+              TouchPosition(x: 180.0, y: 320.0, timeOffset: 0),
+            ],
+          ),
+        );
+
+        // WHEN
+        final rrweb = RRWebEvent.fromSessionReplayEvent(event);
+
+        // THEN
+        expect(rrweb.type, RRWebEventType.incrementalSnapshot);
+        expect(rrweb.timestamp, expectedTimestampMs);
+        expect(rrweb.data['source'], RRWebIncrementalSource.touchMove);
+        expect(rrweb.data['positions'], [
+          {
+            'x': 150,
+            'y': 300,
+            'id': RRWebNodeIds.mainImage,
+            'timeOffset': -120,
+          },
+          {'x': 180, 'y': 320, 'id': RRWebNodeIds.mainImage, 'timeOffset': 0},
+        ]);
+      });
+
       test('converts JPEG screenshot event to rrweb full snapshot', () {
         // GIVEN
         final expectedTimestampMs = 2000;

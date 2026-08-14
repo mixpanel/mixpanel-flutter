@@ -51,6 +51,10 @@ class ScreenshotCapturer {
   /// the same walk as mask detection and enqueued alongside each screenshot.
   final WireframeEmitter? _wireframeEmitter;
 
+  /// Mirrors `WireframesOptions.useAccessibilityLabelFallback`; only consulted
+  /// when [_wireframeEmitter] is non-null.
+  final bool _useAccessibilityLabelFallback;
+
   /// Compression strategy to use for production captures.
   /// Change this value to compare performance between strategies.
   CompressionMode compressionMode;
@@ -64,11 +68,13 @@ class ScreenshotCapturer {
     required bool debugOverlayEnabled,
     NativeImageCompressor? nativeCompressor,
     WireframeEmitter? wireframeEmitter,
+    bool useAccessibilityLabelFallback = true,
     this.compressionMode = CompressionMode.nativeJpeg,
   }) : _logger = logger,
        _debugOverlayEnabled = debugOverlayEnabled,
        _nativeCompressor = nativeCompressor,
-       _wireframeEmitter = wireframeEmitter {
+       _wireframeEmitter = wireframeEmitter,
+       _useAccessibilityLabelFallback = useAccessibilityLabelFallback {
     _maskPainter = MaskPainter();
   }
 
@@ -93,6 +99,7 @@ class ScreenshotCapturer {
             : directive,
         trackUnmaskBounds: _debugOverlayEnabled,
         collectWireframes: _wireframeEmitter != null,
+        useAccessibilityLabelFallback: _useAccessibilityLabelFallback,
       );
 
       // Using endOfFrame ensures both detectMaskRegions() and toImage() see the same painted state

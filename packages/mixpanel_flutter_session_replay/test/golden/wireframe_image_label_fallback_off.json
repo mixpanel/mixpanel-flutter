@@ -6,14 +6,14 @@
   "elements": [
     {
       "role": "image",
-      "text": "profile photo",
+      "text": null,
       "bounds": [
         360,
         260,
         80,
         80
       ],
-      "maskDecision": "declared"
+      "maskDecision": "none"
     }
   ]
 }

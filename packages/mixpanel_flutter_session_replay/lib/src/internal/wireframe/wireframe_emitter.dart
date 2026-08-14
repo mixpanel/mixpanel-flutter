@@ -83,12 +83,13 @@ class WireframeEmitter {
     WireframeElement el,
     List<MaskRegionInfo> maskRegions,
   ) {
-    // Developer-declared text is authored, not scraped from the pixels, so it
-    // is exempt from the geometric strip — including its own mask region. It
-    // survives even when the element is masked (the pixels are still grayed by
-    // that region; the label still describes the element for the AI summary).
-    // User rules below still run over it as a safety net.
-    if (el.declared) return el;
+    // Anything already decided is left alone. That includes
+    // [MaskDecision.declared]: developer-declared text is authored, not
+    // scraped from the pixels, so it is exempt from the geometric strip —
+    // including its own mask region. It survives even when the element is
+    // masked (the pixels are still grayed by that region; the label still
+    // describes the element for the AI summary). User rules below still run
+    // over it as a safety net.
     if (el.maskDecision != MaskDecision.none) return el;
     for (final region in maskRegions) {
       if (region.bounds.overlaps(el.bounds)) {
@@ -104,7 +105,10 @@ class WireframeEmitter {
   /// User sensitive rules, in declared order. StripRule short-circuits;
   /// RedactRule rewrites in place and the next rule sees the rewritten value.
   WireframeElement _applyRules(WireframeElement el) {
-    if (el.maskDecision != MaskDecision.none) return el;
+    if (el.maskDecision != MaskDecision.none &&
+        el.maskDecision != MaskDecision.declared) {
+      return el;
+    }
     final originalText = el.text;
     if (originalText == null || originalText.isEmpty) return el;
 
@@ -161,7 +165,7 @@ class WireframeEmitter {
     // Declared text is authored by the developer, not scraped, so it is taken
     // verbatim — no blank/glyph normalization. (An empty declared string is
     // simply passed through; developers who want no text omit `wireframeText`.)
-    if (el.declared) return el;
+    if (el.maskDecision == MaskDecision.declared) return el;
     final text = el.text;
     if (text == null) return el;
     if (text.trim().isEmpty) return el.copyWith(clearText: true);
@@ -171,16 +175,18 @@ class WireframeEmitter {
     return el;
   }
 
-  /// Truncate long text to [WireframeConstants.maxTextLength] chars plus
-  /// [WireframeConstants.ellipsis]. Applied last so rule-rewrites are
-  /// visible in the truncated output.
+  /// Truncate long text so the emitted value never exceeds
+  /// [WireframeConstants.maxTextLength] characters — the
+  /// [WireframeConstants.ellipsis] is paid for out of that budget, not added
+  /// on top of it. Applied last so rule-rewrites are visible in the truncated
+  /// output.
   WireframeElement _truncate(WireframeElement el) {
     final text = el.text;
     if (text == null || text.length <= WireframeConstants.maxTextLength) {
       return el;
     }
     final truncated =
-        text.substring(0, WireframeConstants.maxTextLength) +
+        text.substring(0, WireframeConstants.maxTextLength - 1) +
         WireframeConstants.ellipsis;
     return el.copyWith(text: truncated);
   }

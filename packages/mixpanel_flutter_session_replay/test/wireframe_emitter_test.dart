@@ -21,13 +21,11 @@ void main() {
     String? text = 'hello',
     Rect bounds = const Rect.fromLTWH(0, 0, 100, 20),
     MaskDecision maskDecision = MaskDecision.none,
-    bool declared = false,
   }) => WireframeElement(
     role: role,
     text: text,
     bounds: bounds,
     maskDecision: maskDecision,
-    declared: declared,
   );
 
   group('WireframeEmitter — passthrough', () {
@@ -309,7 +307,7 @@ void main() {
   });
 
   group('WireframeEmitter — truncation', () {
-    test('truncates text longer than 60 chars with ellipsis', () {
+    test('truncates over-length text, ellipsis paid out of the budget', () {
       // GIVEN — 70 char string
       final long = 'a' * 70;
       final emitter = WireframeEmitter(
@@ -326,17 +324,17 @@ void main() {
         timestamp: defaultTimestamp,
       );
 
-      // THEN
+      // THEN — total length never exceeds the cap; the ellipsis is inside it
       expect(
         payload!.elements.single.text!.length,
-        WireframeConstants.maxTextLength + 1,
+        WireframeConstants.maxTextLength,
       );
       expect(payload.elements.single.text!.endsWith('…'), isTrue);
     });
 
-    test('leaves 60-char text unchanged', () {
-      // GIVEN — exactly 60 chars
-      final exact = 'b' * 60;
+    test('leaves text exactly at the cap unchanged', () {
+      // GIVEN — exactly maxTextLength chars
+      final exact = 'b' * WireframeConstants.maxTextLength;
       final emitter = WireframeEmitter(
         sensitiveRules: const [],
         debugEmitter: null,
@@ -462,7 +460,7 @@ void main() {
           role: WireframeRole.image,
           text: 'profile photo',
           bounds: const Rect.fromLTWH(0, 0, 100, 100),
-          declared: true,
+          maskDecision: MaskDecision.declared,
         ),
       ];
       final masks = [
@@ -477,9 +475,9 @@ void main() {
         timestamp: defaultTimestamp,
       );
 
-      // THEN — text preserved, decision stays none (not geometric)
+      // THEN — text preserved, decision stays declared (not geometric)
       expect(payload!.elements.single.text, 'profile photo');
-      expect(payload.elements.single.maskDecision, MaskDecision.none);
+      expect(payload.elements.single.maskDecision, MaskDecision.declared);
     });
 
     test('declared text is not glyph/blank-cleaned (taken verbatim)', () {
@@ -491,7 +489,11 @@ void main() {
       );
       final glyph = String.fromCharCode(0xe57f);
       final input = [
-        el(role: WireframeRole.button, text: glyph, declared: true),
+        el(
+          role: WireframeRole.button,
+          text: glyph,
+          maskDecision: MaskDecision.declared,
+        ),
       ];
 
       // WHEN
@@ -513,7 +515,9 @@ void main() {
         debugEmitter: null,
         logger: logger,
       );
-      final input = [el(text: 'top secret label', declared: true)];
+      final input = [
+        el(text: 'top secret label', maskDecision: MaskDecision.declared),
+      ];
 
       // WHEN
       final payload = emitter.emit(
@@ -537,7 +541,9 @@ void main() {
         debugEmitter: null,
         logger: logger,
       );
-      final input = [el(text: 'ping foo@bar.com', declared: true)];
+      final input = [
+        el(text: 'ping foo@bar.com', maskDecision: MaskDecision.declared),
+      ];
 
       // WHEN
       final payload = emitter.emit(
@@ -560,7 +566,7 @@ void main() {
         logger: logger,
       );
       final long = 'a' * 70;
-      final input = [el(text: long, declared: true)];
+      final input = [el(text: long, maskDecision: MaskDecision.declared)];
 
       // WHEN
       final payload = emitter.emit(
@@ -573,7 +579,7 @@ void main() {
       // THEN
       expect(
         payload!.elements.single.text!.length,
-        WireframeConstants.maxTextLength + 1,
+        WireframeConstants.maxTextLength,
       );
       expect(payload.elements.single.text!.endsWith('…'), isTrue);
     });

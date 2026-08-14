@@ -396,7 +396,7 @@ void main() {
       (tester) async {
         // Declared text is orthogonal to masking: the pixels are grayed but the
         // authored label is emitted on the direct child (the image here) with
-        // MaskDecision.none + declared. It rides the child's real role + bounds,
+        // MaskDecision.declared. It rides the child's real role + bounds,
         // so the RawImage must be the DIRECT child to classify as role image (a
         // SizedBox wrapper would classify as role text).
         final testImage = await createColoredSquareImage(size: 80);
@@ -461,13 +461,87 @@ void main() {
     });
   });
 
-  group('WireframeGolden — truncation', () {
-    testWidgets('text longer than 60 chars is truncated with ellipsis', (
+  group('WireframeGolden — accessibility label fallback disabled', () {
+    testWidgets('icon-only button drops its label and ships a bare shell', (
       tester,
     ) async {
+      // With the fallback off, the tooltip is never read: the button is still
+      // emitted (structure is not content) but carries no text.
+      await captureWireframeGolden(
+        tester,
+        IconButton(
+          onPressed: () {},
+          tooltip: 'Open settings',
+          icon: const Icon(Icons.settings),
+        ),
+        'wireframe_button_label_fallback_off.json',
+        {},
+        useAccessibilityLabelFallback: false,
+      );
+    });
+
+    testWidgets('visible button text is unaffected by the flag', (
+      tester,
+    ) async {
+      // The flag gates the FALLBACK only — text scraped off the screen still
+      // ships, because it is already visible in the unmasked screenshot.
+      await captureWireframeGolden(
+        tester,
+        ElevatedButton(onPressed: () {}, child: const Text('Continue')),
+        'wireframe_button_label_fallback_off_with_text.json',
+        {},
+        useAccessibilityLabelFallback: false,
+      );
+    });
+
+    testWidgets('image drops its semanticLabel and ships a bare shell', (
+      tester,
+    ) async {
+      final testImage = await createColoredSquareImage(size: 80);
+      await captureWireframeGolden(
+        tester,
+        Semantics(
+          image: true,
+          label: 'Company logo',
+          child: SizedBox(
+            width: 80,
+            height: 80,
+            child: RawImage(image: testImage),
+          ),
+        ),
+        'wireframe_image_label_fallback_off.json',
+        {},
+        useAccessibilityLabelFallback: false,
+      );
+    });
+
+    testWidgets('declared text still ships with the fallback off', (
+      tester,
+    ) async {
+      // wireframeText is authored, not a scraped label, so the flag has no
+      // bearing on it — it stays the one way to describe an icon-only button.
+      await captureWireframeGolden(
+        tester,
+        MixpanelUnmask(
+          wireframeText: 'Open settings',
+          child: IconButton(
+            onPressed: () {},
+            tooltip: 'Open settings',
+            icon: const Icon(Icons.settings),
+          ),
+        ),
+        'wireframe_declared_beats_label_fallback_off.json',
+        {},
+        useAccessibilityLabelFallback: false,
+      );
+    });
+  });
+
+  group('WireframeGolden — truncation', () {
+    testWidgets('over-length text is truncated with ellipsis', (tester) async {
       const longText =
-          'This is a long piece of text that should exceed sixty '
-          'characters and therefore trigger truncation';
+          'This is a long piece of text that should exceed the cap '
+          'and therefore trigger truncation';
       await captureWireframeGolden(
         tester,
         const Text(longText),

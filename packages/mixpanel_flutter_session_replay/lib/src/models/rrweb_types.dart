@@ -25,11 +25,33 @@ class RRWebNodeType {
 /// rrweb incremental snapshot sources
 class RRWebIncrementalSource {
   static const int mouseInteraction = 2;
+
+  /// A batch of sampled drag positions between a down and a lift.
+  static const int touchMove = 6;
 }
 
 /// rrweb mouse interaction types
 class RRWebMouseInteraction {
   static const int touchStart = 7;
+  static const int touchEnd = 9;
+  static const int touchCancel = 10;
+}
+
+/// Budget for the sampled touch-move stream.
+///
+/// A gesture can produce a pointer move per frame (~120/s on a 120Hz display);
+/// shipping all of them would swamp the queue without making the replay any
+/// smoother. Values match the Android and iOS SDKs.
+class TouchSampling {
+  /// Minimum gap between two sampled pointer moves.
+  static const Duration moveSampleInterval = Duration(milliseconds: 50);
+
+  /// A batch is flushed once its samples span this much time.
+  static const Duration moveBatchInterval = Duration(milliseconds: 500);
+
+  /// Hard cap on a single batch, so a stuck gesture can't grow the queue
+  /// without bound.
+  static const int maxPositionsPerBatch = 100;
 }
 
 /// Node ID for the main screenshot image element

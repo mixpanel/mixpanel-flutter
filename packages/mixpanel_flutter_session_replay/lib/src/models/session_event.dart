@@ -18,6 +18,9 @@ enum EventType {
 
   /// Wireframe frame (structured list of visible UI elements)
   wireframe,
+
+  /// A batch of sampled drag positions between a touch down and a lift
+  touchMove,
 }
 
 /// Sealed base class for event payload (type-safe union)
@@ -114,6 +117,55 @@ class InteractionPayload extends EventPayload {
   Map<String, dynamic> toJson() => {'type': interactionType, 'x': x, 'y': y};
 }
 
+/// A single sampled position within a [TouchMovePayload].
+class TouchPosition {
+  const TouchPosition({
+    required this.x,
+    required this.y,
+    required this.timeOffset,
+  });
+
+  /// Screen x coordinate in logical pixels.
+  final double x;
+
+  /// Screen y coordinate in logical pixels.
+  final double y;
+
+  /// Milliseconds relative to the batch's event timestamp. rrweb replays a
+  /// sample at `event.timestamp + timeOffset`, and the batch is stamped with
+  /// its final sample, so offsets are `<= 0`.
+  final int timeOffset;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is TouchPosition &&
+          x == other.x &&
+          y == other.y &&
+          timeOffset == other.timeOffset;
+
+  @override
+  int get hashCode => Object.hash(x, y, timeOffset);
+}
+
+/// Payload for a batch of sampled drag positions.
+///
+/// [positions] is never empty and is ordered oldest to newest, so the event's
+/// timestamp is that of its final sample.
+class TouchMovePayload extends EventPayload {
+  TouchMovePayload({required this.positions});
+
+  /// Sampled positions, oldest first.
+  final List<TouchPosition> positions;
+
+  @override
+  Map<String, dynamic> toJson() => {
+    'positions': positions
+        .map((p) => {'x': p.x, 'y': p.y, 'timeOffset': p.timeOffset})
+        .toList(),
+  };
+}
+
 /// Individual captured event within a session replay
 class SessionReplayEvent {
   /// Parent session ID
@@ -183,6 +235,16 @@ class SessionReplayEvent {
         }),
         'binary': null,
       };
+    } else if (payload is TouchMovePayload) {
+      return {
+        'metadata': jsonEncode({
+          'positions': payload.positions
+              .map((p) => {'x': p.x, 'y': p.y, 'timeOffset': p.timeOffset})
+              .toList(),
+          'version': 1,
+        }),
+        'binary': null,
+      };
     } else if (payload is WireframePayload) {
       return {
         'metadata': jsonEncode({
@@ -228,6 +290,19 @@ class SessionReplayEvent {
       );
     } else if (type == EventType.screenshot) {
       return ScreenshotPayload(imageData: binary!);
+    } else if (type == EventType.touchMove) {
+      return TouchMovePayload(
+        positions: (json['positions'] as List)
+            .cast<Map<String, dynamic>>()
+            .map(
+              (p) => TouchPosition(
+                x: (p['x'] as num).toDouble(),
+                y: (p['y'] as num).toDouble(),
+                timeOffset: p['timeOffset'] as int,
+              ),
+            )
+            .toList(growable: false),
+      );
     } else if (type == EventType.wireframe) {
       final viewport = (json['viewport'] as List).cast<num>();
       final elements = (json['elements'] as List)

@@ -1,6 +1,5 @@
 import 'dart:typed_data';
 
-import 'package:clock/clock.dart';
 import 'package:flutter/rendering.dart';
 
 import '../models/session.dart';
@@ -77,11 +76,19 @@ class EventRecorder {
     );
   }
 
-  /// Record an interaction event
+  /// Record a gesture boundary — down, lift, or cancel.
   ///
-  /// [interactionType] - The RRWeb interaction type (e.g., touchStart, touchEnd, click)
+  /// [interactionType] - The RRWeb interaction type (touchStart, touchEnd,
+  /// touchCancel)
   /// [position] - The position where the interaction occurred
-  Future<void> recordInteraction(int interactionType, Offset position) async {
+  /// [timestamp] - When the pointer event happened, not when it was queued.
+  /// Touches are timestamped accurately at the source so they stay ordered
+  /// against the screenshot stream, which sits behind compression.
+  Future<void> recordInteraction(
+    int interactionType,
+    Offset position,
+    DateTime timestamp,
+  ) async {
     try {
       // Use logical pixel coordinates directly
       // These will match the coordinate system of the screenshots
@@ -90,9 +97,32 @@ class EventRecorder {
 
       _logger.debug('Recording interaction type $interactionType at ($x, $y)');
 
-      await _saveInteractionToQueue(interactionType, x, y);
+      await _saveInteractionToQueue(interactionType, x, y, timestamp);
     } catch (e) {
       _logger.error('Failed to record interaction: $e');
+      // Don't crash the app if storage fails
+    }
+  }
+
+  /// Record a batch of sampled drag positions.
+  ///
+  /// [positions] must be ordered oldest to newest and non-empty; [timestamp]
+  /// is that of the final position, which every `timeOffset` is relative to.
+  Future<void> recordTouchMove({
+    required List<TouchPosition> positions,
+    required DateTime timestamp,
+  }) async {
+    if (positions.isEmpty) return;
+    try {
+      _logger.debug('Recording touch move (${positions.length} positions)');
+
+      await _saveEventToQueue(
+        type: EventType.touchMove,
+        payload: TouchMovePayload(positions: positions),
+        timestamp: timestamp,
+      );
+    } catch (e) {
+      _logger.error('Failed to record touch move: $e');
       // Don't crash the app if storage fails
     }
   }
@@ -174,6 +204,7 @@ class EventRecorder {
     int interactionType,
     double x,
     double y,
+    DateTime timestamp,
   ) async {
     final payload = InteractionPayload(
       interactionType: interactionType,
@@ -184,7 +215,7 @@ class EventRecorder {
     await _saveEventToQueue(
       type: EventType.interaction,
       payload: payload,
-      timestamp: clock.now(),
+      timestamp: timestamp,
     );
   }
 

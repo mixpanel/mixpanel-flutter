@@ -32,6 +32,9 @@ class RRWebEvent {
     } else if (event.payload is InteractionPayload) {
       final interaction = event.payload as InteractionPayload;
       return _buildInteractionEvent(interaction, event.timestamp);
+    } else if (event.payload is TouchMovePayload) {
+      final touchMove = event.payload as TouchMovePayload;
+      return _buildTouchMoveEvent(touchMove, event.timestamp);
     } else if (event.payload is WireframePayload) {
       final wireframe = event.payload as WireframePayload;
       return _buildWireframeEvent(wireframe, event.timestamp);
@@ -204,6 +207,34 @@ class RRWebEvent {
         'id': RRWebNodeIds.mainImage,
         'x': interaction.x.toInt(),
         'y': interaction.y.toInt(),
+      },
+    );
+  }
+
+  /// Build rrweb IncrementalSnapshot event for a batch of sampled drag
+  /// positions.
+  ///
+  /// The event is stamped with its final sample, so every `timeOffset` is
+  /// `<= 0` — rrweb replays each position at `timestamp + timeOffset`.
+  static RRWebEvent _buildTouchMoveEvent(
+    TouchMovePayload touchMove,
+    DateTime timestamp,
+  ) {
+    return RRWebEvent(
+      type: RRWebEventType.incrementalSnapshot,
+      timestamp: timestamp.millisecondsSinceEpoch,
+      data: {
+        'source': RRWebIncrementalSource.touchMove,
+        'positions': touchMove.positions
+            .map(
+              (p) => {
+                'x': p.x.toInt(),
+                'y': p.y.toInt(),
+                'id': RRWebNodeIds.mainImage,
+                'timeOffset': p.timeOffset,
+              },
+            )
+            .toList(),
       },
     );
   }

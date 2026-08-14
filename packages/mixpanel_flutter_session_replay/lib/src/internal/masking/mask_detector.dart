@@ -54,10 +54,17 @@ class MaskDetector {
   /// initial mask decision per element.
   final bool collectWireframes;
 
+  /// Whether an element with no text of its own may fall back to its
+  /// accessibility label. Mirrors
+  /// `WireframesOptions.useAccessibilityLabelFallback`; only consulted when
+  /// [collectWireframes] is true.
+  final bool useAccessibilityLabelFallback;
+
   MaskDetector({
     required this.directive,
     this.trackUnmaskBounds = false,
     this.collectWireframes = false,
+    this.useAccessibilityLabelFallback = true,
   });
 
   /// Traverse widget tree and collect mask regions
@@ -585,9 +592,9 @@ class MaskDetector {
     // Developer-declared text (from an enclosing MixpanelMask/MixpanelUnmask
     // `wireframeText`) is applied to this element — the marker's direct child —
     // with the child's real role + bounds. Declared text is authored, not
-    // scraped: it is emitted with `MaskDecision.none` and `declared: true`, so
-    // downstream it bypasses the geometric strip (surviving even when the marker
-    // masks the pixels) but still runs through user SensitiveRules.
+    // scraped: it is emitted with `MaskDecision.declared`, so downstream it
+    // bypasses the geometric strip (surviving even when the marker masks the
+    // pixels) but still runs through user SensitiveRules.
     //
     // Input fields are exempt — RenderEditable security masking can never be
     // overridden — so they fall through to the normal input handling below.
@@ -616,8 +623,7 @@ class MaskDetector {
           role: role,
           text: declaredText,
           bounds: bounds,
-          maskDecision: MaskDecision.none,
-          declared: true,
+          maskDecision: MaskDecision.declared,
         ),
       );
       return;
@@ -655,7 +661,10 @@ class MaskDetector {
       );
       final visibleLabel = _collectDescendantParagraphText(element, visited);
       final label = decision == MaskDecision.none
-          ? (visibleLabel ?? _collectDescendantSemanticLabel(element))
+          ? (visibleLabel ??
+                (useAccessibilityLabelFallback
+                    ? _collectDescendantSemanticLabel(element)
+                    : null))
           : null;
       visited.add(renderObject);
       // Composite buttons build on inner buttons (e.g. FloatingActionButton
@@ -702,7 +711,7 @@ class MaskDetector {
     if (typeName.contains('RenderImage')) {
       final bounds = _boundaryRelativeBounds(renderObject, boundary);
       if (bounds == null) return;
-      final label = imageLabel;
+      final label = useAccessibilityLabelFallback ? imageLabel : null;
       final decision = _wireframeDecision(
         role: WireframeRole.image,
         maskContext: maskContext,

@@ -25,7 +25,6 @@ class WireframeElement {
     required this.text,
     required this.bounds,
     required this.maskDecision,
-    this.declared = false,
   });
 
   /// Element role.
@@ -42,18 +41,16 @@ class WireframeElement {
   final Rect bounds;
 
   /// Which layer produced this element's text state.
-  final MaskDecision maskDecision;
-
-  /// Whether [text] was authored by the developer (via
-  /// `MixpanelMask(wireframeText:)` / `MixpanelUnmask(wireframeText:)`) rather
-  /// than scraped from the widget.
   ///
-  /// Declared text is orthogonal to masking: it is **exempt from the geometric
-  /// strip** (including its own mask region), so it survives even when the
-  /// pixels are masked — masking hides the pixels while the declared text still
-  /// describes the element for the AI summary. User `SensitiveRule`s still run
-  /// over it as a safety net.
-  final bool declared;
+  /// [MaskDecision.declared] marks text authored by the developer (via
+  /// `MixpanelMask(wireframeText:)` / `MixpanelUnmask(wireframeText:)`) rather
+  /// than scraped from the widget. Declared text is orthogonal to masking: it is
+  /// **exempt from the geometric strip** (including its own mask region), so it
+  /// survives even when the pixels are masked — masking hides the pixels while
+  /// the declared text still describes the element for the AI summary. User
+  /// `SensitiveRule`s still run over it as a safety net, and may replace the
+  /// decision with [MaskDecision.ruleStrip] / [MaskDecision.ruleRedact].
+  final MaskDecision maskDecision;
 
   /// Return a copy with the given fields replaced.
   WireframeElement copyWith({
@@ -62,14 +59,12 @@ class WireframeElement {
     bool clearText = false,
     Rect? bounds,
     MaskDecision? maskDecision,
-    bool? declared,
   }) {
     return WireframeElement(
       role: role ?? this.role,
       text: clearText ? null : (text ?? this.text),
       bounds: bounds ?? this.bounds,
       maskDecision: maskDecision ?? this.maskDecision,
-      declared: declared ?? this.declared,
     );
   }
 
@@ -80,20 +75,22 @@ class WireframeElement {
           role == other.role &&
           text == other.text &&
           bounds == other.bounds &&
-          maskDecision == other.maskDecision &&
-          declared == other.declared;
+          maskDecision == other.maskDecision;
 
   @override
-  int get hashCode => Object.hash(role, text, bounds, maskDecision, declared);
+  int get hashCode => Object.hash(role, text, bounds, maskDecision);
 }
 
 /// Shared wireframe constants.
 class WireframeConstants {
-  /// Maximum text length in wireframe elements. Longer text is truncated
-  /// with [ellipsis].
-  static const int maxTextLength = 60;
+  /// Maximum text length in wireframe elements, **including** the [ellipsis]
+  /// appended when text is truncated — a wire value never exceeds this many
+  /// characters. Matches the service's `MAX_ELEMENT_TEXT` budget and the
+  /// Android/iOS SDKs.
+  static const int maxTextLength = 50;
 
-  /// Ellipsis appended to truncated text.
+  /// Ellipsis appended to truncated text. Paid for out of [maxTextLength],
+  /// not added on top of it.
   static const String ellipsis = '…';
 }
 

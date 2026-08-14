@@ -3,6 +3,7 @@ import 'package:flutter/widgets.dart';
 
 import '../models/masking_directive.dart';
 import '../models/results.dart';
+import '../models/session_event.dart' show TouchPosition;
 import 'settings/settings_service.dart';
 import 'logger.dart';
 
@@ -36,8 +37,17 @@ abstract class WidgetCoordinator {
   /// Handle app going to background
   void onAppBackgrounded();
 
-  /// Capture an interaction event
-  void captureInteraction(int interactionType, Offset position);
+  /// Capture a gesture boundary (down, lift, or cancel) that happened at
+  /// [timestamp]
+  void captureInteraction(
+    int interactionType,
+    Offset position,
+    DateTime timestamp,
+  );
+
+  /// Capture a batch of sampled drag positions, stamped with the time of its
+  /// final position
+  void captureTouchMove(List<TouchPosition> positions, DateTime timestamp);
 
   /// Capture a screenshot from the given boundary
   Future<void> captureSnapshot(RenderRepaintBoundary boundary);
