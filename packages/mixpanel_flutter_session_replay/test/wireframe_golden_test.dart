@@ -444,6 +444,66 @@ void main() {
       );
     });
 
+    testWidgets('declared text labels a TextField without leaking its value', (
+      tester,
+    ) async {
+      // The ERD's own example: an editable field emits the authored label as
+      // role input. Declared text REPLACES scraped text, so the typed value
+      // still never ships — labeling the field costs nothing in privacy.
+      await captureWireframeGolden(
+        tester,
+        MixpanelMask(
+          wireframeText: 'Card number',
+          child: TextField(
+            controller: TextEditingController(text: '4111111111111111'),
+          ),
+        ),
+        'wireframe_declared_textfield.json',
+        {},
+      );
+    });
+
+    testWidgets('declared text labels a CupertinoTextField as role input', (
+      tester,
+    ) async {
+      // Different internal tree from the Material field, same contract.
+      await captureWireframeGolden(
+        tester,
+        MixpanelUnmask(
+          wireframeText: 'Search',
+          child: CupertinoTextField(
+            controller: TextEditingController(text: 'secret-query'),
+          ),
+        ),
+        'wireframe_declared_cupertino_textfield.json',
+        {},
+      );
+    });
+
+    testWidgets('a labeled container does not absorb the field inside it', (
+      tester,
+    ) async {
+      // The label lands on the container, which is not itself a field, so it
+      // stays role text and the TextField still emits its own textless input —
+      // matching Android, where the EditText emits separately from the
+      // container that carries the declared text.
+      await captureWireframeGolden(
+        tester,
+        MixpanelUnmask(
+          wireframeText: 'payment form',
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('Pay now'),
+              TextField(controller: TextEditingController(text: '4111')),
+            ],
+          ),
+        ),
+        'wireframe_declared_container_keeps_input.json',
+        {},
+      );
+    });
+
     testWidgets('declared text still runs through SensitiveRules', (
       tester,
     ) async {

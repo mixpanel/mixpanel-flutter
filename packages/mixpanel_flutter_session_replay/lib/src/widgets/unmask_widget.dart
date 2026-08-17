@@ -40,8 +40,11 @@ class MixpanelUnmask extends StatelessWidget {
   /// Authored text recorded for this element in the `mp_wireframe` event.
   ///
   /// Applied to the [child] (its role + bounds). `null` (default) declares no
-  /// text. See the class docs for the privacy contract. Ignored for
-  /// `RenderEditable` children (e.g. `TextField`), which stay textless.
+  /// text. See the class docs for the privacy contract.
+  ///
+  /// A `TextField` child emits the declared label as its `input` element — the
+  /// label describes the field, and the typed value is still never sent,
+  /// because declared text replaces scraped text rather than adding to it.
   final String? wireframeText;
 
   @override

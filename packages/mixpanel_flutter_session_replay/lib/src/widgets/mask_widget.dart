@@ -36,6 +36,17 @@ import 'package:flutter/widgets.dart';
 ///   child: Image.asset('avatar.png'),
 /// )
 /// ```
+///
+/// This works on a text field too. The label describes the field; the value the
+/// user types is still never emitted, because declared text replaces scraped
+/// text rather than adding to it.
+///
+/// ```dart
+/// MixpanelMask(
+///   wireframeText: 'Card number',
+///   child: TextField(controller: cardNumberController),
+/// )
+/// ```
 class MixpanelMask extends StatelessWidget {
   const MixpanelMask({super.key, required this.child, this.wireframeText});
 

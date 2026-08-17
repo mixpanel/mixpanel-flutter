@@ -596,9 +596,11 @@ class MaskDetector {
     // bypasses the geometric strip (surviving even when the marker masks the
     // pixels) but still runs through user SensitiveRules.
     //
-    // Input fields are exempt — RenderEditable security masking can never be
-    // overridden — so they fall through to the normal input handling below.
-    if (declaredText != null && renderObject is! RenderEditable) {
+    // Text-entry fields are included: an authored label describes the field
+    // ("Card number") without ever revealing the typed value, because declared
+    // text REPLACES scraped text rather than adding to it. The field's pixels
+    // stay masked either way.
+    if (declaredText != null) {
       final bounds = _boundaryRelativeBounds(renderObject, boundary);
       if (bounds == null) return;
       final WireframeRole role;
@@ -609,6 +611,13 @@ class MaskDetector {
         // button path, but the declared text replaces the scraped label.
         _collectDescendantParagraphText(element, visited);
         _markNestedButtonsVisited(element, visited);
+      } else if (renderObject is RenderEditable ||
+          _isTextFieldWidget(element.widget)) {
+        role = WireframeRole.input;
+        // A `TextField` builds its RenderEditable well below the widget the
+        // developer wrapped. Consume it so the field emits once, as the input
+        // it is, rather than a declared shell plus a textless input shell.
+        _markDescendantEditablesVisited(element, visited);
       } else {
         final typeName = renderObject.runtimeType.toString();
         role = typeName.contains('RenderImage')
@@ -788,6 +797,46 @@ class MaskDetector {
       if (name.contains(pattern)) return true;
     }
     return false;
+  }
+
+  /// Whether [widget] is a text-entry field, matched by widget type the way
+  /// buttons are.
+  ///
+  /// Only the declared-text path needs this. Everywhere else a field is
+  /// recognized structurally, by its `RenderEditable` — but declared text lands
+  /// on the widget the developer wrapped, which sits several levels above that
+  /// render object. `'TextField'` also covers `TextFormField` and
+  /// `CupertinoTextField` as substrings.
+  ///
+  /// A field wrapped in a custom widget won't match, exactly as a custom button
+  /// wrapper won't: it stays role text and the field inside emits its own
+  /// textless input. That mirrors Android, where the declared text lands on the
+  /// container and the `EditText` still emits separately.
+  bool _isTextFieldWidget(Widget widget) {
+    final name = widget.runtimeType.toString();
+    return name.contains('TextField') || name.contains('EditableText');
+  }
+
+  /// Mark every descendant [RenderEditable] of [element] visited.
+  ///
+  /// Only used by the declared-text path, and only on a node already known to
+  /// be a text field. A `TextField` builds its `RenderEditable` several levels
+  /// below the widget the developer wrapped, so without this the field emits
+  /// twice: the authored label on the outer node, then a textless input shell
+  /// for the editable inside it.
+  ///
+  /// Descendants only — never walks up.
+  void _markDescendantEditablesVisited(
+    Element element,
+    Set<RenderObject> visited,
+  ) {
+    void visit(Element child) {
+      final renderObject = child.renderObject;
+      if (renderObject is RenderEditable) visited.add(renderObject);
+      child.debugVisitOnstageChildren(visit);
+    }
+
+    element.debugVisitOnstageChildren(visit);
   }
 
   /// Walk descendants of [buttonElement] and join text from any
