@@ -17,6 +17,8 @@ class SdkConfig {
     required this.autoMaskText,
     required this.autoMaskImage,
     required this.enableWireframes,
+    required this.enableWireframeDebugEmitter,
+    required this.useAccessibilityLabelFallback,
   });
 
   final String token;
@@ -31,6 +33,8 @@ class SdkConfig {
   final bool autoMaskText;
   final bool autoMaskImage;
   final bool enableWireframes;
+  final bool enableWireframeDebugEmitter;
+  final bool useAccessibilityLabelFallback;
 
   /// Default configuration
   factory SdkConfig.defaultConfig() {
@@ -47,6 +51,8 @@ class SdkConfig {
       autoMaskText: true,
       autoMaskImage: true,
       enableWireframes: false,
+      enableWireframeDebugEmitter: true,
+      useAccessibilityLabelFallback: true,
     );
   }
 
@@ -56,12 +62,21 @@ class SdkConfig {
     return Platform.isAndroid || Platform.isIOS;
   }
 
-  /// Convert to SessionReplayOptions
-  SessionReplayOptions toOptions() {
+  /// Convert to SessionReplayOptions.
+  ///
+  /// [onWireframeSnapshot] receives every captured frame when both
+  /// `enableWireframes` and `enableWireframeDebugEmitter` are on. The emitter
+  /// only *observes* capture — installing it never turns capture on, which is
+  /// why it lives on `debugOptions` rather than `wireframesOptions`.
+  SessionReplayOptions toOptions({
+    void Function(WireframeSnapshot)? onWireframeSnapshot,
+  }) {
     // Build auto-masked views set based on toggles
     final autoMaskedViews = <AutoMaskedView>{};
     if (autoMaskText) autoMaskedViews.add(AutoMaskedView.text);
     if (autoMaskImage) autoMaskedViews.add(AutoMaskedView.image);
+
+    final wantsEmitter = enableWireframes && enableWireframeDebugEmitter;
 
     return SessionReplayOptions(
       autoMaskedViews: autoMaskedViews,
@@ -73,13 +88,14 @@ class SdkConfig {
       platformOptions: PlatformOptions(
         mobile: MobileOptions(wifiOnly: wifiOnly),
       ),
-      debugOptions: (showDebugMaskOverlay || enableWireframes)
+      debugOptions: (showDebugMaskOverlay || wantsEmitter)
           ? DebugOptions(
               overlayColors: showDebugMaskOverlay
                   ? const DebugOverlayColors()
                   : null,
-              wireframeEmitter: enableWireframes
+              wireframeEmitter: wantsEmitter
                   ? (snapshot) {
+                      onWireframeSnapshot?.call(snapshot);
                       debugPrint('[wireframe] ${snapshot.toJson()}');
                     }
                   : null,
@@ -87,21 +103,7 @@ class SdkConfig {
           : null,
       wireframesOptions: enableWireframes
           ? WireframesOptions(
-              // Sample rules so testers see redact/strip in action.
-              sensitiveRules: [
-                // Redacts SSN-style patterns.
-                RedactRegexRule(
-                  RegExp(r'\d{3}-\d{2}-\d{4}'),
-                  replacement: '[SSN]',
-                ),
-                // Redacts any emails.
-                RedactRegexRule(
-                  RegExp(r'\S+@\S+\.\S+'),
-                  replacement: '[EMAIL]',
-                ),
-                // Drop any text mentioning bearer tokens entirely.
-                const StripRule('Bearer '),
-              ],
+              useAccessibilityLabelFallback: useAccessibilityLabelFallback,
             )
           : null,
     );

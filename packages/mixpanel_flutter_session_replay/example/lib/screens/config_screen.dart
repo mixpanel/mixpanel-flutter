@@ -5,6 +5,7 @@ import 'package:mixpanel_flutter_session_replay/mixpanel_flutter_session_replay.
 import 'package:provider/provider.dart';
 
 import '../models/config_model.dart';
+import '../models/wireframe_model.dart';
 import '../services/mixpanel_analytics.dart';
 import '../utils/constants.dart';
 
@@ -78,6 +79,7 @@ class _ConfigScreenState extends State<ConfigScreen> {
 
   Future<void> _initialize() async {
     final configVm = context.read<ConfigModel>();
+    final wireframeVm = context.read<WireframeModel>();
 
     if (!configVm.validate()) {
       _showError('Please fix validation errors');
@@ -88,6 +90,7 @@ class _ConfigScreenState extends State<ConfigScreen> {
 
     try {
       final config = configVm.getConfig();
+      wireframeVm.clear();
 
       // Initialize analytics SDK first so its native broadcast receiver /
       // notification observer is ready before session replay registers
@@ -100,7 +103,7 @@ class _ConfigScreenState extends State<ConfigScreen> {
       final result = await MixpanelSessionReplay.initialize(
         token: config.token,
         distinctId: config.distinctId,
-        options: config.toOptions(),
+        options: config.toOptions(onWireframeSnapshot: wireframeVm.add),
       );
 
       if (!mounted) return;
@@ -253,9 +256,28 @@ class _ConfigScreenState extends State<ConfigScreen> {
                           ? null
                           : configVm.setEnableWireframes,
                       subtitle:
-                          'Emit structured element frames alongside screenshots. '
-                          'Sample rules redact SSN/email and strip Bearer tokens; '
-                          'snapshots printed via debugPrint.',
+                          'Emit structured element frames alongside screenshots. ',
+                    ),
+                    _buildSwitch(
+                      label: 'Wireframe Debug Emitter',
+                      value: configVm.enableWireframeDebugEmitter,
+                      onChanged: (_isInitializing || !configVm.enableWireframes)
+                          ? null
+                          : configVm.setEnableWireframeDebugEmitter,
+                      subtitle:
+                          'Mirror each captured frame to the on-device Wireframes '
+                          'viewer and debugPrint. Observation only — it never '
+                          'turns capture on.',
+                    ),
+                    _buildSwitch(
+                      label: 'Accessibility Label Fallback',
+                      value: configVm.useAccessibilityLabelFallback,
+                      onChanged: (_isInitializing || !configVm.enableWireframes)
+                          ? null
+                          : configVm.setUseAccessibilityLabelFallback,
+                      subtitle:
+                          'Use a semantics label when a widget has no visible '
+                          'text. Turn off to see text-only capture.',
                     ),
                   ],
                 ),
