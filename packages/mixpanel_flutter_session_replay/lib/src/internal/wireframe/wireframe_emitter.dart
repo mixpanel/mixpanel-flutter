@@ -15,6 +15,8 @@ import '../logger.dart';
 /// Per the Wireframe Capture Contract, every collected semantic element is
 /// emitted — a textless `button`/`input`/`image` is meaningful structure
 /// (role + bounds), so elements are never dropped merely for lacking text.
+/// Likewise a frame that collected no elements at all still emits: an empty
+/// list means "empty screen", which is itself signal.
 ///
 /// One instance per SDK lifetime; dedup state is per-emitter (not per
 /// session).
@@ -34,9 +36,9 @@ class WireframeEmitter {
   int? _lastElementsHash;
   int? _lastMaskHash;
 
-  /// Process raw elements through the pipeline. Returns null when the frame
-  /// deduped against the previous emit (identical elements AND identical
-  /// mask regions).
+  /// Process raw elements through the pipeline. Returns null *only* when the
+  /// frame deduped against the previous emit (identical elements AND identical
+  /// mask regions) — an empty [rawElements] list still yields a payload.
   WireframePayload? emit({
     required List<WireframeElement> rawElements,
     required List<MaskRegionInfo> maskRegions,
@@ -45,17 +47,17 @@ class WireframeEmitter {
   }) {
     // Geometric masking → user rules → text cleaning → truncation, per
     // element. No drop stage: textless elements are kept as role + bounds
-    // shells (see [_cleanText] and the Wireframe Capture Contract).
+    // shells (see [_cleanText] and the Wireframe Capture Contract), and an
+    // empty result is not filtered out either — a frame that held nothing
+    // semantic (fully masked screen, splash, bare canvas) ships as an empty
+    // payload, which the service renders as an empty screen. Dedup below is
+    // what keeps a static empty screen from re-emitting every frame.
     final processed = rawElements
         .map((el) => _applyGeometricMasking(el, maskRegions))
         .map(_applyRules)
         .map(_cleanText)
         .map(_truncate)
         .toList(growable: false);
-
-    // No elements were collected at all; skip rather than shipping an empty
-    // payload. (Individual textless elements are NOT dropped.)
-    if (processed.isEmpty) return null;
 
     // Dedup check against previous emit. Both must be unchanged to skip.
     final elementsHash = Object.hashAll(processed);

@@ -256,9 +256,10 @@ Future<void> captureWireframeGolden(
     timestamp: clock.now(),
   );
 
-  // Null payload is a valid outcome: every element was dropped as noise
-  // (unlabeled image, icon-only button, etc.). Encode as literal `null` so
-  // the golden diff still catches regressions in the drop pipeline.
+  // A null payload here means the emitter deduped — impossible on a fresh
+  // emitter, so it signals a regression in the dedup gate rather than a real
+  // outcome. Encode as literal `null` so the golden diff surfaces it. (An
+  // empty screen is NOT null: it emits a payload with an empty element list.)
   final actual = payload == null
       ? 'null'
       : _wireframePayloadToPrettyJson(payload);

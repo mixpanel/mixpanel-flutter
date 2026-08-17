@@ -55,6 +55,109 @@ void main() {
     });
   });
 
+  group('WireframeEmitter — empty screen', () {
+    test('emits a payload with zero elements when nothing was collected', () {
+      // GIVEN — a frame with no semantic content (splash, bare canvas, or a
+      // screen whose every element was dropped upstream)
+      final emitter = WireframeEmitter(
+        sensitiveRules: const [],
+        debugEmitter: null,
+        logger: logger,
+      );
+
+      // WHEN
+      final payload = emitter.emit(
+        rawElements: const [],
+        maskRegions: const [],
+        viewport: defaultViewport,
+        timestamp: defaultTimestamp,
+      );
+
+      // THEN — an empty screen is signal, not a reason to skip the event
+      expect(payload, isNotNull);
+      expect(payload!.elements, isEmpty);
+      expect(payload.viewportWidth, 400);
+      expect(payload.viewportHeight, 800);
+    });
+
+    test('reports an empty frame to the debug callback', () {
+      // GIVEN
+      final received = <WireframeSnapshot>[];
+      final emitter = WireframeEmitter(
+        sensitiveRules: const [],
+        debugEmitter: received.add,
+        logger: logger,
+      );
+
+      // WHEN
+      emitter.emit(
+        rawElements: const [],
+        maskRegions: const [],
+        viewport: defaultViewport,
+        timestamp: defaultTimestamp,
+      );
+
+      // THEN
+      expect(received, hasLength(1));
+      expect(received.single.elements, isEmpty);
+    });
+
+    test('dedups a static empty screen after the first emit', () {
+      // GIVEN
+      final emitter = WireframeEmitter(
+        sensitiveRules: const [],
+        debugEmitter: null,
+        logger: logger,
+      );
+
+      // WHEN — the same empty frame twice
+      final first = emitter.emit(
+        rawElements: const [],
+        maskRegions: const [],
+        viewport: defaultViewport,
+        timestamp: defaultTimestamp,
+      );
+      final second = emitter.emit(
+        rawElements: const [],
+        maskRegions: const [],
+        viewport: defaultViewport,
+        timestamp: defaultTimestamp,
+      );
+
+      // THEN — emitting empties must not spam one event per frame
+      expect(first, isNotNull);
+      expect(second, isNull);
+    });
+
+    test('emits an empty frame after a populated one', () {
+      // GIVEN — a screen that had content and then cleared
+      final emitter = WireframeEmitter(
+        sensitiveRules: const [],
+        debugEmitter: null,
+        logger: logger,
+      );
+
+      // WHEN
+      final populated = emitter.emit(
+        rawElements: [el(text: 'Hello world')],
+        maskRegions: const [],
+        viewport: defaultViewport,
+        timestamp: defaultTimestamp,
+      );
+      final cleared = emitter.emit(
+        rawElements: const [],
+        maskRegions: const [],
+        viewport: defaultViewport,
+        timestamp: defaultTimestamp,
+      );
+
+      // THEN — the transition to empty is itself a state change worth sending
+      expect(populated, isNotNull);
+      expect(cleared, isNotNull);
+      expect(cleared!.elements, isEmpty);
+    });
+  });
+
   group('WireframeEmitter — geometric masking', () {
     test('nulls text when bounds intersect any mask region', () {
       // GIVEN — element at (10,10,100,20); mask at (50,10,60,20) → overlaps
