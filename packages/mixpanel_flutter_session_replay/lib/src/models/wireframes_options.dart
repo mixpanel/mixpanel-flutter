@@ -142,28 +142,26 @@ enum MaskDecision {
   ruleStrip,
 
   /// Matched a `RedactRule` / `RedactRegexRule` rule (text present but rewritten).
-  ruleRedact,
-}
+  ruleRedact;
 
-String _maskDecisionWireName(MaskDecision decision) {
-  switch (decision) {
-    case MaskDecision.none:
-      return 'NONE';
-    case MaskDecision.declared:
-      return 'DECLARED';
-    case MaskDecision.explicit:
-      return 'EXPLICIT';
-    case MaskDecision.auto:
-      return 'AUTO';
-    case MaskDecision.textEntry:
-      return 'TEXT_ENTRY';
-    case MaskDecision.geometric:
-      return 'GEOMETRIC';
-    case MaskDecision.ruleStrip:
-      return 'RULE_STRIP';
-    case MaskDecision.ruleRedact:
-      return 'RULE_REDACT';
-  }
+  /// SCREAMING_SNAKE name used everywhere this decision is written out —
+  /// [WireframeSnapshot.toJson] and the wireframe golden fixtures.
+  ///
+  /// Not `name`: Dart enum names are camelCase (`textEntry`), while Android
+  /// (`MaskDecision.TEXT_ENTRY`) and iOS (`MPMaskDecision.textEntry` with a
+  /// `"TEXT_ENTRY"` raw value) both render SCREAMING_SNAKE. Spelling it the
+  /// same way on all three keeps golden fixtures byte-comparable across
+  /// platforms, which is the point of capturing the same scenarios three times.
+  String get wireName => switch (this) {
+    MaskDecision.none => 'NONE',
+    MaskDecision.declared => 'DECLARED',
+    MaskDecision.explicit => 'EXPLICIT',
+    MaskDecision.auto => 'AUTO',
+    MaskDecision.textEntry => 'TEXT_ENTRY',
+    MaskDecision.geometric => 'GEOMETRIC',
+    MaskDecision.ruleStrip => 'RULE_STRIP',
+    MaskDecision.ruleRedact => 'RULE_REDACT',
+  };
 }
 
 /// A snapshot delivered to [DebugOptions.wireframeEmitter] after each
@@ -199,7 +197,7 @@ class WireframeSnapshot {
               'role': e.role,
               'text': e.text,
               'bounds': e.bounds,
-              'maskDecision': _maskDecisionWireName(e.maskDecision),
+              'maskDecision': e.maskDecision.wireName,
             },
           )
           .toList(),

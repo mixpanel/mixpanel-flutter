@@ -94,6 +94,35 @@ class WireframePayload extends EventPayload {
         )
         .toList(),
   };
+
+  /// Dedup key: a hash of exactly what ships as the `mp_wireframe` event.
+  ///
+  /// Mirrors [RRWebEvent] `_buildWireframeEvent`, **not** [toJson] — the two
+  /// disagree, and the wire is what matters. `toJson` additionally emits
+  /// `maskDecision`, which the rrweb serializer omits; a frame that changed
+  /// only its decision renders identically for the summarizer and should
+  /// dedup. Bounds are rounded here the same way the serializer rounds them,
+  /// so rects differing by a sub-pixel that rounds away count as one screen.
+  ///
+  /// Matches Android's `WireframePayload.hashCode()` and iOS's
+  /// `WireframePayload.hashValue`, which get the same semantics for free from
+  /// hashing their wire DTOs directly.
+  int get wireHash => Object.hash(
+    viewportWidth,
+    viewportHeight,
+    Object.hashAll(
+      elements.map(
+        (e) => Object.hash(
+          e.role,
+          e.text,
+          e.bounds.left.round(),
+          e.bounds.top.round(),
+          e.bounds.width.round(),
+          e.bounds.height.round(),
+        ),
+      ),
+    ),
+  );
 }
 
 /// Payload for interaction events

@@ -13,7 +13,7 @@
         113,
         20
       ],
-      "maskDecision": "auto"
+      "maskDecision": "AUTO"
     },
     {
       "role": "image",
@@ -24,7 +24,7 @@
         40,
         40
       ],
-      "maskDecision": "none"
+      "maskDecision": "NONE"
     },
     {
       "role": "text",
@@ -35,7 +35,7 @@
         128,
         20
       ],
-      "maskDecision": "none"
+      "maskDecision": "NONE"
     },
     {
       "role": "image",
@@ -46,7 +46,7 @@
         40,
         40
       ],
-      "maskDecision": "explicit"
+      "maskDecision": "EXPLICIT"
     },
     {
       "role": "text",
@@ -57,7 +57,7 @@
         25,
         20
       ],
-      "maskDecision": "auto"
+      "maskDecision": "AUTO"
     },
     {
       "role": "image",
@@ -68,7 +68,7 @@
         40,
         40
       ],
-      "maskDecision": "none"
+      "maskDecision": "NONE"
     },
     {
       "role": "text",
@@ -79,7 +79,7 @@
         44,
         20
       ],
-      "maskDecision": "none"
+      "maskDecision": "NONE"
     },
     {
       "role": "text",
@@ -90,7 +90,7 @@
         51,
         20
       ],
-      "maskDecision": "explicit"
+      "maskDecision": "EXPLICIT"
     },
     {
       "role": "text",
@@ -101,7 +101,7 @@
         33,
         20
       ],
-      "maskDecision": "auto"
+      "maskDecision": "AUTO"
     }
   ]
 }

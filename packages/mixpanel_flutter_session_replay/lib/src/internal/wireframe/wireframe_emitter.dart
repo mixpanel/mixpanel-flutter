@@ -31,14 +31,20 @@ class WireframeEmitter {
   final void Function(WireframeSnapshot)? debugEmitter;
   final MixpanelLogger _logger;
 
-  // Dedup state: keyed by (elementsHash, maskHash). Same-hash consecutive
-  // emits are dropped so static screens don't spam events.
-  int? _lastElementsHash;
-  int? _lastMaskHash;
+  /// Hash of the last emitted payload — of exactly the bytes that go on the
+  /// wire, via [WireframePayload.wireHash]. Same-hash consecutive frames are
+  /// dropped so static screens don't spam events.
+  ///
+  /// This subsumes the mask-region hash this used to carry alongside it. Mask
+  /// rects are not on the wire; they matter only through the text they strip,
+  /// which is already baked into the payload. A mask that shifts without
+  /// changing any element's text produces an identical render and should
+  /// dedup. Matches Android's and iOS's `lastPayloadHash`.
+  int? _lastPayloadHash;
 
   /// Process raw elements through the pipeline. Returns null *only* when the
-  /// frame deduped against the previous emit (identical elements AND identical
-  /// mask regions) — an empty [rawElements] list still yields a payload.
+  /// frame deduped against the previous emit (an identical wire payload) — an
+  /// empty [rawElements] list still yields a payload.
   WireframePayload? emit({
     required List<WireframeElement> rawElements,
     required List<MaskRegionInfo> maskRegions,
@@ -59,20 +65,18 @@ class WireframeEmitter {
         .map(_truncate)
         .toList(growable: false);
 
-    // Dedup check against previous emit. Both must be unchanged to skip.
-    final elementsHash = Object.hashAll(processed);
-    final maskHash = Object.hashAll(maskRegions);
-    if (_lastElementsHash == elementsHash && _lastMaskHash == maskHash) {
-      return null;
-    }
-    _lastElementsHash = elementsHash;
-    _lastMaskHash = maskHash;
-
     final payload = WireframePayload(
       viewportWidth: viewport.width.round(),
       viewportHeight: viewport.height.round(),
       elements: processed,
     );
+
+    // Dedup against the previous emit on the wire content itself. Note this
+    // covers the viewport too: a rotation that leaves the element list
+    // untouched (an empty screen, say) still changes the render and must emit.
+    final payloadHash = payload.wireHash;
+    if (_lastPayloadHash == payloadHash) return null;
+    _lastPayloadHash = payloadHash;
 
     _fireDebugCallback(payload, timestamp);
     return payload;

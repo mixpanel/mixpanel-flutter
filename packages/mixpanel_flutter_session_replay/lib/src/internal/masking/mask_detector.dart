@@ -305,13 +305,36 @@ class MaskDetector {
         : null;
     final bool declaresChildText = childDeclaredText != null;
 
+    // A marker never collects a wireframe element for ITSELF — the same
+    // shared-render-object reasoning as above, generalized. Because
+    // `element.renderObject` resolves to a descendant's, a marker wrapping a
+    // `Text` directly resolves to that `RenderParagraph`; collecting it here
+    // would stamp it with the marker's own MaskContext and mark it visited, so
+    // a marker nested below could never re-decide it. That made
+    // `MixpanelMask(child: MixpanelUnmask(child: Text(...)))` emit `explicit`
+    // with the inner unmask never consulted — while the same tree with any
+    // intervening render object resolved to `none` + a geometric strip.
+    //
+    // Skipping lets the descendant that actually owns the render object collect
+    // it under the fully resolved context, so both tree shapes agree: the inner
+    // unmask IS honored, and the enclosing mask's container rect — which
+    // MaskPainter still paints over the whole subtree — strips the text
+    // geometrically. Traversal always reaches that descendant, so skipping the
+    // marker loses nothing.
+    //
+    // The exception is a marker carrying `declaredText`: it is an enclosing
+    // declaring marker's direct child, and the declared text is applied here.
+    final bool isMarker = widget is MixpanelMask || widget is MixpanelUnmask;
+    final bool skipsOwnCollection =
+        declaresChildText || (isMarker && declaredText == null);
+
     // Wireframe collection — piggyback on the same walk. Uses the same
     // MaskContext as masking. The detector's initial mask decision is
     // derived here; geometric leak prevention and user sensitive rules
     // are applied later by WireframeEmitter. `declaredText` (from an enclosing
     // declaring marker, i.e. this element is that marker's direct child) is
     // applied to this element's role + bounds.
-    if (wireframes != null && wireframeVisited != null && !declaresChildText) {
+    if (wireframes != null && wireframeVisited != null && !skipsOwnCollection) {
       _collectWireframeElement(
         element,
         boundary,

@@ -226,22 +226,56 @@ void main() {
   });
 
   group('WireframeGolden — nested directives', () {
-    testWidgets('MixpanelUnmask inside MixpanelMask emits child unmasked', (
-      tester,
-    ) async {
-      await captureWireframeGolden(
-        tester,
-        const MixpanelMask(
-          child: MixpanelUnmask(child: Text('Nested Unmask Wins')),
-        ),
-        'wireframe_nested_unmask_in_mask.json',
-        {},
-      );
-    });
+    testWidgets(
+      'MixpanelUnmask inside MixpanelMask is honored, then nulled geometrically',
+      (tester) async {
+        // Per the documented nesting behavior, the inner unmask IS honored —
+        // it is not overridden by the enclosing mask context. But MixpanelMask
+        // paints a container rect over its ENTIRE bounds and MaskPainter never
+        // punches unmask regions back out of it (see the screenshot golden
+        // `widget_explicitly_masked_with_inner_unmask.png`), so a non-
+        // overflowing child is grayed in the image. The detector therefore
+        // resolves `none` and Layer 2 strips the text: GEOMETRIC, not EXPLICIT.
+        await captureWireframeGolden(
+          tester,
+          const MixpanelMask(
+            child: MixpanelUnmask(child: Text('Nested Unmask')),
+          ),
+          'wireframe_nested_unmask_in_mask_geometric.json',
+          {},
+        );
+      },
+    );
+
+    testWidgets(
+      'MixpanelUnmask inside MixpanelMask below an intervening render object',
+      (tester) async {
+        // Same scenario, but the Column gives MixpanelMask a render object of
+        // its own rather than resolving to the Text's RenderParagraph. Both
+        // shapes must agree — this is what regressed when the marker element
+        // collected its child's shared render object itself.
+        await captureWireframeGolden(
+          tester,
+          const MixpanelMask(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                MixpanelUnmask(child: Text('Nested Unmask')),
+                Text('Masked Sibling'),
+              ],
+            ),
+          ),
+          'wireframe_nested_unmask_under_column_geometric.json',
+          {},
+        );
+      },
+    );
 
     testWidgets('MixpanelMask inside MixpanelUnmask emits child masked', (
       tester,
     ) async {
+      // The inner mask wins on its own terms: the child resolves to EXPLICIT,
+      // not an incidental geometric strip.
       await captureWireframeGolden(
         tester,
         const MixpanelUnmask(
@@ -507,7 +541,7 @@ void main() {
     testWidgets('declared text still runs through SensitiveRules', (
       tester,
     ) async {
-      // Layer 3 safety net: a StripRule matching the authored label nulls it.
+      // Layer 4 safety net: a StripRule matching the authored label nulls it.
       await captureWireframeGolden(
         tester,
         const MixpanelUnmask(

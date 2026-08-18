@@ -13,7 +13,7 @@
         116,
         20
       ],
-      "maskDecision": "ruleRedact"
+      "maskDecision": "RULE_REDACT"
     }
   ]
 }

@@ -13,7 +13,7 @@
         300,
         68
       ],
-      "maskDecision": "declared"
+      "maskDecision": "DECLARED"
     },
     {
       "role": "text",
@@ -24,7 +24,7 @@
         54,
         20
       ],
-      "maskDecision": "none"
+      "maskDecision": "NONE"
     },
     {
       "role": "input",
@@ -35,7 +35,7 @@
         300,
         24
       ],
-      "maskDecision": "textEntry"
+      "maskDecision": "TEXT_ENTRY"
     }
   ]
 }

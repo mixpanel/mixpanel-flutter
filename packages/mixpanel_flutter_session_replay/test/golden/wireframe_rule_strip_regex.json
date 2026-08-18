@@ -13,7 +13,7 @@
         88,
         20
       ],
-      "maskDecision": "ruleStrip"
+      "maskDecision": "RULE_STRIP"
     }
   ]
 }

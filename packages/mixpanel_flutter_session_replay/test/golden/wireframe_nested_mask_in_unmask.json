@@ -13,7 +13,7 @@
         120,
         20
       ],
-      "maskDecision": "geometric"
+      "maskDecision": "EXPLICIT"
     }
   ]
 }

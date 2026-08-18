@@ -612,7 +612,7 @@ void main() {
     });
 
     test('declared text is still stripped by a matching StripRule', () {
-      // GIVEN — Layer 3 safety net still applies to declared text
+      // GIVEN — Layer 4 safety net still applies to declared text
       final emitter = WireframeEmitter(
         sensitiveRules: const [StripRule('secret')],
         debugEmitter: null,
@@ -744,7 +744,7 @@ void main() {
       expect(second, isNotNull);
     });
 
-    test('emits again when mask regions change', () {
+    test('emits again when a mask region starts stripping text', () {
       // GIVEN
       final emitter = WireframeEmitter(
         sensitiveRules: const [],
@@ -753,7 +753,41 @@ void main() {
       );
       final input = [el(bounds: const Rect.fromLTWH(0, 0, 10, 10))];
 
-      // WHEN — same elements, different mask sets
+      // WHEN — same elements, but the second frame's mask covers the element
+      final first = emitter.emit(
+        rawElements: input,
+        maskRegions: const [],
+        viewport: defaultViewport,
+        timestamp: defaultTimestamp,
+      );
+      final second = emitter.emit(
+        rawElements: input,
+        maskRegions: [
+          MaskRegionInfo(const Rect.fromLTWH(0, 0, 10, 10), MaskSource.auto),
+        ],
+        viewport: defaultViewport,
+        timestamp: defaultTimestamp,
+      );
+
+      // THEN
+      expect(first, isNotNull);
+      expect(first!.elements.single.text, 'hello');
+      expect(second, isNotNull);
+      expect(second!.elements.single.text, isNull);
+    });
+
+    test('dedups when a mask region moves without changing the wire', () {
+      // GIVEN — dedup keys off the finished payload, not the mask set. Mask
+      // rects are not on the wire; they matter only through the text they
+      // strip, so a mask that misses every element renders identically.
+      final emitter = WireframeEmitter(
+        sensitiveRules: const [],
+        debugEmitter: null,
+        logger: logger,
+      );
+      final input = [el(bounds: const Rect.fromLTWH(0, 0, 10, 10))];
+
+      // WHEN — same elements, different non-overlapping mask sets
       final first = emitter.emit(
         rawElements: input,
         maskRegions: const [],
@@ -774,7 +808,64 @@ void main() {
 
       // THEN
       expect(first, isNotNull);
+      expect(second, isNull);
+    });
+
+    test('emits again when only the viewport changes', () {
+      // GIVEN — a rotation on a screen whose element list is unchanged still
+      // changes the render, so the viewport is part of the dedup key.
+      final emitter = WireframeEmitter(
+        sensitiveRules: const [],
+        debugEmitter: null,
+        logger: logger,
+      );
+
+      // WHEN
+      final first = emitter.emit(
+        rawElements: const [],
+        maskRegions: const [],
+        viewport: const Size(400, 800),
+        timestamp: defaultTimestamp,
+      );
+      final second = emitter.emit(
+        rawElements: const [],
+        maskRegions: const [],
+        viewport: const Size(800, 400),
+        timestamp: defaultTimestamp,
+      );
+
+      // THEN
+      expect(first, isNotNull);
       expect(second, isNotNull);
+    });
+
+    test('dedups a frame whose only change is its mask decision', () {
+      // GIVEN — maskDecision is debug-only metadata; the rrweb serializer
+      // never ships it, so two frames that differ only there render the same.
+      final emitter = WireframeEmitter(
+        sensitiveRules: const [],
+        debugEmitter: null,
+        logger: logger,
+      );
+
+      // WHEN — an already-masked element (text already null) whose decision
+      // flips from explicit to auto between frames
+      final first = emitter.emit(
+        rawElements: [el(text: null, maskDecision: MaskDecision.explicit)],
+        maskRegions: const [],
+        viewport: defaultViewport,
+        timestamp: defaultTimestamp,
+      );
+      final second = emitter.emit(
+        rawElements: [el(text: null, maskDecision: MaskDecision.auto)],
+        maskRegions: const [],
+        viewport: defaultViewport,
+        timestamp: defaultTimestamp,
+      );
+
+      // THEN
+      expect(first, isNotNull);
+      expect(second, isNull);
     });
   });
 

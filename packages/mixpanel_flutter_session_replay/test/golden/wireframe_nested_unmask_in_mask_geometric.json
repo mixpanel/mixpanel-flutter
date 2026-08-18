@@ -8,12 +8,12 @@
       "role": "text",
       "text": null,
       "bounds": [
-        331,
+        349,
         290,
-        138,
+        102,
         20
       ],
-      "maskDecision": "explicit"
+      "maskDecision": "GEOMETRIC"
     }
   ]
 }

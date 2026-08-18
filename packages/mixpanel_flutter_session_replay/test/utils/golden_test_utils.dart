@@ -302,7 +302,7 @@ String _wireframePayloadToPrettyJson(WireframePayload payload) {
               e.bounds.width.round(),
               e.bounds.height.round(),
             ],
-            'maskDecision': e.maskDecision.name,
+            'maskDecision': e.maskDecision.wireName,
           },
         )
         .toList(),
