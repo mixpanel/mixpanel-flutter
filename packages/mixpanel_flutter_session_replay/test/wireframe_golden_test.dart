@@ -163,6 +163,22 @@ void main() {
       );
     });
 
+    testWidgets('button under MixpanelMask drops its label (explicit)', (
+      tester,
+    ) async {
+      // Structure survives, content does not: the shell keeps role + bounds so
+      // the summary still sees a control, but the scraped label is dropped
+      // because the button's pixels are masked.
+      await captureWireframeGolden(
+        tester,
+        MixpanelMask(
+          child: ElevatedButton(onPressed: () {}, child: const Text('Pay')),
+        ),
+        'wireframe_button_masked_drops_label.json',
+        {},
+      );
+    });
+
     testWidgets('CupertinoButton is emitted as role button', (tester) async {
       await captureWireframeGolden(
         tester,
@@ -220,6 +236,54 @@ void main() {
           ),
         ),
         'wireframe_image_semantic_label.json',
+        {},
+      );
+    });
+
+    testWidgets('image under AutoMaskedView.image is nulled with auto decision', (
+      tester,
+    ) async {
+      // The image counterpart of wireframe_text_auto_masked — auto-masking an
+      // image must also drop the semanticLabel that would otherwise describe it.
+      final testImage = await createColoredSquareImage(size: 80);
+      await captureWireframeGolden(
+        tester,
+        Semantics(
+          image: true,
+          label: 'Company logo',
+          child: SizedBox(
+            width: 80,
+            height: 80,
+            child: RawImage(image: testImage),
+          ),
+        ),
+        'wireframe_image_auto_masked.json',
+        {AutoMaskedView.image},
+      );
+    });
+
+    testWidgets('image under MixpanelMask drops its semanticLabel (explicit)', (
+      tester,
+    ) async {
+      // The ERD's Risk 2 mitigation, asserted directly: an accessibility label
+      // can describe more than the screen shows (an avatar whose label is the
+      // user's name), so a masked view must emit no label at all. The label is
+      // ordinary element text and dies with the rest of the element's content.
+      final testImage = await createColoredSquareImage(size: 80);
+      await captureWireframeGolden(
+        tester,
+        MixpanelMask(
+          child: Semantics(
+            image: true,
+            label: 'Company logo',
+            child: SizedBox(
+              width: 80,
+              height: 80,
+              child: RawImage(image: testImage),
+            ),
+          ),
+        ),
+        'wireframe_image_masked_drops_label.json',
         {},
       );
     });
@@ -322,6 +386,61 @@ void main() {
         );
       },
     );
+
+    testWidgets('an overlapping mask also strips button and image labels', (
+      tester,
+    ) async {
+      // Layer 2 is role-agnostic: a button's scraped label and an image's
+      // accessibility label are both element text, so both are stripped when a
+      // mask rect the screenshot painted covers them. Neither control is a
+      // descendant of the mask.
+      final testImage = await createColoredSquareImage(size: 40);
+      await captureWireframeGolden(
+        tester,
+        SizedBox(
+          width: 300,
+          height: 200,
+          child: Stack(
+            children: [
+              Positioned(
+                left: 10,
+                top: 10,
+                child: MixpanelMask(
+                  child: Container(
+                    width: 280,
+                    height: 180,
+                    color: Colors.red.shade100,
+                  ),
+                ),
+              ),
+              Positioned(
+                left: 30,
+                top: 30,
+                child: ElevatedButton(
+                  onPressed: () {},
+                  child: const Text('Checkout'),
+                ),
+              ),
+              Positioned(
+                left: 30,
+                top: 110,
+                child: Semantics(
+                  image: true,
+                  label: 'Company logo',
+                  child: SizedBox(
+                    width: 40,
+                    height: 40,
+                    child: RawImage(image: testImage),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        'wireframe_geometric_overlap_button_and_image.json',
+        {},
+      );
+    });
   });
 
   group('WireframeGolden — user sensitive rules', () {
@@ -367,6 +486,47 @@ void main() {
         {},
         sensitiveRules: [
           RedactRegexRule(RegExp(r'\d{3}-\d{2}-\d{4}'), replacement: '[SSN]'),
+        ],
+      );
+    });
+
+    testWidgets('StripRule runs over a button tooltip label', (tester) async {
+      // The ERD names sensitiveRules as the content-level backstop for
+      // accessibility labels (Risk 2), which is only worth anything if rules
+      // actually reach label-derived text rather than scraped text alone.
+      await captureWireframeGolden(
+        tester,
+        IconButton(
+          onPressed: () {},
+          tooltip: 'Bearer eyJhbGciOi',
+          icon: const Icon(Icons.settings),
+        ),
+        'wireframe_rule_strip_button_tooltip.json',
+        {},
+        sensitiveRules: const [StripRule('Bearer ')],
+      );
+    });
+
+    testWidgets('RedactRule rewrites an image semanticLabel in place', (
+      tester,
+    ) async {
+      // Same backstop on the image path — the label ships, but redacted.
+      final testImage = await createColoredSquareImage(size: 80);
+      await captureWireframeGolden(
+        tester,
+        Semantics(
+          image: true,
+          label: 'avatar of alice@example.com',
+          child: SizedBox(
+            width: 80,
+            height: 80,
+            child: RawImage(image: testImage),
+          ),
+        ),
+        'wireframe_rule_redact_image_label.json',
+        {},
+        sensitiveRules: const [
+          RedactRule('alice@example.com', replacement: '[EMAIL]'),
         ],
       );
     });
@@ -627,6 +787,59 @@ void main() {
         'wireframe_declared_beats_label_fallback_off.json',
         {},
         useAccessibilityLabelFallback: false,
+      );
+    });
+  });
+
+  group('WireframeGolden — off-screen and hidden content', () {
+    testWidgets('rows scrolled out of a ListView are not emitted', (
+      tester,
+    ) async {
+      // Content clipped away by a scrollable is not in the screenshot, so it
+      // must not reach the wireframe either. Rows are 30px tall in a 100px
+      // viewport: rows 0-2 are fully visible, row 3's text straddles the
+      // bottom edge and is clipped to its visible slice, and row 4 is laid out
+      // (it sits inside the ListView's cacheExtent) but entirely out of view,
+      // so it emits nothing at all rather than a shell with off-screen bounds.
+      await captureWireframeGolden(
+        tester,
+        SizedBox(
+          height: 100,
+          child: ListView(
+            children: const [
+              SizedBox(height: 30, child: Text('Row 0')),
+              SizedBox(height: 30, child: Text('Row 1')),
+              SizedBox(height: 30, child: Text('Row 2')),
+              SizedBox(height: 30, child: Text('Row 3 CLIPPED')),
+              SizedBox(height: 30, child: Text('Row 4 OFFSCREEN')),
+            ],
+          ),
+        ),
+        'wireframe_scrollable_offscreen_dropped.json',
+        {},
+      );
+    });
+
+    testWidgets('Offstage, invisible and transparent widgets emit nothing', (
+      tester,
+    ) async {
+      // Three separate filters, each of which would otherwise leak text the
+      // screenshot never painted: debugVisitOnstageChildren skips the Offstage
+      // subtree, and the walk skips Visibility(visible: false) and
+      // near-zero-opacity subtrees explicitly.
+      await captureWireframeGolden(
+        tester,
+        const Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('Visible'),
+            Offstage(child: Text('Offstage secret')),
+            Visibility(visible: false, child: Text('Invisible secret')),
+            Opacity(opacity: 0, child: Text('Transparent secret')),
+          ],
+        ),
+        'wireframe_hidden_widgets_not_emitted.json',
+        {},
       );
     });
   });

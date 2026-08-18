@@ -343,6 +343,7 @@ class MaskDetector {
         visited: wireframeVisited,
         imageLabel: currentImageLabel,
         declaredText: declaredText,
+        viewportBounds: currentViewportBounds,
       );
     }
 
@@ -600,6 +601,10 @@ class MaskDetector {
   /// Elements that don't map to a wireframe role (containers, layout
   /// widgets, etc.) contribute nothing here — but traversal continues into
   /// their children so descendants can still emit.
+  ///
+  /// [viewportBounds] is the enclosing scrollable's rect (null outside a
+  /// scrollable). Elements scrolled fully out of it are not emitted at all —
+  /// see [_boundaryRelativeBounds].
   void _collectWireframeElement(
     Element element,
     RenderRepaintBoundary boundary,
@@ -608,6 +613,7 @@ class MaskDetector {
     required Set<RenderObject> visited,
     String? imageLabel,
     String? declaredText,
+    Rect? viewportBounds,
   }) {
     final renderObject = element.renderObject;
     if (renderObject == null || visited.contains(renderObject)) return;
@@ -624,7 +630,11 @@ class MaskDetector {
     // text REPLACES scraped text rather than adding to it. The field's pixels
     // stay masked either way.
     if (declaredText != null) {
-      final bounds = _boundaryRelativeBounds(renderObject, boundary);
+      final bounds = _boundaryRelativeBounds(
+        renderObject,
+        boundary,
+        viewportBounds: viewportBounds,
+      );
       if (bounds == null) return;
       final WireframeRole role;
       if (_isButtonWidget(element.widget)) {
@@ -663,7 +673,11 @@ class MaskDetector {
 
     // Input fields — always masked, cannot be overridden.
     if (renderObject is RenderEditable) {
-      final bounds = _boundaryRelativeBounds(renderObject, boundary);
+      final bounds = _boundaryRelativeBounds(
+        renderObject,
+        boundary,
+        viewportBounds: viewportBounds,
+      );
       if (bounds == null) return;
       visited.add(renderObject);
       out.add(
@@ -685,7 +699,11 @@ class MaskDetector {
     // when masked — so its paragraphs are consumed and never re-emit as
     // separate shells.
     if (_isButtonWidget(element.widget)) {
-      final bounds = _boundaryRelativeBounds(renderObject, boundary);
+      final bounds = _boundaryRelativeBounds(
+        renderObject,
+        boundary,
+        viewportBounds: viewportBounds,
+      );
       if (bounds == null) return;
       final decision = _wireframeDecision(
         role: WireframeRole.button,
@@ -718,7 +736,11 @@ class MaskDetector {
     // Text — RenderParagraph.
     final typeName = renderObject.runtimeType.toString();
     if (typeName.contains('RenderParagraph')) {
-      final bounds = _boundaryRelativeBounds(renderObject, boundary);
+      final bounds = _boundaryRelativeBounds(
+        renderObject,
+        boundary,
+        viewportBounds: viewportBounds,
+      );
       if (bounds == null) return;
       final text = _extractParagraphText(renderObject);
       final decision = _wireframeDecision(
@@ -741,7 +763,11 @@ class MaskDetector {
     // `Semantics(image: true, label: ...)` threaded down as [imageLabel] (the
     // `Image` widget puts the label there, not on `RenderImage`).
     if (typeName.contains('RenderImage')) {
-      final bounds = _boundaryRelativeBounds(renderObject, boundary);
+      final bounds = _boundaryRelativeBounds(
+        renderObject,
+        boundary,
+        viewportBounds: viewportBounds,
+      );
       if (bounds == null) return;
       final label = useAccessibilityLabelFallback ? imageLabel : null;
       final decision = _wireframeDecision(
@@ -764,10 +790,19 @@ class MaskDetector {
   /// Compute bounds relative to the capture boundary. Returns null if the
   /// element has no size / not attached / doesn't overlap the boundary, or
   /// if the effective bounds are sub-pixel (nothing meaningful to emit).
+  ///
+  /// When [viewportBounds] is non-null the node sits inside a scrollable, so
+  /// bounds are additionally clipped to that viewport — mirroring what
+  /// [_shouldMaskRenderObject] does for mask rects. A node scrolled fully out
+  /// of view clips to nothing and yields null, so the caller emits no element:
+  /// the screenshot paints nothing there, and text the screenshot never showed
+  /// must not reach the wireframe. A partially visible node keeps its text and
+  /// reports only the visible slice as its bounds.
   Rect? _boundaryRelativeBounds(
     RenderObject node,
-    RenderRepaintBoundary boundary,
-  ) {
+    RenderRepaintBoundary boundary, {
+    Rect? viewportBounds,
+  }) {
     if (node is! RenderBox) return null;
     if (!node.hasSize || !node.attached) return null;
     try {
@@ -780,7 +815,11 @@ class MaskDetector {
         boundary.size.height,
       );
       if (!boundaryBounds.overlaps(bounds)) return null;
-      final clipped = bounds.intersect(boundaryBounds);
+      var clipped = bounds.intersect(boundaryBounds);
+      if (viewportBounds != null) {
+        if (!viewportBounds.overlaps(clipped)) return null;
+        clipped = clipped.intersect(viewportBounds);
+      }
       if (clipped.width < 1 || clipped.height < 1) return null;
       return clipped;
     } catch (_) {
