@@ -59,6 +59,13 @@ class ScreenshotCapturer {
   /// Change this value to compare performance between strategies.
   CompressionMode compressionMode;
 
+  /// Clears wireframe dedup state at a recording-session boundary.
+  ///
+  /// Forwarded rather than exposing [_wireframeEmitter] itself: the capturer owns the
+  /// emitter, and the coordinator — which knows when a session starts — already holds
+  /// the capturer. No-op when wireframes are off. See [WireframeEmitter.resetDedup].
+  void resetWireframeDedup() => _wireframeEmitter?.resetDedup();
+
   /// Mask painter (reusable across captures)
   late final MaskPainter _maskPainter;
 

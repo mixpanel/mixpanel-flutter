@@ -42,6 +42,22 @@ class WireframeEmitter {
   /// dedup. Matches Android's and iOS's `lastPayloadHash`.
   int? _lastPayloadHash;
 
+  /// Clears [_lastPayloadHash] so the next [emit] publishes even if the render is
+  /// identical.
+  ///
+  /// Dedup is scoped to a *recording session*, but this emitter is built once per SDK
+  /// lifetime (see `session_replay.dart`) and survives a stop/start cycle — so the
+  /// boundary has to be announced. The coordinator calls this right after
+  /// `_sessionManager.startNewSession()`.
+  ///
+  /// Without it, a background/foreground onto an unchanged screen compares the new
+  /// session's first frame against the *previous* session's last one and dedups it away,
+  /// shipping an opening screenshot with no `mp_wireframe` to describe it. Mirrors
+  /// Android's and iOS's `resetDedup()`.
+  void resetDedup() {
+    _lastPayloadHash = null;
+  }
+
   /// Process raw elements through the pipeline. Returns null *only* when the
   /// frame deduped against the previous emit (an identical wire payload) — an
   /// empty [rawElements] list still yields a payload.

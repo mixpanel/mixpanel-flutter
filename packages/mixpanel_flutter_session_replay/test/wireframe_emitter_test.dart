@@ -717,6 +717,47 @@ void main() {
       expect(second, isNull);
     });
 
+    test('resetDedup emits an identical payload again after a session restart', () {
+      // GIVEN — dedup state is per recording session, not per SDK lifetime. The
+      // emitter is built once in initialize() and survives a stop/start cycle, so
+      // a new session's first frame would otherwise be compared against the
+      // previous session's last one. A background/foreground onto an unchanged
+      // screen then dedups the opening mp_wireframe away, leaving a screenshot
+      // with nothing to describe it. The coordinator calls resetDedup() right
+      // after startNewSession().
+      final emitter = WireframeEmitter(
+        sensitiveRules: const [],
+        debugEmitter: null,
+        logger: logger,
+      );
+      final input = [el(text: 'unchanged')];
+
+      // WHEN
+      final first = emitter.emit(
+        rawElements: input,
+        maskRegions: const [],
+        viewport: defaultViewport,
+        timestamp: defaultTimestamp,
+      );
+      emitter.resetDedup(); // same screen, new session
+      final second = emitter.emit(
+        rawElements: input,
+        maskRegions: const [],
+        viewport: defaultViewport,
+        timestamp: defaultTimestamp,
+      );
+
+      // THEN
+      expect(first, isNotNull);
+      expect(
+        second,
+        isNotNull,
+        reason:
+            'the first frame of a new session must emit even when the screen '
+            'has not changed',
+      );
+    });
+
     test('emits again when elements change', () {
       // GIVEN
       final emitter = WireframeEmitter(

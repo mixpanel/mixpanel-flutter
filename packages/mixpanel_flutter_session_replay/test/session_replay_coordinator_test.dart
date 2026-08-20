@@ -14,6 +14,9 @@ import 'package:mixpanel_flutter_session_replay/src/internal/settings/settings_s
 import 'package:mixpanel_flutter_session_replay/src/internal/upload/payload_serializer.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/session/session_manager.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/logger.dart';
+import 'package:mixpanel_flutter_session_replay/src/internal/wireframe/wireframe_emitter.dart';
+import 'package:mixpanel_flutter_session_replay/src/models/wireframe.dart';
+import 'package:mixpanel_flutter_session_replay/src/models/wireframes_options.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/configuration.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/masking_directive.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/results.dart';
@@ -167,6 +170,69 @@ void main() {
 
         // THEN
         expect(coordinator.recordingState, expectedState);
+      });
+
+      test('resets wireframe dedup state so a new session re-emits', () async {
+        // GIVEN a capturer wired to a real emitter, primed the way a previous
+        // session's last frame would leave it. Dedup is per session, but the
+        // emitter is built once in initialize() and survives a stop/start cycle,
+        // so without a reset a background/foreground onto an unchanged screen
+        // dedups the new session's opening mp_wireframe away — leaving a
+        // screenshot with nothing to describe it.
+        //
+        // Asserted through the coordinator on purpose: a test that calls
+        // resetDedup() directly still passes if this call site is deleted.
+        final emitter = WireframeEmitter(
+          sensitiveRules: const [],
+          debugEmitter: null,
+          logger: logger,
+        );
+        screenshotCapturer = ScreenshotCapturer(
+          directive: MaskingDirective(autoMaskTypes: {}),
+          logger: logger,
+          debugOverlayEnabled: false,
+          wireframeEmitter: emitter,
+        );
+
+        final frame = [
+          const WireframeElement(
+            role: WireframeRole.text,
+            text: 'unchanged',
+            bounds: Rect.fromLTWH(0, 0, 100, 20),
+            maskDecision: MaskDecision.none,
+          ),
+        ];
+        WireframePayload? emitFrame() => emitter.emit(
+          rawElements: frame,
+          maskRegions: const [],
+          viewport: const Size(400, 800),
+          timestamp: DateTime.fromMillisecondsSinceEpoch(1000),
+        );
+
+        expect(
+          emitFrame(),
+          isNotNull,
+          reason: 'precondition: first emit ships',
+        );
+        expect(
+          emitFrame(),
+          isNull,
+          reason: 'precondition: an identical frame dedups',
+        );
+
+        // WHEN
+        final coordinator = createCoordinator();
+        coordinator.startRecording(sessionsPercent: 100.0);
+        await pumpEventQueue();
+
+        // THEN the same screen emits again for the new session.
+        expect(
+          emitFrame(),
+          isNotNull,
+          reason:
+              'the first frame of a new session must emit even when the screen '
+              'has not changed',
+        );
       });
 
       test('does not start when already recording', () async {

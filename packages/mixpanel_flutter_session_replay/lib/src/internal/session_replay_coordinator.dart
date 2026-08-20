@@ -548,6 +548,14 @@ class SessionReplayCoordinator implements WidgetCoordinator {
       final session = _sessionManager.startNewSession();
       _logger.debug('New session created: ${session.id}', tag: 'coordinator');
 
+      // Wireframe dedup is per session, not per SDK lifetime. The emitter is built once
+      // in initialize() and outlives a stop/start cycle, so without this the new
+      // session's first frame is compared against the previous session's last one — and
+      // a background/foreground onto an unchanged screen dedups it away, shipping an
+      // opening screenshot with no mp_wireframe to describe it. Matches iOS and Android,
+      // which reset at the same point.
+      _screenshotCapturer.resetWireframeDedup();
+
       // Transition to initializing immediately to prevent double-starts
       _recordingState = RecordingState.initializing;
 
