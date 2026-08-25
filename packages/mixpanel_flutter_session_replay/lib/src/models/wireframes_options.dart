@@ -36,7 +36,7 @@ import 'dart:convert';
 class WireframesOptions {
   const WireframesOptions({
     this.sensitiveRules = const [],
-    this.useAccessibilityLabelFallback = true,
+    this.useAccessibilityLabelFallback = false,
   });
 
   /// Content-level privacy rules applied to element text after view-level
@@ -45,19 +45,19 @@ class WireframesOptions {
 
   /// Whether an element with no text of its own may fall back to its
   /// accessibility label (an [Icon]/[ImageIcon] `semanticLabel`, a `Tooltip`
-  /// message, or a `Semantics(label:)`). On by default: for icon-only buttons
-  /// and images the label is usually the only description of what the element
-  /// is for, and without it they are sent as bare `role + bounds` shells.
+  /// message, or a `Semantics(label:)`). Off by default: a label is not drawn
+  /// on screen, so unlike visible text you cannot confirm what it contains by
+  /// watching the replay, and labels sometimes hold more than what is shown.
+  ///
+  /// Turn it on if you want icon-only buttons and images named. For those the
+  /// label is usually the only description of what the element is for, and with
+  /// the fallback off they are sent as bare `role + bounds` shells —
+  /// `wireframeText` is then the only way to describe them.
   ///
   /// The label is only ever a fallback. Text declared with
   /// `MixpanelMask(wireframeText:)` / `MixpanelUnmask(wireframeText:)` wins
   /// over it, an element's own visible text wins over it, and a masked element
   /// stays textless either way.
-  ///
-  /// Turn it off if your labels might hold anything you would not want sent. A
-  /// label is not drawn on screen, so unlike visible text you cannot confirm
-  /// what it contains by watching the replay — which also means turning this
-  /// off leaves you no way to describe an icon except `wireframeText`.
   final bool useAccessibilityLabelFallback;
 }
 

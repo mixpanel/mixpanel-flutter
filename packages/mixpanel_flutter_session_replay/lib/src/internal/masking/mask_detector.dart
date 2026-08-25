@@ -64,7 +64,7 @@ class MaskDetector {
     required this.directive,
     this.trackUnmaskBounds = false,
     this.collectWireframes = false,
-    this.useAccessibilityLabelFallback = true,
+    this.useAccessibilityLabelFallback = false,
   });
 
   /// Traverse widget tree and collect mask regions
@@ -642,7 +642,14 @@ class MaskDetector {
         // Consume descendant paragraphs / nested buttons so the button's own
         // label doesn't re-emit as standalone elements — same as the normal
         // button path, but the declared text replaces the scraped label.
-        _collectDescendantParagraphText(element, visited);
+        // Result discarded: declared text is authored, so it replaces whatever the
+        // descendants say and their masking has no bearing on it. The call still
+        // runs to consume them so they don't re-emit as standalone elements.
+        _collectDescendantParagraphText(
+          element,
+          visited,
+          maskContext: maskContext,
+        );
         _markNestedButtonsVisited(element, visited);
       } else if (renderObject is RenderEditable ||
           _isTextFieldWidget(element.widget)) {
@@ -709,9 +716,26 @@ class MaskDetector {
         role: WireframeRole.button,
         maskContext: maskContext,
       );
-      final visibleLabel = _collectDescendantParagraphText(element, visited);
-      final label = decision == MaskDecision.none
-          ? (visibleLabel ??
+      final aggregated = _collectDescendantParagraphText(
+        element,
+        visited,
+        maskContext: maskContext,
+      );
+      // A masked contributor demotes the whole label. `geometric` rather than a new
+      // decision because that is what Layer 2 already reports for the same shape
+      // when the contributor happens to be on screen — the clipped and visible
+      // cases now agree instead of diverging. The accessibility fallback is skipped
+      // too: a label describing masked content is the same leak by another route.
+      // Only ever *adds* a demotion. If the button is already masked in its own
+      // right — inside a MixpanelMask, or auto-masked — that decision is the more
+      // specific one and stands; overwriting it with `geometric` would report a
+      // developer's explicit mask as an incidental overlap.
+      final effectiveDecision =
+          decision == MaskDecision.none && aggregated.hasMaskedContributor
+          ? MaskDecision.geometric
+          : decision;
+      final label = effectiveDecision == MaskDecision.none
+          ? (aggregated.text ??
                 (useAccessibilityLabelFallback
                     ? _collectDescendantSemanticLabel(element)
                     : null))
@@ -727,7 +751,7 @@ class MaskDetector {
           role: WireframeRole.button,
           text: label,
           bounds: bounds,
-          maskDecision: decision,
+          maskDecision: effectiveDecision,
         ),
       );
       return;
@@ -912,31 +936,81 @@ class MaskDetector {
   /// so they never re-emit — but are NOT added to the label, since a glyph
   /// is not human-readable text. Such buttons fall back to
   /// [_collectDescendantSemanticLabel].
-  String? _collectDescendantParagraphText(
+  /// Folded descendant text, plus whether any contributor to it was masked.
+  ///
+  /// The second field is the whole point: a label synthesized from descendants is
+  /// only as safe as the least safe descendant that fed it.
+  _AggregatedLabel _collectDescendantParagraphText(
     Element buttonElement,
-    Set<RenderObject> visited,
-  ) {
+    Set<RenderObject> visited, {
+    required MaskContext maskContext,
+  }) {
     final buffer = <String>[];
-    void visit(Element child) {
+    var hasMaskedContributor = false;
+
+    // Auto-masking is evaluated per contributor rather than once up front, because
+    // an unmask below this point overrides it (and an explicit mask below does not).
+    final autoMasksText = directive.autoMaskTypes.contains(AutoMaskedView.text);
+
+    void visit(Element child, MaskContext context) {
+      // Markers below the button still apply to what they wrap. Resolved here so a
+      // MixpanelMask around one child of a composite button is honored even though
+      // that child never emits an element of its own.
+      var childContext = context;
+      final widget = child.widget;
+      if (widget is MixpanelMask) {
+        childContext = MaskContext.mask;
+      } else if (widget is MixpanelUnmask) {
+        childContext = MaskContext.unmask;
+      }
+
       final renderObject = child.renderObject;
+      // `child is RenderObjectElement` is load-bearing, not a micro-optimization.
+      //
+      // `Element.renderObject` on a component element resolves *downward* to the
+      // first descendant render object, so every wrapper above a Text reports that
+      // Text's RenderParagraph as its own. Collecting at the first element that
+      // reports it means collecting at the outermost wrapper — before any marker
+      // below it has been seen. That is how a masked subtitle leaked: `ListTile`
+      // builds `AnimatedDefaultTextStyle(child: MixpanelMask(child: Text(...)))`,
+      // the wrapper claimed the paragraph with pre-mask context and marked it
+      // visited, and the MixpanelMask below then had nothing left to flag.
+      //
+      // Deferring to the render object's real owner means every marker on the path
+      // has already been folded into `childContext` by the time it is judged.
       if (renderObject != null &&
+          child is RenderObjectElement &&
           renderObject is! RenderEditable &&
           !visited.contains(renderObject)) {
         final typeName = renderObject.runtimeType.toString();
         if (typeName.contains('RenderParagraph')) {
           visited.add(renderObject);
-          final text = _extractParagraphText(renderObject);
-          if (text.isNotEmpty && wireframeTextIsHumanReadable(text)) {
-            buffer.add(text);
+          // Deliberately independent of this paragraph's *bounds*. Layer 2 can only
+          // strip what it can intersect, and a contributor scrolled out of the
+          // viewport has no rect to intersect — which is exactly how masked text
+          // used to reach the wire inside a synthesized label. Provenance is known
+          // here, so it is decided here rather than left to geometry.
+          final masked =
+              childContext == MaskContext.mask ||
+              (childContext == MaskContext.none && autoMasksText);
+          if (masked) {
+            hasMaskedContributor = true;
+          } else {
+            final text = _extractParagraphText(renderObject);
+            if (text.isNotEmpty && wireframeTextIsHumanReadable(text)) {
+              buffer.add(text);
+            }
           }
         }
       }
-      child.debugVisitOnstageChildren(visit);
+      child.debugVisitOnstageChildren((c) => visit(c, childContext));
     }
 
-    buttonElement.debugVisitOnstageChildren(visit);
-    if (buffer.isEmpty) return null;
-    return buffer.join(' ');
+    buttonElement.debugVisitOnstageChildren((c) => visit(c, maskContext));
+    return _AggregatedLabel(
+      buffer.isEmpty ? null : buffer.join(' '),
+      hasMaskedContributor,
+    );
   }
 
   /// Best-effort human-readable label for an icon-only [buttonElement],
@@ -1030,4 +1104,21 @@ class MaskDetectionException implements Exception {
 
   @override
   String toString() => 'MaskDetectionException: $message';
+}
+
+/// Text folded up from a composite widget's descendants, with the masking verdict
+/// for the set that produced it.
+///
+/// Kept as a pair rather than just a nullable string so the caller cannot forget
+/// to ask: a synthesized label is only as safe as its least safe contributor, and
+/// geometry alone cannot answer that when a contributor has no rect.
+class _AggregatedLabel {
+  const _AggregatedLabel(this.text, this.hasMaskedContributor);
+
+  /// The joined contributor text, or null when nothing contributed.
+  final String? text;
+
+  /// True when at least one contributor was masked, whether by an enclosing
+  /// [MixpanelMask] or by auto-masking. The label must then be dropped.
+  final bool hasMaskedContributor;
 }

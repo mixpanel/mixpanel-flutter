@@ -75,7 +75,7 @@ class ScreenshotCapturer {
     required bool debugOverlayEnabled,
     NativeImageCompressor? nativeCompressor,
     WireframeEmitter? wireframeEmitter,
-    bool useAccessibilityLabelFallback = true,
+    bool useAccessibilityLabelFallback = false,
     this.compressionMode = CompressionMode.nativeJpeg,
   }) : _logger = logger,
        _debugOverlayEnabled = debugOverlayEnabled,

@@ -5,13 +5,13 @@ import 'package:mixpanel_flutter_session_replay/src/models/wireframes_options.da
 
 void main() {
   group('WireframesOptions', () {
-    test('has empty rules and label fallback on by default', () {
+    test('has empty rules and label fallback off by default', () {
       // WHEN
       const options = WireframesOptions();
 
       // THEN
       expect(options.sensitiveRules, isEmpty);
-      expect(options.useAccessibilityLabelFallback, isTrue);
+      expect(options.useAccessibilityLabelFallback, isFalse);
     });
 
     test('carries provided rules', () {
@@ -25,12 +25,12 @@ void main() {
       expect(options.sensitiveRules, same(rules));
     });
 
-    test('label fallback can be turned off', () {
+    test('label fallback can be turned on', () {
       // WHEN
-      const options = WireframesOptions(useAccessibilityLabelFallback: false);
+      const options = WireframesOptions(useAccessibilityLabelFallback: true);
 
       // THEN
-      expect(options.useAccessibilityLabelFallback, isFalse);
+      expect(options.useAccessibilityLabelFallback, isTrue);
     });
   });
 

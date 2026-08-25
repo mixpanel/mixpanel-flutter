@@ -17,7 +17,7 @@ class ConfigModel extends ChangeNotifier {
   bool _autoMaskImage = true;
   bool _enableWireframes = false;
   bool _enableWireframeDebugEmitter = true;
-  bool _useAccessibilityLabelFallback = true;
+  bool _useAccessibilityLabelFallback = false;
 
   String? _tokenError;
   String? _distinctIdError;

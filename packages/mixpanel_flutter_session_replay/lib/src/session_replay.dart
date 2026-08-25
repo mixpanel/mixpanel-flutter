@@ -221,7 +221,7 @@ class MixpanelSessionReplay {
         nativeCompressor: NativeImageCompressor(),
         wireframeEmitter: wireframeEmitter,
         useAccessibilityLabelFallback:
-            wireframesOptions?.useAccessibilityLabelFallback ?? true,
+            wireframesOptions?.useAccessibilityLabelFallback ?? false,
       );
 
       // Create instance first (before components) so we can reference it in closures

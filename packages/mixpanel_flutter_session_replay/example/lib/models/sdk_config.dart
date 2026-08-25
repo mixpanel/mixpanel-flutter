@@ -52,7 +52,7 @@ class SdkConfig {
       autoMaskImage: true,
       enableWireframes: false,
       enableWireframeDebugEmitter: true,
-      useAccessibilityLabelFallback: true,
+      useAccessibilityLabelFallback: false,
     );
   }
 
