@@ -584,6 +584,124 @@ void main() {
     );
   });
 
+  group('WireframeGolden — aggregated label provenance', () {
+    // A composite widget's label is synthesized from its descendants, so it is only
+    // as safe as the least safe descendant that fed it. Layer 2 cannot answer that
+    // on its own: it strips by intersecting mask rects, and a contributor scrolled
+    // out of the viewport has no rect to intersect.
+
+    testWidgets('a masked contributor drops the whole synthesized label', (
+      tester,
+    ) async {
+      // Fully visible, so Layer 2 would also have caught this one. Pinned so the
+      // clipped case below can be compared against it — both must agree.
+      await captureWireframeGolden(
+        tester,
+        ElevatedButton(
+          onPressed: () {},
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('Marshmallow'),
+              MixpanelMask(child: const Text(r'$2.99')),
+            ],
+          ),
+        ),
+        'wireframe_aggregated_masked_contributor.json',
+        {},
+      );
+    });
+
+    testWidgets('a masked contributor clipped out of the viewport still drops it', (
+      tester,
+    ) async {
+      // The regression. The masked Text sits far below a 40px viewport, so it is
+      // laid out (and therefore still folded into the label) but has no rect for
+      // the geometric strip to intersect. Before provenance was tracked this
+      // emitted `none` with "Marshmallow $2.99" — the masked price on the wire.
+      await captureWireframeGolden(
+        tester,
+        SizedBox(
+          height: 40,
+          child: SingleChildScrollView(
+            child: ElevatedButton(
+              onPressed: () {},
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('Marshmallow'),
+                  const SizedBox(height: 400),
+                  MixpanelMask(child: const Text(r'$2.99')),
+                ],
+              ),
+            ),
+          ),
+        ),
+        'wireframe_aggregated_masked_contributor_clipped.json',
+        {},
+      );
+    });
+
+    testWidgets('a wrapper element above the mask does not claim the paragraph', (
+      tester,
+    ) async {
+      // The shape the sample app actually produces, and the one the first two
+      // goldens here missed. `ListTile` wraps its subtitle as
+      // `AnimatedDefaultTextStyle(child: MixpanelMask(child: Text(...)))`, and
+      // `Element.renderObject` on a component element resolves *downward* — so the
+      // wrapper reports the Text's RenderParagraph as its own and, if allowed to
+      // collect it, does so with pre-mask context and marks it visited before the
+      // MixpanelMask below is ever seen. Any component wrapper reproduces it;
+      // DefaultTextStyle stands in for ListTile's.
+      //
+      // The clipping matters as much as the wrapper: with the masked Text on
+      // screen, Layer 2 strips the label anyway and the case cannot tell whether
+      // provenance worked. Only wrapper *and* clipped isolates it — which is
+      // exactly the shape the sample app produces on its last, half-scrolled row.
+      await captureWireframeGolden(
+        tester,
+        SizedBox(
+          height: 40,
+          child: SingleChildScrollView(
+            child: ElevatedButton(
+              onPressed: () {},
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('Marshmallow'),
+                  const SizedBox(height: 400),
+                  DefaultTextStyle(
+                    style: const TextStyle(fontSize: 14),
+                    child: MixpanelMask(child: const Text(r'$2.99')),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        'wireframe_aggregated_masked_under_wrapper.json',
+        {},
+      );
+    });
+
+    testWidgets('unmasked contributors still produce a label', (tester) async {
+      // Guard against over-redaction: provenance must only demote a label when a
+      // contributor is actually masked, not whenever a button has several.
+      await captureWireframeGolden(
+        tester,
+        ElevatedButton(
+          onPressed: () {},
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: const [Text('Marshmallow'), Text(r'$2.99')],
+          ),
+        ),
+        'wireframe_aggregated_unmasked_contributors.json',
+        {},
+      );
+    });
+  });
+
   group('WireframeGolden — declared wireframe text', () {
     testWidgets(
       'MixpanelMask(wireframeText:) survives masking on the direct child',
