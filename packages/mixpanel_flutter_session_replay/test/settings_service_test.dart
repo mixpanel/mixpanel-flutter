@@ -3,6 +3,8 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
+import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart' as http_testing;
 import 'package:mixpanel_flutter_session_replay/src/internal/settings/settings_service.dart';
@@ -353,6 +355,195 @@ void main() {
         expect(requestCount, 1);
         expect(result1.sdkConfig!.recordSessionsPercent, 75.0);
         expect(result2.sdkConfig!.recordSessionsPercent, 75.0);
+      });
+    });
+
+    group('wireframe kill switch', () {
+      test('does not ask for the switch when wireframes are off', () async {
+        // GIVEN
+        final recorder = createRecordingHttpClient(
+          statusCode: 200,
+          body: jsonEncode({
+            'recording': {'is_enabled': true},
+          }),
+        );
+        final service = SettingsService(
+          storageProvider: storageProvider,
+          token: testToken,
+          logger: MixpanelLogger(LogLevel.none),
+          httpClient: recorder.client,
+        );
+
+        // WHEN
+        await service.fetchRemoteSettings();
+
+        // THEN
+        expect(
+          recorder.requests.single.url.queryParameters.containsKey('wireframe'),
+          false,
+        );
+      });
+
+      test('asks for the switch when wireframes are on', () async {
+        // GIVEN
+        final recorder = createRecordingHttpClient(
+          statusCode: 200,
+          body: jsonEncode({
+            'recording': {'is_enabled': true},
+          }),
+        );
+        final service = SettingsService(
+          storageProvider: storageProvider,
+          token: testToken,
+          logger: MixpanelLogger(LogLevel.none),
+          httpClient: recorder.client,
+          wireframesRequested: true,
+        );
+
+        // WHEN
+        await service.fetchRemoteSettings();
+
+        // THEN
+        expect(recorder.requests.single.url.queryParameters['wireframe'], '1');
+      });
+
+      test('reports wireframes disabled when the server says so', () async {
+        // GIVEN
+        final httpClient = http_testing.MockClient((request) async {
+          return http.Response(
+            jsonEncode({
+              'recording': {'is_enabled': true},
+              'wireframe': {
+                'is_enabled': false,
+                'error': 'organization is blocked from wireframe capture.',
+              },
+            }),
+            200,
+          );
+        });
+        final service = SettingsService(
+          storageProvider: storageProvider,
+          token: testToken,
+          logger: MixpanelLogger(LogLevel.none),
+          httpClient: httpClient,
+          wireframesRequested: true,
+        );
+
+        // WHEN
+        final result = await service.fetchRemoteSettings();
+
+        // THEN - replay keeps recording; only wireframes are killed
+        expect(result.isWireframeEnabled, false);
+        expect(result.isRecordingEnabled, true);
+      });
+
+      test('leaves wireframes on when the field is absent', () async {
+        // GIVEN
+        final httpClient = createFakeSettingsClient(isEnabled: true);
+        final service = SettingsService(
+          storageProvider: storageProvider,
+          token: testToken,
+          logger: MixpanelLogger(LogLevel.none),
+          httpClient: httpClient,
+          wireframesRequested: true,
+        );
+
+        // WHEN
+        final result = await service.fetchRemoteSettings();
+
+        // THEN
+        expect(result.isWireframeEnabled, true);
+      });
+
+      test('kills wireframes while recording is also disabled', () async {
+        // GIVEN
+        final httpClient = http_testing.MockClient((request) async {
+          return http.Response(
+            jsonEncode({
+              'recording': {'is_enabled': false},
+              'wireframe': {'is_enabled': false},
+            }),
+            200,
+          );
+        });
+        final service = SettingsService(
+          storageProvider: storageProvider,
+          token: testToken,
+          logger: MixpanelLogger(LogLevel.none),
+          httpClient: httpClient,
+          wireframesRequested: true,
+        );
+
+        // WHEN
+        final result = await service.fetchRemoteSettings();
+
+        // THEN
+        expect(result.isRecordingEnabled, false);
+        expect(result.isWireframeEnabled, false);
+      });
+
+      test('falls back to the cached verdict on network failure', () async {
+        // GIVEN - an earlier launch cached the kill switch
+        SharedPreferencesAsyncPlatform.instance =
+            InMemorySharedPreferencesAsync.withData({
+              'mp_sr_flutter_${testToken}_wireframe_enabled': false,
+            });
+        final disabledCacheProvider = SettingsStorageProvider(
+          token: testToken,
+          logger: testLogger,
+        );
+
+        final service = SettingsService(
+          storageProvider: disabledCacheProvider,
+          token: testToken,
+          logger: MixpanelLogger(LogLevel.none),
+          httpClient: createFailingHttpClient(),
+          wireframesRequested: true,
+        );
+
+        // WHEN
+        final result = await service.fetchRemoteSettings();
+
+        // THEN
+        expect(result.isFromCache, true);
+        expect(result.isWireframeEnabled, false);
+      });
+
+      test('clears the cached verdict once the server re-enables', () async {
+        // GIVEN - the kill switch fired earlier
+        SharedPreferencesAsyncPlatform.instance =
+            InMemorySharedPreferencesAsync.withData({
+              'mp_sr_flutter_${testToken}_wireframe_enabled': false,
+            });
+        final provider = SettingsStorageProvider(
+          token: testToken,
+          logger: testLogger,
+        );
+        expect(await provider.getWireframeEnabled(), false);
+
+        final httpClient = http_testing.MockClient((request) async {
+          return http.Response(
+            jsonEncode({
+              'recording': {'is_enabled': true},
+              'wireframe': {'is_enabled': true},
+            }),
+            200,
+          );
+        });
+        final service = SettingsService(
+          storageProvider: provider,
+          token: testToken,
+          logger: MixpanelLogger(LogLevel.none),
+          httpClient: httpClient,
+          wireframesRequested: true,
+        );
+
+        // WHEN
+        final result = await service.fetchRemoteSettings();
+
+        // THEN
+        expect(result.isWireframeEnabled, true);
+        expect(await provider.getWireframeEnabled(), true);
       });
     });
 

@@ -101,6 +101,10 @@ class SessionReplayOptions {
 
   /// Opt-in configuration for wireframe capture.
   ///
+  /// **Beta.** Wireframes are in beta. Before shipping to production, inspect
+  /// the wireframes your app produces and confirm that no sensitive information
+  /// is captured; see [WireframesOptions].
+  ///
   /// When non-null, the SDK piggybacks on each screenshot pass to emit a
   /// structured, per-frame list of visible UI elements (role, visible text,
   /// bounds) into the replay stream.

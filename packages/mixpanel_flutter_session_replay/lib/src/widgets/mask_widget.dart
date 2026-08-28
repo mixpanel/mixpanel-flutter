@@ -55,6 +55,9 @@ class MixpanelMask extends StatelessWidget {
 
   /// Authored text recorded for this element in the `mp_wireframe` event.
   ///
+  /// **Beta.** Wireframes are in beta; see `WireframesOptions` for what to check
+  /// before shipping to production.
+  ///
   /// Orthogonal to masking — sent even though the child's pixels are masked.
   /// Applied to the [child] (its role + bounds). `null` (default) declares no
   /// text. See the class docs for the privacy contract.

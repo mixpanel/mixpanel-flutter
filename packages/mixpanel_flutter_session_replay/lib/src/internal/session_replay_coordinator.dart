@@ -374,6 +374,13 @@ class SessionReplayCoordinator implements WidgetCoordinator {
                   ? RemoteEnablementState.enabled
                   : RemoteEnablementState.disabled;
 
+              // The wireframe kill switch is an enablement switch, not remote
+              // config, so it is honored in every remote settings mode and
+              // regardless of whether recording itself is allowed. Forwarded
+              // before the recording branch below because until the capturer
+              // has the verdict it emits no wireframes at all.
+              _applyWireframeVerdict(result);
+
               if (!result.isRecordingEnabled) {
                 _logger.warning(
                   'Recording disabled by remote enablement check',
@@ -425,6 +432,26 @@ class SessionReplayCoordinator implements WidgetCoordinator {
           tag: 'coordinator',
         );
     }
+  }
+
+  /// Hands the server's wireframe verdict to the capturer.
+  ///
+  /// Always forwarded, including the `true` case: the capturer suppresses
+  /// wireframes until it hears a verdict, so a frame captured by a manually
+  /// started recording cannot ship a wireframe before `/settings` has answered.
+  /// When the verdict is `false`, replay keeps recording and only the wireframe
+  /// payload is dropped. No-op in effect when wireframes were never turned on
+  /// locally — the capturer has no emitter either way.
+  void _applyWireframeVerdict(RemoteSettingsResult result) {
+    if (!result.isWireframeEnabled) {
+      _logger.warning(
+        'Wireframe capture is disabled via remote settings',
+        tag: 'coordinator',
+      );
+    }
+    _screenshotCapturer.applyRemoteWireframeVerdict(
+      isEnabled: result.isWireframeEnabled,
+    );
   }
 
   /// Applies remote settings to the coordinator based on [_remoteSettingsMode].

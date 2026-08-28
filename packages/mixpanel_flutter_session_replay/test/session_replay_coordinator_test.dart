@@ -836,6 +836,159 @@ void main() {
       );
     });
 
+    group('wireframe kill switch', () {
+      // The other platforms clear `wireframesOptions` before building the
+      // instance; here the emitter is wired at init and settings land on first
+      // foreground, so the coordinator has to stop a live capturer.
+      ScreenshotCapturer createWireframeCapturer() => ScreenshotCapturer(
+        directive: MaskingDirective(autoMaskTypes: {}),
+        logger: logger,
+        debugOverlayEnabled: false,
+        wireframeEmitter: WireframeEmitter(
+          sensitiveRules: const [],
+          debugEmitter: null,
+          logger: logger,
+        ),
+      );
+
+      SessionReplayCoordinator createWireframeCoordinator({
+        required ScreenshotCapturer capturer,
+        required SettingsService settings,
+        RemoteSettingsMode remoteSettingsMode = RemoteSettingsMode.fallback,
+      }) => SessionReplayCoordinator(
+        screenshotCapturer: capturer,
+        eventRecorder: eventRecorder,
+        uploadService: uploadService,
+        settingsService: settings,
+        sessionManager: sessionManager,
+        logger: logger,
+        autoRecordSessionsPercent: 100.0,
+        remoteSettingsMode: remoteSettingsMode,
+        debugOptions: null,
+      );
+
+      test('stops wireframe capture when the server disables it', () async {
+        // GIVEN - recording allowed, wireframes killed
+        final capturer = createWireframeCapturer();
+        final coordinator = createWireframeCoordinator(
+          capturer: capturer,
+          settings: SettingsService(
+            storageProvider: storageProvider,
+            token: 'test-token',
+            logger: logger,
+            httpClient: createFakeSettingsClient(
+              isEnabled: true,
+              wireframeEnabled: false,
+              wireframeError: 'organization is blocked from wireframe capture.',
+            ),
+            wireframesRequested: true,
+          ),
+        );
+
+        // WHEN
+        coordinator.onAppForegrounded();
+        await pumpEventQueue();
+
+        // THEN - replay keeps recording, only wireframes are off
+        expect(capturer.wireframesEnabled, false);
+        expect(coordinator.recordingState, RecordingState.recording);
+      });
+
+      test('suppresses wireframes until the verdict arrives', () async {
+        // GIVEN - wireframes opted in locally, settings not fetched yet
+        final capturer = createWireframeCapturer();
+        createWireframeCoordinator(
+          capturer: capturer,
+          settings: SettingsService(
+            storageProvider: storageProvider,
+            token: 'test-token',
+            logger: logger,
+            httpClient: createFakeSettingsClient(
+              isEnabled: true,
+              wireframeEnabled: true,
+            ),
+            wireframesRequested: true,
+          ),
+        );
+
+        // THEN - a manually started recording cannot ship a wireframe yet
+        expect(capturer.wireframesEnabled, false);
+      });
+
+      test('leaves wireframe capture on when the field is absent', () async {
+        // GIVEN - a server that was never asked for the switch
+        final capturer = createWireframeCapturer();
+        final coordinator = createWireframeCoordinator(
+          capturer: capturer,
+          settings: SettingsService(
+            storageProvider: storageProvider,
+            token: 'test-token',
+            logger: logger,
+            httpClient: createFakeSettingsClient(isEnabled: true),
+          ),
+        );
+
+        // WHEN
+        coordinator.onAppForegrounded();
+        await pumpEventQueue();
+
+        // THEN
+        expect(capturer.wireframesEnabled, true);
+      });
+
+      test('honors the kill switch in disabled remote settings mode', () async {
+        // GIVEN - remote config is ignored, but enablement switches are not
+        final capturer = createWireframeCapturer();
+        final coordinator = createWireframeCoordinator(
+          capturer: capturer,
+          remoteSettingsMode: RemoteSettingsMode.disabled,
+          settings: SettingsService(
+            storageProvider: storageProvider,
+            token: 'test-token',
+            logger: logger,
+            httpClient: createFakeSettingsClient(
+              isEnabled: true,
+              wireframeEnabled: false,
+            ),
+            wireframesRequested: true,
+          ),
+        );
+
+        // WHEN
+        coordinator.onAppForegrounded();
+        await pumpEventQueue();
+
+        // THEN
+        expect(capturer.wireframesEnabled, false);
+      });
+
+      test('honors the kill switch when recording is also disabled', () async {
+        // GIVEN - both switches off
+        final capturer = createWireframeCapturer();
+        final coordinator = createWireframeCoordinator(
+          capturer: capturer,
+          settings: SettingsService(
+            storageProvider: storageProvider,
+            token: 'test-token',
+            logger: logger,
+            httpClient: createFakeSettingsClient(
+              isEnabled: false,
+              wireframeEnabled: false,
+            ),
+            wireframesRequested: true,
+          ),
+        );
+
+        // WHEN
+        coordinator.onAppForegrounded();
+        await pumpEventQueue();
+
+        // THEN
+        expect(capturer.wireframesEnabled, false);
+        expect(coordinator.recordingState, RecordingState.notRecording);
+      });
+    });
+
     group('remote config modes', () {
       test('disabled mode ignores remote sdk_config values', () async {
         // GIVEN - server returns 25% sampling rate

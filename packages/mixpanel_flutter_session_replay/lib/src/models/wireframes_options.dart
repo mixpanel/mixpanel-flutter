@@ -2,6 +2,10 @@ import 'dart:convert';
 
 /// Configuration for wireframe capture.
 ///
+/// **Beta.** Wireframes are in beta. Before shipping to production, inspect the
+/// wireframes your app produces with [DebugOptions.wireframeEmitter] and
+/// confirm that no sensitive information is captured.
+///
 /// Wireframes are structured, per-frame lists of visible UI elements (role,
 /// visible text, bounds) that ship as rrweb Custom events alongside the
 /// existing screenshot stream. Downstream tooling can read the structured
@@ -10,6 +14,10 @@ import 'dart:convert';
 /// Wireframe capture is opt-in: pass a non-null [WireframesOptions] to
 /// [SessionReplayOptions.wireframesOptions] to enable it. Existing session
 /// replay integrations see no change until they ask for it.
+///
+/// Mixpanel can also turn wireframe capture off for a project from the server.
+/// When it does, the rest of session replay keeps recording — only the
+/// wireframe payload is dropped — and the reason is logged.
 ///
 /// Every masking guarantee the screenshot honors, the wireframe honors too —
 /// enforced structurally by a four-layer masking pipeline (view-level,

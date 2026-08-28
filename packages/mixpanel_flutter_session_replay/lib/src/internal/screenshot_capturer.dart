@@ -55,6 +55,23 @@ class ScreenshotCapturer {
   /// when [_wireframeEmitter] is non-null.
   final bool _useAccessibilityLabelFallback;
 
+  /// The server's verdict on wireframe capture, or null until `/settings`
+  /// answers.
+  ///
+  /// Unlike the other platforms — where remote settings resolve before the
+  /// instance is built and the kill switch simply clears `wireframesOptions` —
+  /// the emitter here is constructed at SDK init and the settings fetch lands
+  /// on first foreground. Recording can be started manually in between, so the
+  /// verdict starts unknown and capture is **suppressed until it arrives**:
+  /// nothing can be captured, queued, and then flushed before the server has
+  /// been asked.
+  bool? _wireframesRemotelyEnabled;
+
+  /// Whether wireframes are collected on the next capture: opted in locally and
+  /// affirmatively allowed by the server.
+  bool get wireframesEnabled =>
+      _wireframeEmitter != null && (_wireframesRemotelyEnabled ?? false);
+
   /// Compression strategy to use for production captures.
   /// Change this value to compare performance between strategies.
   CompressionMode compressionMode;
@@ -65,6 +82,16 @@ class ScreenshotCapturer {
   /// emitter, and the coordinator — which knows when a session starts — already holds
   /// the capturer. No-op when wireframes are off. See [WireframeEmitter.resetDedup].
   void resetWireframeDedup() => _wireframeEmitter?.resetDedup();
+
+  /// Records the server's verdict on wireframe capture.
+  ///
+  /// Called by the coordinator once `/settings` answers — including the
+  /// cached-fallback answer a failed fetch produces. Until then wireframes are
+  /// suppressed; see [_wireframesRemotelyEnabled]. Screenshots are unaffected
+  /// either way: when the verdict is `false` the traversal stops collecting
+  /// elements and only the wireframe payload is dropped.
+  void applyRemoteWireframeVerdict({required bool isEnabled}) =>
+      _wireframesRemotelyEnabled = isEnabled;
 
   /// Mask painter (reusable across captures)
   late final MaskPainter _maskPainter;
@@ -105,7 +132,7 @@ class ScreenshotCapturer {
             ? MaskingDirective(autoMaskTypes: maskTypes)
             : directive,
         trackUnmaskBounds: _debugOverlayEnabled,
-        collectWireframes: _wireframeEmitter != null,
+        collectWireframes: wireframesEnabled,
         useAccessibilityLabelFallback: _useAccessibilityLabelFallback,
       );
 
@@ -214,8 +241,12 @@ class ScreenshotCapturer {
       }
 
       final rawWireframes = maskResult.rawWireframes;
+      // Spelled out rather than via [wireframesEnabled] so Dart promotes
+      // [_wireframeEmitter] to non-null for the emit call below.
       final wireframePayload =
-          (_wireframeEmitter != null && rawWireframes != null)
+          (_wireframeEmitter != null &&
+              (_wireframesRemotelyEnabled ?? false) &&
+              rawWireframes != null)
           ? _wireframeEmitter.emit(
               rawElements: rawWireframes,
               maskRegions: maskRegions,

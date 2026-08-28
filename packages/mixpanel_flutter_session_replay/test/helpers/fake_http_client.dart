@@ -20,9 +20,13 @@ http.Client createFakeHttpClient({
 ///
 /// [isEnabled] controls whether recording is enabled in the response.
 /// [recordSessionsPercent] optionally includes sdk_config with the given value.
+/// [wireframeEnabled] optionally includes the `wireframe` kill switch; omit it
+/// to model a server that was never asked for the switch.
 http.Client createFakeSettingsClient({
   required bool isEnabled,
   double? recordSessionsPercent,
+  bool? wireframeEnabled,
+  String? wireframeError,
 }) {
   return http_testing.MockClient((request) async {
     final response = <String, dynamic>{
@@ -31,6 +35,12 @@ http.Client createFakeSettingsClient({
     if (recordSessionsPercent != null) {
       response['sdk_config'] = {
         'config': {'record_sessions_percent': recordSessionsPercent},
+      };
+    }
+    if (wireframeEnabled != null) {
+      response['wireframe'] = {
+        'is_enabled': wireframeEnabled,
+        'error': ?wireframeError,
       };
     }
     return http.Response(jsonEncode(response), 200);
