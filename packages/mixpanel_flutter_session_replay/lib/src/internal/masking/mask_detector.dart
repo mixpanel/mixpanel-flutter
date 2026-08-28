@@ -737,7 +737,10 @@ class MaskDetector {
       final label = effectiveDecision == MaskDecision.none
           ? (aggregated.text ??
                 (useAccessibilityLabelFallback
-                    ? _collectDescendantSemanticLabel(element)
+                    ? _collectDescendantSemanticLabel(
+                        element,
+                        maskContext: maskContext,
+                      )
                     : null))
           : null;
       visited.add(renderObject);
@@ -1024,33 +1027,72 @@ class MaskDetector {
   /// decision so a masked button stays textless. `Tooltip` is matched by
   /// runtime-type name (it lives in the Material library, which this file
   /// intentionally does not import) with a dynamic property read.
-  String? _collectDescendantSemanticLabel(Element buttonElement) {
+  ///
+  /// Mask context is threaded down the walk for the same reason
+  /// [_collectDescendantParagraphText] threads it: a label harvested from a
+  /// masked subtree describes masked content, and shipping it is the same leak
+  /// by another route. The button's own decision cannot stand in for this — an
+  /// *unmasked* icon-only button may still contain a `MixpanelMask`-wrapped
+  /// `ImageIcon`, `Tooltip` or `Semantics`, and its label must not be harvested.
+  ///
+  /// Nor can Layer 2 be left to catch it. The geometric pass strips text only
+  /// when a mask rect intersects the *emitted* bounds, so a masked descendant
+  /// that overflows or is clipped out of the button has no rect to intersect.
+  /// Provenance is known here, so it is decided here.
+  String? _collectDescendantSemanticLabel(
+    Element buttonElement, {
+    required MaskContext maskContext,
+  }) {
+    // Evaluated per contributor rather than once up front, matching
+    // [_collectDescendantParagraphText]: an unmask below this point overrides
+    // auto-masking, and an explicit mask below does not get overridden.
+    final autoMasksText = directive.autoMaskTypes.contains(AutoMaskedView.text);
+    final autoMasksImage = directive.autoMaskTypes.contains(
+      AutoMaskedView.image,
+    );
+
     String? found;
-    void visit(Element child) {
+    void visit(Element child, MaskContext context) {
       if (found != null) return;
+
+      var childContext = context;
       final widget = child.widget;
+      if (widget is MixpanelMask) {
+        childContext = MaskContext.mask;
+      } else if (widget is MixpanelUnmask) {
+        childContext = MaskContext.unmask;
+      }
+
+      // An `Icon` renders as a `RenderParagraph` and an `ImageIcon` as a
+      // `RenderImage`, so each answers to the auto-mask type its own pixels
+      // would be masked under. `Tooltip` and `Semantics` paint nothing of their
+      // own, so only an explicit marker can mask them.
+      bool maskedFor(bool autoMasks) =>
+          childContext == MaskContext.mask ||
+          (childContext == MaskContext.none && autoMasks);
+
       if (widget is Icon) {
         final label = widget.semanticLabel;
-        if (label != null && label.isNotEmpty) {
+        if (label != null && label.isNotEmpty && !maskedFor(autoMasksText)) {
           found = label;
           return;
         }
       } else if (widget is ImageIcon) {
         final label = widget.semanticLabel;
-        if (label != null && label.isNotEmpty) {
+        if (label != null && label.isNotEmpty && !maskedFor(autoMasksImage)) {
           found = label;
           return;
         }
       } else if (widget is Semantics) {
         final label = widget.properties.label;
-        if (label != null && label.isNotEmpty) {
+        if (label != null && label.isNotEmpty && !maskedFor(false)) {
           found = label;
           return;
         }
       } else if (widget.runtimeType.toString() == 'Tooltip') {
         try {
           final message = (widget as dynamic).message as String?;
-          if (message != null && message.isNotEmpty) {
+          if (message != null && message.isNotEmpty && !maskedFor(false)) {
             found = message;
             return;
           }
@@ -1058,10 +1100,10 @@ class MaskDetector {
           // Not the Material Tooltip we expected — ignore and keep walking.
         }
       }
-      child.debugVisitOnstageChildren(visit);
+      child.debugVisitOnstageChildren((c) => visit(c, childContext));
     }
 
-    buttonElement.debugVisitOnstageChildren(visit);
+    buttonElement.debugVisitOnstageChildren((c) => visit(c, maskContext));
     return found;
   }
 
