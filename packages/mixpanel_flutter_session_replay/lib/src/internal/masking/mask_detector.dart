@@ -1028,17 +1028,31 @@ class MaskDetector {
   /// runtime-type name (it lives in the Material library, which this file
   /// intentionally does not import) with a dynamic property read.
   ///
-  /// Mask context is threaded down the walk for the same reason
-  /// [_collectDescendantParagraphText] threads it: a label harvested from a
-  /// masked subtree describes masked content, and shipping it is the same leak
-  /// by another route. The button's own decision cannot stand in for this — an
-  /// *unmasked* icon-only button may still contain a `MixpanelMask`-wrapped
-  /// `ImageIcon`, `Tooltip` or `Semantics`, and its label must not be harvested.
+  /// An explicit mask anywhere in the subtree refuses the label outright, which
+  /// is the same rule [_collectDescendantParagraphText] applies to the text it
+  /// folds together: a label synthesized from descendants is only as safe as the
+  /// least safe descendant that fed it. Two shapes both have to be caught, and
+  /// only the first is about the label's own position:
   ///
-  /// Nor can Layer 2 be left to catch it. The geometric pass strips text only
+  ///   - the mask wraps the label — `MixpanelMask(child: Tooltip(...))`;
+  ///   - the label wraps the mask — `Semantics(label: ..., child:
+  ///     MixpanelMask(...))`, where a first-match-wins walk would take the label
+  ///     and return before ever reaching the marker below it.
+  ///
+  /// The second is why the walk no longer stops at the first match. A wrapper
+  /// label describes what is beneath it, and what is beneath it is masked.
+  ///
+  /// Layer 2 cannot be left to catch either: the geometric pass strips text only
   /// when a mask rect intersects the *emitted* bounds, so a masked descendant
-  /// that overflows or is clipped out of the button has no rect to intersect.
-  /// Provenance is known here, so it is decided here.
+  /// that is clipped, scrolled out of the viewport, or simply painted clear of
+  /// its button has no rect to intersect. Provenance is known here, so it is
+  /// decided here.
+  ///
+  /// A developer who does want text on a masked control has the API built for
+  /// saying so — `MixpanelMask(wireframeText: ...)`, which is authored rather
+  /// than scraped and documented as being sent even when masked. Refusing a
+  /// scraped accessibility label does not remove that capability; it routes the
+  /// intent through the explicit call.
   String? _collectDescendantSemanticLabel(
     Element buttonElement, {
     required MaskContext maskContext,
@@ -1052,15 +1066,20 @@ class MaskDetector {
     );
 
     String? found;
-    void visit(Element child, MaskContext context) {
-      if (found != null) return;
+    // Seeded from the caller's context so a masked button refuses a label even if
+    // its own subtree carries no marker of its own.
+    var hasMaskedDescendant = maskContext == MaskContext.mask;
 
+    void visit(Element child, MaskContext context) {
       var childContext = context;
       final widget = child.widget;
       if (widget is MixpanelMask) {
         childContext = MaskContext.mask;
       } else if (widget is MixpanelUnmask) {
         childContext = MaskContext.unmask;
+      }
+      if (childContext == MaskContext.mask) {
+        hasMaskedDescendant = true;
       }
 
       // An `Icon` renders as a `RenderParagraph` and an `ImageIcon` as a
@@ -1071,40 +1090,40 @@ class MaskDetector {
           childContext == MaskContext.mask ||
           (childContext == MaskContext.none && autoMasks);
 
-      if (widget is Icon) {
-        final label = widget.semanticLabel;
-        if (label != null && label.isNotEmpty && !maskedFor(autoMasksText)) {
-          found = label;
-          return;
-        }
-      } else if (widget is ImageIcon) {
-        final label = widget.semanticLabel;
-        if (label != null && label.isNotEmpty && !maskedFor(autoMasksImage)) {
-          found = label;
-          return;
-        }
-      } else if (widget is Semantics) {
-        final label = widget.properties.label;
-        if (label != null && label.isNotEmpty && !maskedFor(false)) {
-          found = label;
-          return;
-        }
-      } else if (widget.runtimeType.toString() == 'Tooltip') {
-        try {
-          final message = (widget as dynamic).message as String?;
-          if (message != null && message.isNotEmpty && !maskedFor(false)) {
-            found = message;
-            return;
+      if (found == null) {
+        if (widget is Icon) {
+          final label = widget.semanticLabel;
+          if (label != null && label.isNotEmpty && !maskedFor(autoMasksText)) {
+            found = label;
           }
-        } catch (_) {
-          // Not the Material Tooltip we expected — ignore and keep walking.
+        } else if (widget is ImageIcon) {
+          final label = widget.semanticLabel;
+          if (label != null && label.isNotEmpty && !maskedFor(autoMasksImage)) {
+            found = label;
+          }
+        } else if (widget is Semantics) {
+          final label = widget.properties.label;
+          if (label != null && label.isNotEmpty && !maskedFor(false)) {
+            found = label;
+          }
+        } else if (widget.runtimeType.toString() == 'Tooltip') {
+          try {
+            final message = (widget as dynamic).message as String?;
+            if (message != null && message.isNotEmpty && !maskedFor(false)) {
+              found = message;
+            }
+          } catch (_) {
+            // Not the Material Tooltip we expected — ignore and keep walking.
+          }
         }
       }
       child.debugVisitOnstageChildren((c) => visit(c, childContext));
     }
 
     buttonElement.debugVisitOnstageChildren((c) => visit(c, maskContext));
-    return found;
+    // First match wins for *which* label is chosen; any mask in the subtree
+    // refuses all of them.
+    return hasMaskedDescendant ? null : found;
   }
 
   /// Mark the render objects of any nested button-like widgets in

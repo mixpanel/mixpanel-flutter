@@ -91,6 +91,32 @@ void main() {
       expect(buttonOf(elements).text, isNull);
     });
 
+    testWidgets(
+      'a label wrapping a mask is refused, not just one wrapped by a mask',
+      (tester) async {
+        // The developer put the label *above* the marker, so a first-match-wins
+        // walk took it and returned before reaching the mask below. A wrapper
+        // label describes what is beneath it, and what is beneath it is masked —
+        // same rule the paragraph collector already applies to a folded label.
+        //
+        // The masked child is deliberately not a paragraph. A masked `Text` or
+        // `Icon` would already be caught upstream as a masked paragraph
+        // contributor, and the fallback would never be consulted at all.
+        final elements = await collect(
+          tester,
+          IconButton(
+            onPressed: () {},
+            icon: Semantics(
+              label: 'Photo of Jane Doe',
+              child: const MixpanelMask(child: SizedBox(width: 24, height: 24)),
+            ),
+          ),
+        );
+
+        expect(buttonOf(elements).text, isNull);
+      },
+    );
+
     testWidgets('an unmasked label is still harvested', (tester) async {
       // The guard must not swallow the feature it guards: with nothing masked,
       // the fallback still names an icon-only button.
