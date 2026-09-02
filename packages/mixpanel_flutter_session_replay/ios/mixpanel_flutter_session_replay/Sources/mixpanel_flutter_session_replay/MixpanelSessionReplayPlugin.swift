@@ -40,9 +40,24 @@ public class MixpanelSessionReplayPlugin: NSObject, FlutterPlugin {
         case "endBackgroundTask":
             endBackgroundTask()
             result(nil)
+        case "getAppInfo":
+            result(appInfo())
         default:
             result(FlutterMethodNotImplemented)
         }
+    }
+
+    /// Host app identity for the settings request. Mirrors mixpanel-ios:
+    /// bundleId = bundle identifier, buildNumber = CFBundleVersion.
+    private func appInfo() -> [String: String] {
+        var info = [String: String]()
+        if let bundleId = Bundle.main.bundleIdentifier {
+            info["bundleId"] = bundleId
+        }
+        if let buildNumber = Bundle.main.infoDictionary?["CFBundleVersion"] as? String {
+            info["buildNumber"] = buildNumber
+        }
+        return info
     }
 
     private func beginBackgroundTask() {

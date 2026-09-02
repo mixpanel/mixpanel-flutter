@@ -3,6 +3,7 @@ package com.mixpanel.flutter_session_replay
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
+import android.os.Build
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
@@ -59,8 +60,34 @@ class MixpanelSessionReplayPlugin : FlutterPlugin, MethodCallHandler {
             }
             "beginBackgroundTask" -> result.success(null)
             "endBackgroundTask" -> result.success(null)
+            "getAppInfo" -> getAppInfo(result)
             else -> result.notImplemented()
         }
+    }
+
+    // Host app identity for the settings request. Mirrors mixpanel-android:
+    // bundleId = package name, buildNumber = versionCode (longVersionCode on API 28+).
+    private fun getAppInfo(result: Result) {
+        val context = applicationContext
+        if (context == null) {
+            result.success(emptyMap<String, String>())
+            return
+        }
+
+        val info = mutableMapOf<String, String>()
+        try {
+            info["bundleId"] = context.packageName
+            val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
+            info["buildNumber"] = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                packageInfo.longVersionCode.toString()
+            } else {
+                @Suppress("DEPRECATION")
+                packageInfo.versionCode.toString()
+            }
+        } catch (e: Exception) {
+            // Best-effort — omit whatever could not be resolved
+        }
+        result.success(info)
     }
 
     private fun registerSuperProperties(call: MethodCall) {
