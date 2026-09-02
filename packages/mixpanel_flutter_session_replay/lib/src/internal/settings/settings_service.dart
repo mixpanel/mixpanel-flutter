@@ -164,11 +164,11 @@ class SettingsService {
     // per app ID and app build version
     final bundleId = appInfo.bundleId;
     if (bundleId != null) {
-      queryParameters['bundleId'] = bundleId;
+      queryParameters['bundle_id'] = bundleId;
     }
     final buildNumber = appInfo.buildNumber;
     if (buildNumber != null) {
-      queryParameters['buildNumber'] = buildNumber;
+      queryParameters['build_number'] = buildNumber;
     }
 
     final uri = Uri.parse(_endpoint).replace(queryParameters: queryParameters);

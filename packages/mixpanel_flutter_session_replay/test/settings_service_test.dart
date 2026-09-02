@@ -689,8 +689,8 @@ void main() {
 
         // THEN
         final uri = recorder.requests.single.url;
-        expect(uri.queryParameters['bundleId'], 'com.test.app');
-        expect(uri.queryParameters['buildNumber'], '1234');
+        expect(uri.queryParameters['bundle_id'], 'com.test.app');
+        expect(uri.queryParameters['build_number'], '1234');
 
         // Pre-existing params must be unaffected
         expect(uri.queryParameters['recording'], '1');
@@ -720,8 +720,8 @@ void main() {
 
         // THEN
         final uri = recorder.requests.single.url;
-        expect(uri.queryParameters['bundleId'], 'com.native.app');
-        expect(uri.queryParameters['buildNumber'], '99');
+        expect(uri.queryParameters['bundle_id'], 'com.native.app');
+        expect(uri.queryParameters['build_number'], '99');
       });
 
       test('omits both params when the platform supplies neither', () async {
@@ -744,8 +744,8 @@ void main() {
 
         // THEN
         final uri = recorder.requests.single.url;
-        expect(uri.queryParameters.containsKey('bundleId'), isFalse);
-        expect(uri.queryParameters.containsKey('buildNumber'), isFalse);
+        expect(uri.queryParameters.containsKey('bundle_id'), isFalse);
+        expect(uri.queryParameters.containsKey('build_number'), isFalse);
 
         // Pre-existing params must still be sent
         expect(uri.queryParameters['recording'], '1');
@@ -775,8 +775,8 @@ void main() {
 
         // THEN
         final uri = recorder.requests.single.url;
-        expect(uri.queryParameters['bundleId'], 'com.partial.app');
-        expect(uri.queryParameters.containsKey('buildNumber'), isFalse);
+        expect(uri.queryParameters['bundle_id'], 'com.partial.app');
+        expect(uri.queryParameters.containsKey('build_number'), isFalse);
       });
     });
   });
