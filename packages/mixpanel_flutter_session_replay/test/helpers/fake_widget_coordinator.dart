@@ -36,6 +36,8 @@ class FakeWidgetCoordinator implements WidgetCoordinator {
   int onAppForegroundedCallCount = 0;
   int onAppBackgroundedCallCount = 0;
   int captureSnapshotCallCount = 0;
+  final List<({RenderRepaintBoundary boundary, Element boundaryElement})>
+  capturedSnapshots = [];
 
   final List<({int interactionType, Offset position, DateTime timestamp})>
   capturedInteractions = [];
@@ -82,7 +84,14 @@ class FakeWidgetCoordinator implements WidgetCoordinator {
   }
 
   @override
-  Future<void> captureSnapshot(RenderRepaintBoundary boundary) async {
+  Future<void> captureSnapshot(
+    RenderRepaintBoundary boundary, {
+    required Element boundaryElement,
+  }) async {
     captureSnapshotCallCount++;
+    capturedSnapshots.add((
+      boundary: boundary,
+      boundaryElement: boundaryElement,
+    ));
   }
 }

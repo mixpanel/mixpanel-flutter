@@ -30,7 +30,9 @@ void main() {
         );
 
     /// Pumps a one-screen tree and returns its repaint boundary.
-    Future<RenderRepaintBoundary> pumpScreen(WidgetTester tester) async {
+    Future<({RenderRepaintBoundary boundary, Element element})> pumpScreen(
+      WidgetTester tester,
+    ) async {
       await loadTestFont();
       await tester.pumpWidget(
         MaterialApp(
@@ -39,6 +41,7 @@ void main() {
             backgroundColor: Colors.white,
             body: Center(
               child: RepaintBoundary(
+                key: ValueKey('capture-boundary'),
                 child: SizedBox(
                   width: 300,
                   height: 200,
@@ -51,7 +54,12 @@ void main() {
       );
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
-      return tester.allRenderObjects.whereType<RenderRepaintBoundary>().first;
+      return (
+        boundary: tester.allRenderObjects
+            .whereType<RenderRepaintBoundary>()
+            .first,
+        element: tester.element(find.byKey(const ValueKey('capture-boundary'))),
+      );
     }
 
     /// Runs one real capture. Mirrors `captureGolden`: the capture has to run
@@ -60,9 +68,12 @@ void main() {
     Future<CaptureSuccess> capture(
       WidgetTester tester,
       ScreenshotCapturer capturer,
-      RenderRepaintBoundary boundary,
+      ({RenderRepaintBoundary boundary, Element element}) target,
     ) async {
-      final pending = tester.runAsync(() => capturer.capture(boundary));
+      final pending = tester.runAsync(
+        () =>
+            capturer.capture(target.boundary, boundaryElement: target.element),
+      );
       await tester.pump();
       final result = await pending;
       expect(result, isA<CaptureSuccess>());

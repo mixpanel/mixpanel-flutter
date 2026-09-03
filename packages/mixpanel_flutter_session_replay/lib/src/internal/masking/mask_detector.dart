@@ -19,6 +19,8 @@ enum MaskContext {
   unmask,
 }
 
+enum _ComponentWireframeKind { none, button, textField }
+
 /// Result of mask detection
 class MaskDetectionResult {
   /// Mask regions to apply with source information
@@ -43,6 +45,14 @@ class MaskDetectionResult {
 
 /// Detects widgets that should be masked in screenshots
 class MaskDetector {
+  static final Map<Type, String> _widgetTypeNames = <Type, String>{};
+  static final Map<Type, WidgetType?> _fallbackRenderTypes =
+      <Type, WidgetType?>{};
+  static final Map<Type, bool> _fallbackScrollableWidgetTypes = <Type, bool>{};
+  static final Map<Type, bool> _fallbackViewportRenderTypes = <Type, bool>{};
+  static final Map<Type, _ComponentWireframeKind> _componentWireframeKinds =
+      <Type, _ComponentWireframeKind>{};
+
   /// Configuration for auto-masking
   final MaskingDirective directive;
 
@@ -70,7 +80,10 @@ class MaskDetector {
   /// Traverse widget tree and collect mask regions
   ///
   /// Returns MaskDetectionResult with regions and bounds snapshot, or throws on error
-  MaskDetectionResult detectMaskRegions(RenderRepaintBoundary boundary) {
+  MaskDetectionResult detectMaskRegions(
+    RenderRepaintBoundary boundary, {
+    Element? boundaryElement,
+  }) {
     final maskRegions = <MaskRegionInfo>[];
     final wireframes = collectWireframes ? <WireframeElement>[] : null;
     // Dedup wireframe emission by RenderObject identity. Non-RenderObjectElements
@@ -79,23 +92,21 @@ class MaskDetector {
     final wireframeVisited = collectWireframes
         ? Set<RenderObject>.identity()
         : null;
-    bool shouldSkipCapture = false;
+    final traversalState = _MaskTraversalState();
 
     try {
-      // Find the element that owns this boundary
-      final boundaryElement = _findElementForRenderObject(boundary);
-      if (boundaryElement == null) {
+      final resolvedBoundaryElement =
+          boundaryElement ?? _findElementForRenderObject(boundary);
+      if (resolvedBoundaryElement == null) {
         return MaskDetectionResult(maskRegions: [], rawWireframes: wireframes);
       }
 
-      // Check for conditions that would cause mask coordinate mismatch
-      shouldSkipCapture = _shouldSkipCapture(boundaryElement);
-
-      // Traverse descendants and track TickerMode state to filter background routes
+      // Collect masks, wireframes, and unsafe visual state in one traversal.
       _traverseElementTree(
-        boundaryElement,
+        resolvedBoundaryElement,
         boundary,
         maskRegions,
+        traversalState: traversalState,
         wireframes: wireframes,
         wireframeVisited: wireframeVisited,
         maskContext: MaskContext.none,
@@ -109,7 +120,7 @@ class MaskDetector {
 
     return MaskDetectionResult(
       maskRegions: maskRegions,
-      shouldSkipCapture: shouldSkipCapture,
+      shouldSkipCapture: traversalState.shouldSkipCapture,
       rawWireframes: wireframes,
     );
   }
@@ -137,6 +148,7 @@ class MaskDetector {
     Element element,
     RenderRepaintBoundary boundary,
     List<MaskRegionInfo> maskRegions, {
+    required _MaskTraversalState traversalState,
     required MaskContext maskContext,
     required bool tickerEnabled,
     Rect?
@@ -148,6 +160,10 @@ class MaskDetector {
     declaredText, // Developer-declared wireframe text handed down from an enclosing marker to its DIRECT child (one level only)
   }) {
     final widget = element.widget;
+
+    if (_hasUnsafeVisualState(widget)) {
+      traversalState.shouldSkipCapture = true;
+    }
 
     // PERFORMANCE: Track TickerMode state as we traverse (no expensive ancestor walks)
     // Navigator wraps background routes in TickerMode(enabled: false)
@@ -168,23 +184,8 @@ class MaskDetector {
       final renderObject = element.renderObject;
       final widget = element.widget;
 
-      // Detect scrollable viewports by widget type (fast) or render object name (slower fallback)
-      // Covers: SingleChildScrollView, ListView, GridView, CustomScrollView, PageView, TabBarView, NestedScrollView, ReorderableListView, TableView
-      const scrollablePatterns = [
-        'ScrollView',
-        'ListView',
-        'GridView',
-        'PageView',
-        'TableView',
-      ];
-
-      final widgetTypeName = widget.runtimeType.toString();
       final isScrollable =
-          scrollablePatterns.any(
-            (pattern) => widgetTypeName.contains(pattern),
-          ) ||
-          (renderObject != null &&
-              renderObject.runtimeType.toString().contains('RenderViewport'));
+          _isScrollableWidget(widget) || _isViewportRenderObject(renderObject);
 
       if (isScrollable && renderObject is RenderBox && renderObject.hasSize) {
         try {
@@ -226,13 +227,17 @@ class MaskDetector {
     // only, so a generic `Semantics(label:)` around other content doesn't leak
     // onto images. Cleared by a nested image-Semantics with an empty label.
     String? currentImageLabel = enclosingImageLabel;
-    if (widget is Semantics && widget.properties.image == true) {
+    if (wireframes != null &&
+        widget is Semantics &&
+        widget.properties.image == true) {
       final label = widget.properties.label;
       currentImageLabel = (label != null && label.isNotEmpty) ? label : null;
     }
 
     // --- Masking decision ---
     MaskContext currentContext = maskContext;
+    Rect? boundsResolvedByMasking;
+    var boundsWereResolvedByMasking = false;
 
     // SECURITY: TextField is always masked regardless of context or directives
     if (element.renderObject is RenderEditable) {
@@ -275,13 +280,19 @@ class MaskDetector {
           // Auto-masking: check directive rules for text/image
           final renderObject = element.renderObject;
           if (renderObject != null) {
-            final maskRegionInfo = _shouldMaskRenderObject(
+            boundsWereResolvedByMasking =
+                renderObject is RenderEditable ||
+                renderObject is RenderParagraph ||
+                renderObject is RenderImage;
+            final resolution = _resolveMaskableRenderObject(
               renderObject,
               boundary,
               currentViewportBounds,
             );
-            if (maskRegionInfo != null) {
-              maskRegions.add(maskRegionInfo);
+            boundsResolvedByMasking = resolution.bounds;
+            final maskRegion = resolution.maskRegion;
+            if (maskRegion != null) {
+              maskRegions.add(maskRegion);
             }
           }
       }
@@ -298,35 +309,39 @@ class MaskDetector {
     // marker collect would consume (and mark visited) that shared render object
     // first, and the direct child — which knows its true role (e.g. button) —
     // could never apply the declared text.
-    final String? childDeclaredText = widget is MixpanelMask
-        ? widget.wireframeText
-        : widget is MixpanelUnmask
-        ? widget.wireframeText
-        : null;
-    final bool declaresChildText = childDeclaredText != null;
+    String? childDeclaredText;
+    var skipsOwnCollection = false;
+    if (wireframes != null) {
+      childDeclaredText = widget is MixpanelMask
+          ? widget.wireframeText
+          : widget is MixpanelUnmask
+          ? widget.wireframeText
+          : null;
+      final declaresChildText = childDeclaredText != null;
 
-    // A marker never collects a wireframe element for ITSELF — the same
-    // shared-render-object reasoning as above, generalized. Because
-    // `element.renderObject` resolves to a descendant's, a marker wrapping a
-    // `Text` directly resolves to that `RenderParagraph`; collecting it here
-    // would stamp it with the marker's own MaskContext and mark it visited, so
-    // a marker nested below could never re-decide it. That made
-    // `MixpanelMask(child: MixpanelUnmask(child: Text(...)))` emit `explicit`
-    // with the inner unmask never consulted — while the same tree with any
-    // intervening render object resolved to `none` + a geometric strip.
-    //
-    // Skipping lets the descendant that actually owns the render object collect
-    // it under the fully resolved context, so both tree shapes agree: the inner
-    // unmask IS honored, and the enclosing mask's container rect — which
-    // MaskPainter still paints over the whole subtree — strips the text
-    // geometrically. Traversal always reaches that descendant, so skipping the
-    // marker loses nothing.
-    //
-    // The exception is a marker carrying `declaredText`: it is an enclosing
-    // declaring marker's direct child, and the declared text is applied here.
-    final bool isMarker = widget is MixpanelMask || widget is MixpanelUnmask;
-    final bool skipsOwnCollection =
-        declaresChildText || (isMarker && declaredText == null);
+      // A marker never collects a wireframe element for ITSELF — the same
+      // shared-render-object reasoning as above, generalized. Because
+      // `element.renderObject` resolves to a descendant's, a marker wrapping a
+      // `Text` directly resolves to that `RenderParagraph`; collecting it here
+      // would stamp it with the marker's own MaskContext and mark it visited, so
+      // a marker nested below could never re-decide it. That made
+      // `MixpanelMask(child: MixpanelUnmask(child: Text(...)))` emit `explicit`
+      // with the inner unmask never consulted — while the same tree with any
+      // intervening render object resolved to `none` + a geometric strip.
+      //
+      // Skipping lets the descendant that actually owns the render object collect
+      // it under the fully resolved context, so both tree shapes agree: the inner
+      // unmask IS honored, and the enclosing mask's container rect — which
+      // MaskPainter still paints over the whole subtree — strips the text
+      // geometrically. Traversal always reaches that descendant, so skipping the
+      // marker loses nothing.
+      //
+      // The exception is a marker carrying `declaredText`: it is an enclosing
+      // declaring marker's direct child, and the declared text is applied here.
+      final isMarker = widget is MixpanelMask || widget is MixpanelUnmask;
+      skipsOwnCollection =
+          declaresChildText || (isMarker && declaredText == null);
+    }
 
     // Wireframe collection — piggyback on the same walk. Uses the same
     // MaskContext as masking. The detector's initial mask decision is
@@ -334,7 +349,12 @@ class MaskDetector {
     // are applied later by WireframeEmitter. `declaredText` (from an enclosing
     // declaring marker, i.e. this element is that marker's direct child) is
     // applied to this element's role + bounds.
-    if (wireframes != null && wireframeVisited != null && !skipsOwnCollection) {
+    final maskingAlreadyRejectedBounds =
+        boundsWereResolvedByMasking && boundsResolvedByMasking == null;
+    if (wireframes != null &&
+        wireframeVisited != null &&
+        !skipsOwnCollection &&
+        !maskingAlreadyRejectedBounds) {
       _collectWireframeElement(
         element,
         boundary,
@@ -344,6 +364,8 @@ class MaskDetector {
         imageLabel: currentImageLabel,
         declaredText: declaredText,
         viewportBounds: currentViewportBounds,
+        resolvedBounds: boundsResolvedByMasking,
+        boundsWereResolved: boundsWereResolvedByMasking,
       );
     }
 
@@ -354,6 +376,7 @@ class MaskDetector {
         child,
         boundary,
         maskRegions,
+        traversalState: traversalState,
         maskContext: currentContext,
         tickerEnabled: currentTickerEnabled,
         viewportBounds: currentViewportBounds,
@@ -367,64 +390,38 @@ class MaskDetector {
     });
   }
 
-  /// Detect conditions where mask coordinates would not match the visual output.
-  ///
-  /// Returns true if capture should be skipped. Currently detects:
-  /// 1. Route transitions — both routes are onstage with TickerMode(enabled: true),
-  ///    causing overlapping masks from outgoing and incoming routes.
-  /// 2. Overscroll stretch — StretchEffect widget with non-zero stretchStrength
-  ///    applies a paint-only transform not reflected in getTransformTo().
-  bool _shouldSkipCapture(Element root) {
-    bool skip = false;
+  bool _hasUnsafeVisualState(Widget widget) {
+    final widgetType = widget.runtimeType;
+    final typeName = _widgetTypeNames.putIfAbsent(
+      widgetType,
+      widgetType.toString,
+    );
 
-    void visit(Element element) {
-      if (skip) return;
-
-      final widget = element.widget;
-
-      // 1. Route transition detection
-      if (widget.runtimeType.toString() == '_ModalScopeStatus') {
-        try {
-          final route = (widget as dynamic).route;
-          if (route is ModalRoute) {
-            final animStatus = route.animation?.status;
-            final secondaryStatus = route.secondaryAnimation?.status;
-
-            // Route is being pushed behind, popped, or pushed in
-            if (animStatus == AnimationStatus.forward ||
-                animStatus == AnimationStatus.reverse ||
-                secondaryStatus == AnimationStatus.forward ||
-                secondaryStatus == AnimationStatus.reverse) {
-              skip = true;
-              return;
-            }
-          }
-        } catch (_) {
-          // If dynamic access fails, continue scanning
+    if (typeName == '_ModalScopeStatus') {
+      try {
+        final route = (widget as dynamic).route;
+        if (route is ModalRoute) {
+          final animationStatus = route.animation?.status;
+          final secondaryStatus = route.secondaryAnimation?.status;
+          return animationStatus == AnimationStatus.forward ||
+              animationStatus == AnimationStatus.reverse ||
+              secondaryStatus == AnimationStatus.forward ||
+              secondaryStatus == AnimationStatus.reverse;
         }
+      } catch (_) {
+        return false;
       }
-
-      // 2. Overscroll stretch detection
-      // StretchEffect is used by StretchingOverscrollIndicator but is not
-      // publicly exported. When stretchStrength != 0, a paint-only transform
-      // is active that getTransformTo() doesn't reflect, causing mask
-      // coordinate mismatch.
-      if (widget.runtimeType.toString() == 'StretchEffect') {
-        try {
-          if ((widget as dynamic).stretchStrength != 0.0) {
-            skip = true;
-            return;
-          }
-        } catch (_) {
-          // If dynamic access fails, continue scanning
-        }
-      }
-
-      element.visitChildren(visit);
     }
 
-    root.visitChildren(visit);
-    return skip;
+    if (typeName == 'StretchEffect') {
+      try {
+        return (widget as dynamic).stretchStrength != 0.0;
+      } catch (_) {
+        return false;
+      }
+    }
+
+    return false;
   }
 
   /// Add an element's bounds to mask rects
@@ -468,26 +465,32 @@ class MaskDetector {
 
   /// Check if a RenderObject should be masked
   ///
-  /// Returns the MaskRegionInfo to mask, or null if not masked
-  MaskRegionInfo? _shouldMaskRenderObject(
+  /// Returns both the visible bounds (when the node is a visible maskable
+  /// render type) and the optional mask region. Keeping these separate lets
+  /// wireframe collection reuse the transform even when the directive leaves a
+  /// visible node unmasked; a null bounds value remains reserved for nodes that
+  /// are not visible/positionable.
+  ({MaskRegionInfo? maskRegion, Rect? bounds}) _resolveMaskableRenderObject(
     RenderObject node,
     RenderRepaintBoundary boundary,
     Rect?
     viewportBounds, // Cached viewport bounds from traversal (avoids tree walk)
   ) {
-    if (node is! RenderBox) return null;
+    if (node is! RenderBox) return (maskRegion: null, bounds: null);
 
     // After is! check, node is promoted to RenderBox
-    if (!node.hasSize) return null;
+    if (!node.hasSize) return (maskRegion: null, bounds: null);
 
     // CRITICAL: Filter out widgets that aren't actually visible
     // This prevents masking widgets on inactive Navigator routes
-    if (!node.attached) return null; // Not attached to render tree
+    if (!node.attached) {
+      return (maskRegion: null, bounds: null); // Not attached to render tree
+    }
 
     // Skip if paint bounds are empty (widget doesn't contribute to final render)
     // This filters out widgets that exist in the tree but are visually hidden
     // behind other widgets (z-order issue)
-    if (node.paintBounds.isEmpty) return null;
+    if (node.paintBounds.isEmpty) return (maskRegion: null, bounds: null);
 
     // Detect widget type
     WidgetType? widgetType;
@@ -495,23 +498,20 @@ class MaskDetector {
     // PERFORMANCE: Check fast type checks first before expensive string operations
     // Check for text (any type of text rendering)
     // - RenderEditable: TextField, TextFormField (editable text)
-    if (node is RenderEditable) {
+    if (node is RenderEditable || node is RenderParagraph) {
       widgetType = WidgetType.text;
+    } else if (node is RenderImage) {
+      widgetType = WidgetType.image;
     } else {
-      // Only call toString() if type check failed (expensive operation)
-      final typeName = node.runtimeType.toString();
-
-      // - RenderParagraph: Text, RichText (non-editable text)
-      if (typeName.contains('RenderParagraph')) {
-        widgetType = WidgetType.text;
-      }
-      // Check for images (RenderImage)
-      else if (typeName.contains('RenderImage')) {
-        widgetType = WidgetType.image;
-      }
+      widgetType = _fallbackRenderTypes.putIfAbsent(node.runtimeType, () {
+        final typeName = node.runtimeType.toString();
+        if (typeName.contains('RenderParagraph')) return WidgetType.text;
+        if (typeName.contains('RenderImage')) return WidgetType.image;
+        return null;
+      });
     }
 
-    if (widgetType == null) return null;
+    if (widgetType == null) return (maskRegion: null, bounds: null);
 
     // Get bounds relative to the boundary's RENDERED position (viewport)
     // Use matrix transforms to correctly handle rotation, scaling, skewing, etc.
@@ -527,7 +527,7 @@ class MaskDetector {
       bounds = MatrixUtils.transformRect(transform, node.paintBounds);
     } catch (_) {
       // Can't get transform to boundary, skip
-      return null;
+      return (maskRegion: null, bounds: null);
     }
 
     // Define boundary bounds (the visible area we're capturing)
@@ -541,7 +541,7 @@ class MaskDetector {
     // CRITICAL: Filter out widgets that are completely outside the visible boundary
     // This includes widgets on inactive Navigator routes, which are positioned offscreen.
     if (!boundaryBounds.overlaps(bounds)) {
-      return null;
+      return (maskRegion: null, bounds: null);
     }
 
     // Check if widget is inside a scrollable viewport and if so, verify it's within viewport bounds
@@ -550,32 +550,63 @@ class MaskDetector {
     if (viewportBounds != null) {
       // Widget is inside a scrollable - check if it's within the viewport
       if (!viewportBounds.overlaps(bounds)) {
-        return null; // Scrolled completely out of view
+        return (
+          maskRegion: null,
+          bounds: null,
+        ); // Scrolled completely out of view
       }
+    }
+
+    var clippedBounds = bounds.intersect(boundaryBounds);
+    if (viewportBounds != null) {
+      clippedBounds = clippedBounds.intersect(viewportBounds);
+    }
+    if (clippedBounds.isEmpty ||
+        clippedBounds.width <= 0 ||
+        clippedBounds.height <= 0) {
+      return (maskRegion: null, bounds: null);
     }
 
     // Check if this widget should be masked based on directive
     if (directive.shouldMask(bounds, widgetType)) {
-      // Clip mask bounds to boundary - only mask the portion that's actually visible
-      var clippedBounds = bounds.intersect(boundaryBounds);
-
-      // Also clip to viewport bounds if inside a scrollable (only mask visible portion)
-      if (viewportBounds != null) {
-        clippedBounds = clippedBounds.intersect(viewportBounds);
-      }
-
-      // CRITICAL: Filter out masks that don't have any actual visible area
-      // This handles edge cases like content scrolled completely out of view
-      if (clippedBounds.isEmpty ||
-          clippedBounds.width <= 0 ||
-          clippedBounds.height <= 0) {
-        return null;
-      }
-
-      return MaskRegionInfo(clippedBounds, MaskSource.auto);
+      return (
+        maskRegion: MaskRegionInfo(clippedBounds, MaskSource.auto),
+        bounds: clippedBounds,
+      );
     }
 
-    return null;
+    return (maskRegion: null, bounds: clippedBounds);
+  }
+
+  bool _isScrollableWidget(Widget widget) {
+    if (widget is ScrollView ||
+        widget is SingleChildScrollView ||
+        widget is PageView ||
+        widget is TwoDimensionalScrollView ||
+        widget is NestedScrollView) {
+      return true;
+    }
+
+    return _fallbackScrollableWidgetTypes.putIfAbsent(widget.runtimeType, () {
+      final typeName = widget.runtimeType.toString();
+      return typeName.contains('ScrollView') ||
+          typeName.contains('ListView') ||
+          typeName.contains('GridView') ||
+          typeName.contains('PageView') ||
+          typeName.contains('TableView');
+    });
+  }
+
+  bool _isViewportRenderObject(RenderObject? renderObject) {
+    if (renderObject == null) return false;
+    if (renderObject is RenderViewport ||
+        renderObject is RenderShrinkWrappingViewport) {
+      return true;
+    }
+    return _fallbackViewportRenderTypes.putIfAbsent(
+      renderObject.runtimeType,
+      () => renderObject.runtimeType.toString().contains('RenderViewport'),
+    );
   }
 
   /// Widget type name substrings identifying button-like widgets. Detection
@@ -614,8 +645,46 @@ class MaskDetector {
     String? imageLabel,
     String? declaredText,
     Rect? viewportBounds,
+    Rect? resolvedBounds,
+    required bool boundsWereResolved,
   }) {
-    final renderObject = element.renderObject;
+    final ownsRenderObject = element is RenderObjectElement;
+    var isButton = false;
+    var isTextField = false;
+
+    // Most nodes in a Flutter element tree are layout/paint render objects that
+    // can never produce a wireframe element. Reject those before touching the
+    // visited set or doing any ComponentElement descendant lookup. This branch
+    // is especially important for long SingleChildScrollViews, whose offscreen
+    // children remain mounted and are all visited by the masking traversal.
+    RenderObject? renderObject;
+    if (ownsRenderObject) {
+      renderObject = element.renderObject;
+      if (declaredText == null &&
+          renderObject is! RenderEditable &&
+          renderObject is! RenderParagraph &&
+          renderObject is! RenderImage) {
+        return;
+      }
+    } else {
+      final kind = _componentWireframeKind(element.widget);
+      isButton = kind == _ComponentWireframeKind.button;
+      isTextField = kind == _ComponentWireframeKind.textField;
+    }
+
+    // ComponentElement.renderObject searches downward for the first render
+    // object. Ordinary wrappers cannot own a wireframe role, and resolving the
+    // same descendant through every wrapper turns this walk superlinear. Only
+    // widgets whose public type carries meaning (buttons/fields) and elements
+    // receiving declared text need that fallback lookup.
+    if (declaredText == null &&
+        !isButton &&
+        !isTextField &&
+        !ownsRenderObject) {
+      return;
+    }
+
+    renderObject ??= element.renderObject;
     if (renderObject == null || visited.contains(renderObject)) return;
 
     // Developer-declared text (from an enclosing MixpanelMask/MixpanelUnmask
@@ -630,14 +699,16 @@ class MaskDetector {
     // text REPLACES scraped text rather than adding to it. The field's pixels
     // stay masked either way.
     if (declaredText != null) {
-      final bounds = _boundaryRelativeBounds(
-        renderObject,
-        boundary,
-        viewportBounds: viewportBounds,
-      );
+      final bounds = boundsWereResolved
+          ? resolvedBounds
+          : _boundaryRelativeBounds(
+              renderObject,
+              boundary,
+              viewportBounds: viewportBounds,
+            );
       if (bounds == null) return;
       final WireframeRole role;
-      if (_isButtonWidget(element.widget)) {
+      if (isButton) {
         role = WireframeRole.button;
         // Consume descendant paragraphs / nested buttons so the button's own
         // label doesn't re-emit as standalone elements — same as the normal
@@ -650,17 +721,14 @@ class MaskDetector {
           visited,
           maskContext: maskContext,
         );
-        _markNestedButtonsVisited(element, visited);
-      } else if (renderObject is RenderEditable ||
-          _isTextFieldWidget(element.widget)) {
+      } else if (renderObject is RenderEditable || isTextField) {
         role = WireframeRole.input;
         // A `TextField` builds its RenderEditable well below the widget the
         // developer wrapped. Consume it so the field emits once, as the input
         // it is, rather than a declared shell plus a textless input shell.
         _markDescendantEditablesVisited(element, visited);
       } else {
-        final typeName = renderObject.runtimeType.toString();
-        role = typeName.contains('RenderImage')
+        role = renderObject is RenderImage
             ? WireframeRole.image
             // RenderParagraph, custom-drawn content (CustomPaint/Canvas), or any
             // other opaque render object the developer explicitly labeled.
@@ -680,11 +748,13 @@ class MaskDetector {
 
     // Input fields — always masked, cannot be overridden.
     if (renderObject is RenderEditable) {
-      final bounds = _boundaryRelativeBounds(
-        renderObject,
-        boundary,
-        viewportBounds: viewportBounds,
-      );
+      final bounds = boundsWereResolved
+          ? resolvedBounds
+          : _boundaryRelativeBounds(
+              renderObject,
+              boundary,
+              viewportBounds: viewportBounds,
+            );
       if (bounds == null) return;
       visited.add(renderObject);
       out.add(
@@ -705,12 +775,14 @@ class MaskDetector {
     // (tooltip / semanticLabel). The descendant walk always runs — even
     // when masked — so its paragraphs are consumed and never re-emit as
     // separate shells.
-    if (_isButtonWidget(element.widget)) {
-      final bounds = _boundaryRelativeBounds(
-        renderObject,
-        boundary,
-        viewportBounds: viewportBounds,
-      );
+    if (isButton) {
+      final bounds = boundsWereResolved
+          ? resolvedBounds
+          : _boundaryRelativeBounds(
+              renderObject,
+              boundary,
+              viewportBounds: viewportBounds,
+            );
       if (bounds == null) return;
       final decision = _wireframeDecision(
         role: WireframeRole.button,
@@ -748,7 +820,6 @@ class MaskDetector {
       // wraps a RawMaterialButton). Mark those nested button render objects
       // visited so the ongoing top-down walk doesn't emit them as duplicate
       // shells now that textless shells are kept.
-      _markNestedButtonsVisited(element, visited);
       out.add(
         WireframeElement(
           role: WireframeRole.button,
@@ -761,13 +832,14 @@ class MaskDetector {
     }
 
     // Text — RenderParagraph.
-    final typeName = renderObject.runtimeType.toString();
-    if (typeName.contains('RenderParagraph')) {
-      final bounds = _boundaryRelativeBounds(
-        renderObject,
-        boundary,
-        viewportBounds: viewportBounds,
-      );
+    if (renderObject is RenderParagraph) {
+      final bounds = boundsWereResolved
+          ? resolvedBounds
+          : _boundaryRelativeBounds(
+              renderObject,
+              boundary,
+              viewportBounds: viewportBounds,
+            );
       if (bounds == null) return;
       final text = _extractParagraphText(renderObject);
       final decision = _wireframeDecision(
@@ -789,12 +861,14 @@ class MaskDetector {
     // Image — RenderImage. The accessibility label comes from the enclosing
     // `Semantics(image: true, label: ...)` threaded down as [imageLabel] (the
     // `Image` widget puts the label there, not on `RenderImage`).
-    if (typeName.contains('RenderImage')) {
-      final bounds = _boundaryRelativeBounds(
-        renderObject,
-        boundary,
-        viewportBounds: viewportBounds,
-      );
+    if (renderObject is RenderImage) {
+      final bounds = boundsWereResolved
+          ? resolvedBounds
+          : _boundaryRelativeBounds(
+              renderObject,
+              boundary,
+              viewportBounds: viewportBounds,
+            );
       if (bounds == null) return;
       final label = useAccessibilityLabelFallback ? imageLabel : null;
       final decision = _wireframeDecision(
@@ -820,7 +894,7 @@ class MaskDetector {
   ///
   /// When [viewportBounds] is non-null the node sits inside a scrollable, so
   /// bounds are additionally clipped to that viewport — mirroring what
-  /// [_shouldMaskRenderObject] does for mask rects. A node scrolled fully out
+  /// [_resolveMaskableRenderObject] does for mask rects. A node scrolled fully out
   /// of view clips to nothing and yields null, so the caller emits no element:
   /// the screenshot paints nothing there, and text the screenshot never showed
   /// must not reach the wireframe. A partially visible node keeps its text and
@@ -881,29 +955,20 @@ class MaskDetector {
   }
 
   bool _isButtonWidget(Widget widget) {
-    final name = widget.runtimeType.toString();
-    for (final pattern in _buttonWidgetPatterns) {
-      if (name.contains(pattern)) return true;
-    }
-    return false;
+    return _componentWireframeKind(widget) == _ComponentWireframeKind.button;
   }
 
-  /// Whether [widget] is a text-entry field, matched by widget type the way
-  /// buttons are.
-  ///
-  /// Only the declared-text path needs this. Everywhere else a field is
-  /// recognized structurally, by its `RenderEditable` — but declared text lands
-  /// on the widget the developer wrapped, which sits several levels above that
-  /// render object. `'TextField'` also covers `TextFormField` and
-  /// `CupertinoTextField` as substrings.
-  ///
-  /// A field wrapped in a custom widget won't match, exactly as a custom button
-  /// wrapper won't: it stays role text and the field inside emits its own
-  /// textless input. That mirrors Android, where the declared text lands on the
-  /// container and the `EditText` still emits separately.
-  bool _isTextFieldWidget(Widget widget) {
-    final name = widget.runtimeType.toString();
-    return name.contains('TextField') || name.contains('EditableText');
+  _ComponentWireframeKind _componentWireframeKind(Widget widget) {
+    return _componentWireframeKinds.putIfAbsent(widget.runtimeType, () {
+      final name = widget.runtimeType.toString();
+      for (final pattern in _buttonWidgetPatterns) {
+        if (name.contains(pattern)) return _ComponentWireframeKind.button;
+      }
+      if (name.contains('TextField') || name.contains('EditableText')) {
+        return _ComponentWireframeKind.textField;
+      }
+      return _ComponentWireframeKind.none;
+    });
   }
 
   /// Mark every descendant [RenderEditable] of [element] visited.
@@ -968,6 +1033,9 @@ class MaskDetector {
       }
 
       final renderObject = child.renderObject;
+      if (_isButtonWidget(widget) && renderObject != null) {
+        visited.add(renderObject);
+      }
       // `child is RenderObjectElement` is load-bearing, not a micro-optimization.
       //
       // `Element.renderObject` on a component element resolves *downward* to the
@@ -1126,27 +1194,6 @@ class MaskDetector {
     return hasMaskedDescendant ? null : found;
   }
 
-  /// Mark the render objects of any nested button-like widgets in
-  /// [buttonElement]'s subtree as visited so the ongoing top-down traversal
-  /// skips them. Composite buttons (e.g. `FloatingActionButton` →
-  /// `RawMaterialButton`) are built from inner button widgets that would
-  /// otherwise emit as duplicate shells now that textless shells are kept.
-  /// Descendants only — never walks up.
-  void _markNestedButtonsVisited(
-    Element buttonElement,
-    Set<RenderObject> visited,
-  ) {
-    void visit(Element child) {
-      if (_isButtonWidget(child.widget)) {
-        final renderObject = child.renderObject;
-        if (renderObject != null) visited.add(renderObject);
-      }
-      child.debugVisitOnstageChildren(visit);
-    }
-
-    buttonElement.debugVisitOnstageChildren(visit);
-  }
-
   String _extractParagraphText(RenderObject node) {
     try {
       final text = (node as dynamic).text as InlineSpan?;
@@ -1155,6 +1202,10 @@ class MaskDetector {
       return '';
     }
   }
+}
+
+class _MaskTraversalState {
+  bool shouldSkipCapture = false;
 }
 
 /// Exception thrown when mask detection fails
