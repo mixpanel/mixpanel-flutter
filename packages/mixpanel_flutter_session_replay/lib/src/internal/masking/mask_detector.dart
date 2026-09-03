@@ -33,6 +33,8 @@ class MaskDetectionResult {
 
 /// Detects widgets that should be masked in screenshots
 class MaskDetector {
+  static final Map<Type, String> _widgetTypeNames = <Type, String>{};
+
   /// Configuration for auto-masking
   final MaskingDirective directive;
 
@@ -44,25 +46,29 @@ class MaskDetector {
   /// Traverse widget tree and collect mask regions
   ///
   /// Returns MaskDetectionResult with regions and bounds snapshot, or throws on error
-  MaskDetectionResult detectMaskRegions(RenderRepaintBoundary boundary) {
+  MaskDetectionResult detectMaskRegions(
+    RenderRepaintBoundary boundary, {
+    Element? boundaryElement,
+  }) {
     final maskRegions = <MaskRegionInfo>[];
-    bool shouldSkipCapture = false;
+    final traversalState = _MaskTraversalState();
 
     try {
-      // Find the element that owns this boundary
-      final boundaryElement = _findElementForRenderObject(boundary);
-      if (boundaryElement == null) {
+      // Production callers already own the boundary element. The fallback is
+      // retained for direct detector callers and performance comparisons.
+      final resolvedBoundaryElement =
+          boundaryElement ?? _findElementForRenderObject(boundary);
+      if (resolvedBoundaryElement == null) {
         return MaskDetectionResult(maskRegions: []);
       }
 
-      // Check for conditions that would cause mask coordinate mismatch
-      shouldSkipCapture = _shouldSkipCapture(boundaryElement);
-
-      // Traverse descendants and track TickerMode state to filter background routes
+      // Traverse descendants once, collecting masks and detecting visual states
+      // that make their coordinates unsafe to apply to the captured image.
       _traverseElementTree(
-        boundaryElement,
+        resolvedBoundaryElement,
         boundary,
         maskRegions,
+        traversalState: traversalState,
         maskContext: MaskContext.none,
         tickerEnabled: true, // Start with enabled (active route)
         viewportBounds: null, // Will be detected and cached during traversal
@@ -74,7 +80,7 @@ class MaskDetector {
 
     return MaskDetectionResult(
       maskRegions: maskRegions,
-      shouldSkipCapture: shouldSkipCapture,
+      shouldSkipCapture: traversalState.shouldSkipCapture,
     );
   }
 
@@ -101,12 +107,17 @@ class MaskDetector {
     Element element,
     RenderRepaintBoundary boundary,
     List<MaskRegionInfo> maskRegions, {
+    required _MaskTraversalState traversalState,
     required MaskContext maskContext,
     required bool tickerEnabled,
     Rect?
     viewportBounds, // Cached viewport bounds (detected once, reused for all children)
   }) {
     final widget = element.widget;
+
+    if (_hasUnsafeVisualState(widget)) {
+      traversalState.shouldSkipCapture = true;
+    }
 
     // PERFORMANCE: Track TickerMode state as we traverse (no expensive ancestor walks)
     // Navigator wraps background routes in TickerMode(enabled: false)
@@ -240,6 +251,7 @@ class MaskDetector {
         child,
         boundary,
         maskRegions,
+        traversalState: traversalState,
         maskContext: currentContext,
         tickerEnabled: currentTickerEnabled,
         viewportBounds: currentViewportBounds,
@@ -247,64 +259,41 @@ class MaskDetector {
     });
   }
 
-  /// Detect conditions where mask coordinates would not match the visual output.
-  ///
-  /// Returns true if capture should be skipped. Currently detects:
-  /// 1. Route transitions — both routes are onstage with TickerMode(enabled: true),
-  ///    causing overlapping masks from outgoing and incoming routes.
-  /// 2. Overscroll stretch — StretchEffect widget with non-zero stretchStrength
-  ///    applies a paint-only transform not reflected in getTransformTo().
-  bool _shouldSkipCapture(Element root) {
-    bool skip = false;
+  bool _hasUnsafeVisualState(Widget widget) {
+    final widgetType = widget.runtimeType;
+    final typeName = _widgetTypeNames.putIfAbsent(
+      widgetType,
+      widgetType.toString,
+    );
 
-    void visit(Element element) {
-      if (skip) return;
-
-      final widget = element.widget;
-
-      // 1. Route transition detection
-      if (widget.runtimeType.toString() == '_ModalScopeStatus') {
-        try {
-          final route = (widget as dynamic).route;
-          if (route is ModalRoute) {
-            final animStatus = route.animation?.status;
-            final secondaryStatus = route.secondaryAnimation?.status;
-
-            // Route is being pushed behind, popped, or pushed in
-            if (animStatus == AnimationStatus.forward ||
-                animStatus == AnimationStatus.reverse ||
-                secondaryStatus == AnimationStatus.forward ||
-                secondaryStatus == AnimationStatus.reverse) {
-              skip = true;
-              return;
-            }
-          }
-        } catch (_) {
-          // If dynamic access fails, continue scanning
+    // Route transition detection.
+    if (typeName == '_ModalScopeStatus') {
+      try {
+        final route = (widget as dynamic).route;
+        if (route is ModalRoute) {
+          final animationStatus = route.animation?.status;
+          final secondaryStatus = route.secondaryAnimation?.status;
+          return animationStatus == AnimationStatus.forward ||
+              animationStatus == AnimationStatus.reverse ||
+              secondaryStatus == AnimationStatus.forward ||
+              secondaryStatus == AnimationStatus.reverse;
         }
+      } catch (_) {
+        return false;
       }
-
-      // 2. Overscroll stretch detection
-      // StretchEffect is used by StretchingOverscrollIndicator but is not
-      // publicly exported. When stretchStrength != 0, a paint-only transform
-      // is active that getTransformTo() doesn't reflect, causing mask
-      // coordinate mismatch.
-      if (widget.runtimeType.toString() == 'StretchEffect') {
-        try {
-          if ((widget as dynamic).stretchStrength != 0.0) {
-            skip = true;
-            return;
-          }
-        } catch (_) {
-          // If dynamic access fails, continue scanning
-        }
-      }
-
-      element.visitChildren(visit);
     }
 
-    root.visitChildren(visit);
-    return skip;
+    // StretchEffect is private Flutter API. A non-zero paint-only transform is
+    // not represented by getTransformTo(), so its mask coordinates are unsafe.
+    if (typeName == 'StretchEffect') {
+      try {
+        return (widget as dynamic).stretchStrength != 0.0;
+      } catch (_) {
+        return false;
+      }
+    }
+
+    return false;
   }
 
   /// Add an element's bounds to mask rects
@@ -377,18 +366,10 @@ class MaskDetector {
     // - RenderEditable: TextField, TextFormField (editable text)
     if (node is RenderEditable) {
       widgetType = WidgetType.text;
-    } else {
-      // Only call toString() if type check failed (expensive operation)
-      final typeName = node.runtimeType.toString();
-
-      // - RenderParagraph: Text, RichText (non-editable text)
-      if (typeName.contains('RenderParagraph')) {
-        widgetType = WidgetType.text;
-      }
-      // Check for images (RenderImage)
-      else if (typeName.contains('RenderImage')) {
-        widgetType = WidgetType.image;
-      }
+    } else if (node is RenderParagraph) {
+      widgetType = WidgetType.text;
+    } else if (node is RenderImage) {
+      widgetType = WidgetType.image;
     }
 
     if (widgetType == null) return null;
@@ -457,6 +438,10 @@ class MaskDetector {
 
     return null;
   }
+}
+
+class _MaskTraversalState {
+  bool shouldSkipCapture = false;
 }
 
 /// Exception thrown when mask detection fails

@@ -736,6 +736,8 @@ void main() {
 
       // THEN - initial post-frame callback triggered a capture
       expect(fake.captureSnapshotCallCount, 1);
+      final snapshot = fake.capturedSnapshots.single;
+      expect(snapshot.boundaryElement.renderObject, same(snapshot.boundary));
     });
 
     testWidgets(

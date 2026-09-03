@@ -79,6 +79,7 @@ Future<void> captureGolden(
         backgroundColor: Colors.white,
         body: Center(
           child: RepaintBoundary(
+            key: const ValueKey('golden-capture-boundary'),
             child: SizedBox(
               width: width,
               height: height,
@@ -99,6 +100,9 @@ Future<void> captureGolden(
   final RenderRepaintBoundary boundary = tester.allRenderObjects
       .whereType<RenderRepaintBoundary>()
       .first;
+  final boundaryElement = tester.element(
+    find.byKey(const ValueKey('golden-capture-boundary')),
+  );
 
   // Create screenshot capturer with the test's masking directive
   final capturer = ScreenshotCapturer(
@@ -114,7 +118,10 @@ Future<void> captureGolden(
 
   // Start capture in background
   final captureFuture = tester.runAsync(() async {
-    final result = await capturer.capture(boundary);
+    final result = await capturer.capture(
+      boundary,
+      boundaryElement: boundaryElement,
+    );
 
     // Verify capture succeeded
     if (result is! CaptureSuccess) {
