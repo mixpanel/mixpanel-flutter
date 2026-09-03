@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -6,6 +8,13 @@ import 'package:mixpanel_flutter_session_replay/src/models/configuration.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/masking_directive.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/wireframe.dart';
 import 'package:mixpanel_flutter_session_replay/src/widgets/mask_widget.dart';
+import 'package:mixpanel_flutter_session_replay/src/widgets/unmask_widget.dart';
+
+final _testImage = MemoryImage(
+  base64Decode(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+  ),
+);
 
 /// The accessibility-label fallback, asserted at the detector rather than through
 /// a golden.
@@ -134,5 +143,64 @@ void main() {
 
       expect(buttonOf(elements).text, 'Add item');
     });
+
+    testWidgets(
+      'a Semantics wrapper inherits its ImageIcon automatic mask',
+      (tester) async {
+        final elements = await collect(
+          tester,
+          IconButton(
+            onPressed: () {},
+            icon: Semantics(
+              label: 'Photo of Jane Doe',
+              child: ImageIcon(_testImage),
+            ),
+          ),
+          autoMask: const {AutoMaskedView.image},
+        );
+
+        expect(buttonOf(elements).text, isNull);
+      },
+    );
+
+    testWidgets(
+      'a Tooltip wrapper inherits its ImageIcon automatic mask',
+      (tester) async {
+        final elements = await collect(
+          tester,
+          IconButton(
+            onPressed: () {},
+            icon: Tooltip(
+              message: 'Photo of Jane Doe',
+              child: ImageIcon(_testImage),
+            ),
+          ),
+          autoMask: const {AutoMaskedView.image},
+        );
+
+        expect(buttonOf(elements).text, isNull);
+      },
+    );
+
+    testWidgets(
+      'an explicit unmask allows a wrapper label around an ImageIcon',
+      (tester) async {
+        final elements = await collect(
+          tester,
+          IconButton(
+            onPressed: () {},
+            icon: Semantics(
+              label: 'Add item',
+              child: MixpanelUnmask(
+                child: ImageIcon(_testImage),
+              ),
+            ),
+          ),
+          autoMask: const {AutoMaskedView.image},
+        );
+
+        expect(buttonOf(elements).text, 'Add item');
+      },
+    );
   });
 }

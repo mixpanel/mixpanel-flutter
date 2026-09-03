@@ -1158,6 +1158,20 @@ class MaskDetector {
           childContext == MaskContext.mask ||
           (childContext == MaskContext.none && autoMasks);
 
+      // A wrapper label describes the visual content beneath it. Carry the
+      // automatic mask status of the render object's real owner back to that
+      // label, just as explicit mask context is carried above. Restrict this to
+      // RenderObjectElement so a component wrapper cannot claim a descendant's
+      // render object before an intervening MixpanelUnmask is visited.
+      final renderObject = child.renderObject;
+      if (child is RenderObjectElement) {
+        if (renderObject is RenderParagraph && maskedFor(autoMasksText)) {
+          hasMaskedDescendant = true;
+        } else if (renderObject is RenderImage && maskedFor(autoMasksImage)) {
+          hasMaskedDescendant = true;
+        }
+      }
+
       if (found == null) {
         if (widget is Icon) {
           final label = widget.semanticLabel;
