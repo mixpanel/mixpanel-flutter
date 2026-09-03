@@ -34,6 +34,10 @@ class MaskDetectionResult {
 /// Detects widgets that should be masked in screenshots
 class MaskDetector {
   static final Map<Type, String> _widgetTypeNames = <Type, String>{};
+  static final Map<Type, WidgetType?> _fallbackRenderTypes =
+      <Type, WidgetType?>{};
+  static final Map<Type, bool> _fallbackScrollableWidgetTypes = <Type, bool>{};
+  static final Map<Type, bool> _fallbackViewportRenderTypes = <Type, bool>{};
 
   /// Configuration for auto-masking
   final MaskingDirective directive;
@@ -138,23 +142,8 @@ class MaskDetector {
       final renderObject = element.renderObject;
       final widget = element.widget;
 
-      // Detect scrollable viewports by widget type (fast) or render object name (slower fallback)
-      // Covers: SingleChildScrollView, ListView, GridView, CustomScrollView, PageView, TabBarView, NestedScrollView, ReorderableListView, TableView
-      const scrollablePatterns = [
-        'ScrollView',
-        'ListView',
-        'GridView',
-        'PageView',
-        'TableView',
-      ];
-
-      final widgetTypeName = widget.runtimeType.toString();
       final isScrollable =
-          scrollablePatterns.any(
-            (pattern) => widgetTypeName.contains(pattern),
-          ) ||
-          (renderObject != null &&
-              renderObject.runtimeType.toString().contains('RenderViewport'));
+          _isScrollableWidget(widget) || _isViewportRenderObject(renderObject);
 
       if (isScrollable && renderObject is RenderBox && renderObject.hasSize) {
         try {
@@ -370,6 +359,17 @@ class MaskDetector {
       widgetType = WidgetType.text;
     } else if (node is RenderImage) {
       widgetType = WidgetType.image;
+    } else {
+      widgetType = _fallbackRenderTypes.putIfAbsent(node.runtimeType, () {
+        final typeName = node.runtimeType.toString();
+        if (typeName.contains('RenderParagraph')) {
+          return WidgetType.text;
+        }
+        if (typeName.contains('RenderImage')) {
+          return WidgetType.image;
+        }
+        return null;
+      });
     }
 
     if (widgetType == null) return null;
@@ -437,6 +437,41 @@ class MaskDetector {
     }
 
     return null;
+  }
+
+  bool _isScrollableWidget(Widget widget) {
+    if (widget is ScrollView ||
+        widget is SingleChildScrollView ||
+        widget is PageView ||
+        widget is TwoDimensionalScrollView ||
+        widget is NestedScrollView) {
+      return true;
+    }
+
+    return _fallbackScrollableWidgetTypes.putIfAbsent(widget.runtimeType, () {
+      final typeName = widget.runtimeType.toString();
+      return typeName.contains('ScrollView') ||
+          typeName.contains('ListView') ||
+          typeName.contains('GridView') ||
+          typeName.contains('PageView') ||
+          typeName.contains('TableView');
+    });
+  }
+
+  bool _isViewportRenderObject(RenderObject? renderObject) {
+    if (renderObject == null) return false;
+
+    if (renderObject is RenderViewport ||
+        renderObject is RenderShrinkWrappingViewport) {
+      return true;
+    }
+
+    return _fallbackViewportRenderTypes.putIfAbsent(
+      renderObject.runtimeType,
+      () {
+        return renderObject.runtimeType.toString().contains('RenderViewport');
+      },
+    );
   }
 }
 
