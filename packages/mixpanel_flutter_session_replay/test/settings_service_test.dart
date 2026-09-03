@@ -455,6 +455,36 @@ void main() {
         expect(result.isWireframeEnabled, true);
       });
 
+      test(
+        'preserves cached wireframe disable when the field is absent',
+        () async {
+          // GIVEN - an earlier launch received an explicit kill-switch response
+          SharedPreferencesAsyncPlatform.instance =
+              InMemorySharedPreferencesAsync.withData({
+                'mp_sr_flutter_${testToken}_wireframe_enabled': false,
+              });
+          final provider = SettingsStorageProvider(
+            token: testToken,
+            logger: testLogger,
+          );
+          final service = SettingsService(
+            storageProvider: provider,
+            token: testToken,
+            logger: MixpanelLogger(LogLevel.none),
+            httpClient: createFakeSettingsClient(isEnabled: true),
+            wireframesRequested: true,
+          );
+
+          // WHEN - the successful response has no wireframe field
+          final result = await service.fetchRemoteSettings();
+
+          // THEN - only an explicit true may clear the cached kill switch
+          expect(result.isFromCache, false);
+          expect(result.isWireframeEnabled, false);
+          expect(await provider.getWireframeEnabled(), false);
+        },
+      );
+
       test('kills wireframes while recording is also disabled', () async {
         // GIVEN
         final httpClient = http_testing.MockClient((request) async {

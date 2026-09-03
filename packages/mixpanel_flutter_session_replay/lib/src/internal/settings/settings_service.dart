@@ -161,7 +161,9 @@ class SettingsService {
   }
 
   /// Parse successful settings response.
-  RemoteSettingsResult _handleSuccessResponse(String responseBody) {
+  Future<RemoteSettingsResult> _handleSuccessResponse(
+    String responseBody,
+  ) async {
     _logger.debug('Parsing settings response');
     final json = jsonDecode(responseBody) as Map<String, dynamic>;
 
@@ -182,18 +184,19 @@ class SettingsService {
     }
 
     // Parse the wireframe kill switch. An absent field means the switch was never
-    // asked for (wireframes off locally) or the server had nothing to say, so the
-    // cached verdict is left untouched and capture stays on.
+    // asked for (wireframes off locally) or the server had nothing to say. Preserve
+    // a previously cached disable; with no cached verdict, capture defaults to on.
     final wireframe = json['wireframe'] as Map<String, dynamic>?;
-    var isWireframeEnabled = true;
+    var isWireframeEnabled = await _storageProvider.getWireframeEnabled();
 
-    if (wireframe != null) {
-      isWireframeEnabled = wireframe['is_enabled'] as bool? ?? true;
+    final explicitWireframeEnabled = wireframe?['is_enabled'] as bool?;
+    if (explicitWireframeEnabled != null) {
+      isWireframeEnabled = explicitWireframeEnabled;
       if (isWireframeEnabled) {
         _logger.info('Wireframe settings check: enabled');
         _storageProvider.clearWireframeState();
       } else {
-        final wireframeError = wireframe['error'] as String?;
+        final wireframeError = wireframe?['error'] as String?;
         _logger.warning('Wireframe capture is disabled via remote settings');
         if (wireframeError != null) {
           _logger.warning('Wireframe settings error: $wireframeError');
