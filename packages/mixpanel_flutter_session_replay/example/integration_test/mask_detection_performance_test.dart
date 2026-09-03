@@ -28,7 +28,9 @@ void main() {
   final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
   binding.framePolicy = LiveTestWidgetsFlutterBindingFramePolicy.fullyLive;
 
-  testWidgets('measures optimized mask detection on device', (tester) async {
+  testWidgets('should measure mask detection when running on device', (
+    tester,
+  ) async {
     // GIVEN a fully built, scrollable product list inside the capture boundary.
     final boundaryKey = GlobalKey();
     runApp(

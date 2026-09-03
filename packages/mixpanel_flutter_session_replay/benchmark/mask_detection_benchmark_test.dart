@@ -12,7 +12,9 @@ const _warmUpIterations = 20;
 const _measuredIterations = 100;
 
 void main() {
-  testWidgets('measures optimized mask detection', (tester) async {
+  testWidgets('should measure mask detection when the tree has 250 rows', (
+    tester,
+  ) async {
     // GIVEN a large, fully built widget tree representative of a complex page.
     final boundaryKey = GlobalKey();
     await tester.pumpWidget(

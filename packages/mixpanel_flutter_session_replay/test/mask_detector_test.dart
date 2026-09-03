@@ -7,7 +7,7 @@ import 'package:mixpanel_flutter_session_replay/src/internal/masking/mask_detect
 import 'package:mixpanel_flutter_session_replay/src/models/masking_directive.dart';
 
 void main() {
-  testWidgets('detects route transitions during the mask traversal', (
+  testWidgets('should skip capture when a route transition is in progress', (
     tester,
   ) async {
     final boundaryKey = GlobalKey();
