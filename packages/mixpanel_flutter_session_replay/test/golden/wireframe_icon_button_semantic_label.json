@@ -1,0 +1,19 @@
+{
+  "viewport": [
+    800,
+    600
+  ],
+  "elements": [
+    {
+      "role": "button",
+      "text": "Add item",
+      "bounds": [
+        376,
+        276,
+        48,
+        48
+      ],
+      "maskDecision": "NONE"
+    }
+  ]
+}

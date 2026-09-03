@@ -1,5 +1,9 @@
 import 'dart:convert';
 import 'dart:typed_data';
+import 'dart:ui' show Rect;
+
+import 'wireframe.dart';
+import 'wireframes_options.dart' show MaskDecision;
 
 /// Event type enum
 enum EventType {
@@ -11,6 +15,12 @@ enum EventType {
 
   /// User tap/click interaction
   interaction,
+
+  /// Wireframe frame (structured list of visible UI elements)
+  wireframe,
+
+  /// A batch of sampled drag positions between a touch down and a lift
+  touchMove,
 }
 
 /// Sealed base class for event payload (type-safe union)
@@ -44,6 +54,77 @@ class ScreenshotPayload extends EventPayload {
   Map<String, dynamic> toJson() => {'screenshot_data': base64Encode(imageData)};
 }
 
+/// Payload for wireframe events.
+///
+/// Carries a viewport size and an ordered list of visible UI elements
+/// (role/text/bounds/maskDecision). Serialized into a metadata JSON blob;
+/// no binary column.
+class WireframePayload extends EventPayload {
+  WireframePayload({
+    required this.viewportWidth,
+    required this.viewportHeight,
+    required this.elements,
+  });
+
+  /// Viewport width in logical pixels.
+  final int viewportWidth;
+
+  /// Viewport height in logical pixels.
+  final int viewportHeight;
+
+  /// Elements in traversal order.
+  final List<WireframeElement> elements;
+
+  @override
+  Map<String, dynamic> toJson() => {
+    'viewport': [viewportWidth, viewportHeight],
+    'elements': elements
+        .map(
+          (e) => {
+            'role': e.role.wireName,
+            'text': e.text,
+            'bounds': [
+              e.bounds.left.round(),
+              e.bounds.top.round(),
+              e.bounds.width.round(),
+              e.bounds.height.round(),
+            ],
+            'maskDecision': e.maskDecision.index,
+          },
+        )
+        .toList(),
+  };
+
+  /// Dedup key: a hash of exactly what ships as the `mp_wireframe` event.
+  ///
+  /// Mirrors [RRWebEvent] `_buildWireframeEvent`, **not** [toJson] — the two
+  /// disagree, and the wire is what matters. `toJson` additionally emits
+  /// `maskDecision`, which the rrweb serializer omits; a frame that changed
+  /// only its decision renders identically for the summarizer and should
+  /// dedup. Bounds are rounded here the same way the serializer rounds them,
+  /// so rects differing by a sub-pixel that rounds away count as one screen.
+  ///
+  /// Matches Android's `WireframePayload.hashCode()` and iOS's
+  /// `WireframePayload.hashValue`, which get the same semantics for free from
+  /// hashing their wire DTOs directly.
+  int get wireHash => Object.hash(
+    viewportWidth,
+    viewportHeight,
+    Object.hashAll(
+      elements.map(
+        (e) => Object.hash(
+          e.role,
+          e.text,
+          e.bounds.left.round(),
+          e.bounds.top.round(),
+          e.bounds.width.round(),
+          e.bounds.height.round(),
+        ),
+      ),
+    ),
+  );
+}
+
 /// Payload for interaction events
 class InteractionPayload extends EventPayload {
   /// RRWeb interaction type (e.g., touchStart, touchEnd, click)
@@ -63,6 +144,55 @@ class InteractionPayload extends EventPayload {
 
   @override
   Map<String, dynamic> toJson() => {'type': interactionType, 'x': x, 'y': y};
+}
+
+/// A single sampled position within a [TouchMovePayload].
+class TouchPosition {
+  const TouchPosition({
+    required this.x,
+    required this.y,
+    required this.timeOffset,
+  });
+
+  /// Screen x coordinate in logical pixels.
+  final double x;
+
+  /// Screen y coordinate in logical pixels.
+  final double y;
+
+  /// Milliseconds relative to the batch's event timestamp. rrweb replays a
+  /// sample at `event.timestamp + timeOffset`, and the batch is stamped with
+  /// its final sample, so offsets are `<= 0`.
+  final int timeOffset;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is TouchPosition &&
+          x == other.x &&
+          y == other.y &&
+          timeOffset == other.timeOffset;
+
+  @override
+  int get hashCode => Object.hash(x, y, timeOffset);
+}
+
+/// Payload for a batch of sampled drag positions.
+///
+/// [positions] is never empty and is ordered oldest to newest, so the event's
+/// timestamp is that of its final sample.
+class TouchMovePayload extends EventPayload {
+  TouchMovePayload({required this.positions});
+
+  /// Sampled positions, oldest first.
+  final List<TouchPosition> positions;
+
+  @override
+  Map<String, dynamic> toJson() => {
+    'positions': positions
+        .map((p) => {'x': p.x, 'y': p.y, 'timeOffset': p.timeOffset})
+        .toList(),
+  };
 }
 
 /// Individual captured event within a session replay
@@ -134,6 +264,39 @@ class SessionReplayEvent {
         }),
         'binary': null,
       };
+    } else if (payload is TouchMovePayload) {
+      return {
+        'metadata': jsonEncode({
+          'positions': payload.positions
+              .map((p) => {'x': p.x, 'y': p.y, 'timeOffset': p.timeOffset})
+              .toList(),
+          'version': 1,
+        }),
+        'binary': null,
+      };
+    } else if (payload is WireframePayload) {
+      return {
+        'metadata': jsonEncode({
+          'viewport': [payload.viewportWidth, payload.viewportHeight],
+          'elements': payload.elements
+              .map(
+                (e) => {
+                  'role': e.role.index,
+                  'text': e.text,
+                  'bounds': [
+                    e.bounds.left,
+                    e.bounds.top,
+                    e.bounds.width,
+                    e.bounds.height,
+                  ],
+                  'maskDecision': e.maskDecision.index,
+                },
+              )
+              .toList(),
+          'version': 1,
+        }),
+        'binary': null,
+      };
     }
 
     throw UnsupportedError('Unknown payload type: ${payload.runtimeType}');
@@ -156,6 +319,43 @@ class SessionReplayEvent {
       );
     } else if (type == EventType.screenshot) {
       return ScreenshotPayload(imageData: binary!);
+    } else if (type == EventType.touchMove) {
+      return TouchMovePayload(
+        positions: (json['positions'] as List)
+            .cast<Map<String, dynamic>>()
+            .map(
+              (p) => TouchPosition(
+                x: (p['x'] as num).toDouble(),
+                y: (p['y'] as num).toDouble(),
+                timeOffset: p['timeOffset'] as int,
+              ),
+            )
+            .toList(growable: false),
+      );
+    } else if (type == EventType.wireframe) {
+      final viewport = (json['viewport'] as List).cast<num>();
+      final elements = (json['elements'] as List)
+          .cast<Map<String, dynamic>>()
+          .map((e) {
+            final bounds = (e['bounds'] as List).cast<num>();
+            return WireframeElement(
+              role: WireframeRole.values[e['role'] as int],
+              text: e['text'] as String?,
+              bounds: Rect.fromLTWH(
+                bounds[0].toDouble(),
+                bounds[1].toDouble(),
+                bounds[2].toDouble(),
+                bounds[3].toDouble(),
+              ),
+              maskDecision: MaskDecision.values[e['maskDecision'] as int],
+            );
+          })
+          .toList(growable: false);
+      return WireframePayload(
+        viewportWidth: viewport[0].toInt(),
+        viewportHeight: viewport[1].toInt(),
+        elements: elements,
+      );
     } else {
       // Interaction
       return InteractionPayload(

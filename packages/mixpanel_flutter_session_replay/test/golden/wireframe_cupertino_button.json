@@ -1,0 +1,19 @@
+{
+  "viewport": [
+    800,
+    600
+  ],
+  "elements": [
+    {
+      "role": "button",
+      "text": "Confirm",
+      "bounds": [
+        322,
+        276,
+        156,
+        49
+      ],
+      "maskDecision": "NONE"
+    }
+  ]
+}

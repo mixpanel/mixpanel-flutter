@@ -1,15 +1,21 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
 
+import 'package:clock/clock.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mixpanel_flutter_session_replay/src/models/configuration.dart';
-import 'package:mixpanel_flutter_session_replay/src/models/results.dart';
-import 'package:mixpanel_flutter_session_replay/src/models/masking_directive.dart';
-import 'package:mixpanel_flutter_session_replay/src/internal/screenshot_capturer.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/logger.dart';
+import 'package:mixpanel_flutter_session_replay/src/internal/masking/mask_detector.dart';
+import 'package:mixpanel_flutter_session_replay/src/internal/screenshot_capturer.dart';
+import 'package:mixpanel_flutter_session_replay/src/internal/wireframe/wireframe_emitter.dart';
+import 'package:mixpanel_flutter_session_replay/src/models/configuration.dart';
+import 'package:mixpanel_flutter_session_replay/src/models/masking_directive.dart';
+import 'package:mixpanel_flutter_session_replay/src/models/results.dart';
+import 'package:mixpanel_flutter_session_replay/src/models/session_event.dart';
+import 'package:mixpanel_flutter_session_replay/src/models/wireframes_options.dart';
 
 /// Whether the test font has been loaded in this test run.
 bool _fontLoaded = false;
@@ -79,6 +85,7 @@ Future<void> captureGolden(
         backgroundColor: Colors.white,
         body: Center(
           child: RepaintBoundary(
+            key: const ValueKey('golden-capture-boundary'),
             child: SizedBox(
               width: width,
               height: height,
@@ -99,6 +106,9 @@ Future<void> captureGolden(
   final RenderRepaintBoundary boundary = tester.allRenderObjects
       .whereType<RenderRepaintBoundary>()
       .first;
+  final boundaryElement = tester.element(
+    find.byKey(const ValueKey('golden-capture-boundary')),
+  );
 
   // Create screenshot capturer with the test's masking directive
   final capturer = ScreenshotCapturer(
@@ -114,7 +124,10 @@ Future<void> captureGolden(
 
   // Start capture in background
   final captureFuture = tester.runAsync(() async {
-    final result = await capturer.capture(boundary);
+    final result = await capturer.capture(
+      boundary,
+      boundaryElement: boundaryElement,
+    );
 
     // Verify capture succeeded
     if (result is! CaptureSuccess) {
@@ -167,4 +180,139 @@ Future<void> captureGolden(
       '✅ Exact match: $goldenFileName (${(pngBytes.length / 1024).toStringAsFixed(1)}KB)',
     );
   }
+}
+
+/// Captures a golden wireframe payload of a widget with masking + rules applied.
+///
+/// Runs the same production pipeline that ships wireframes to Mixpanel:
+/// `MaskDetector.detectMaskRegions(..., collectWireframes: true)` →
+/// `WireframeEmitter.emit(...)` → serialize. Diffs against a JSON golden
+/// so an accidental leak surfaces as a one-line change in review.
+///
+/// Example:
+/// ```dart
+/// testWidgets('Text auto-masked', (tester) async {
+///   await captureWireframeGolden(
+///     tester,
+///     const Text('secret'),
+///     'text_auto_masked.json',
+///     {AutoMaskedView.text},
+///   );
+/// });
+/// ```
+Future<void> captureWireframeGolden(
+  WidgetTester tester,
+  Widget widget,
+  String goldenFileName,
+  Set<AutoMaskedView> maskTypes, {
+  List<SensitiveRule> sensitiveRules = const [],
+  bool useAccessibilityLabelFallback = true,
+  double width = 300,
+  double height = 200,
+}) async {
+  await loadTestFont();
+
+  await tester.pumpWidget(
+    MaterialApp(
+      theme: ThemeData(fontFamily: 'Roboto'),
+      home: Scaffold(
+        backgroundColor: Colors.white,
+        body: Center(
+          child: RepaintBoundary(
+            child: SizedBox(
+              width: width,
+              height: height,
+              child: Align(alignment: Alignment.center, child: widget),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 100));
+  await tester.pump(const Duration(milliseconds: 100));
+
+  final boundary = tester.allRenderObjects
+      .whereType<RenderRepaintBoundary>()
+      .first;
+
+  final detector = MaskDetector(
+    directive: MaskingDirective(autoMaskTypes: maskTypes),
+    trackUnmaskBounds: false,
+    collectWireframes: true,
+    useAccessibilityLabelFallback: useAccessibilityLabelFallback,
+  );
+  final maskResult = detector.detectMaskRegions(boundary);
+  if (maskResult.shouldSkipCapture) {
+    throw StateError(
+      'Mask detector reported shouldSkipCapture — widget tree is unstable',
+    );
+  }
+
+  final emitter = WireframeEmitter(
+    sensitiveRules: sensitiveRules,
+    debugEmitter: null,
+    logger: MixpanelLogger(LogLevel.none),
+  );
+  final payload = emitter.emit(
+    rawElements: maskResult.rawWireframes!,
+    maskRegions: maskResult.maskRegions,
+    viewport: boundary.size,
+    timestamp: clock.now(),
+  );
+
+  // A null payload here means the emitter deduped — impossible on a fresh
+  // emitter, so it signals a regression in the dedup gate rather than a real
+  // outcome. Encode as literal `null` so the golden diff surfaces it. (An
+  // empty screen is NOT null: it emits a payload with an empty element list.)
+  final actual = payload == null
+      ? 'null'
+      : _wireframePayloadToPrettyJson(payload);
+  final goldenFile = File('test/golden/$goldenFileName');
+  if (!goldenFile.parent.existsSync()) {
+    goldenFile.parent.createSync(recursive: true);
+  }
+
+  if (!goldenFile.existsSync()) {
+    goldenFile.writeAsStringSync(actual);
+    // ignore: avoid_print
+    print('📸 Created wireframe golden: $goldenFileName');
+  } else {
+    final expected = goldenFile.readAsStringSync();
+    expect(
+      actual,
+      equals(expected),
+      reason:
+          'Wireframe payload must exactly match golden file.\n'
+          'Delete test/golden/$goldenFileName to regenerate.',
+    );
+    // ignore: avoid_print
+    print('✅ Wireframe match: $goldenFileName');
+  }
+}
+
+/// Pretty-print a [WireframePayload] with enum names (not indices) so
+/// golden diffs are human-readable in code review.
+String _wireframePayloadToPrettyJson(WireframePayload payload) {
+  final json = {
+    'viewport': [payload.viewportWidth, payload.viewportHeight],
+    'elements': payload.elements
+        .map(
+          (e) => {
+            'role': e.role.wireName,
+            'text': e.text,
+            'bounds': [
+              e.bounds.left.round(),
+              e.bounds.top.round(),
+              e.bounds.width.round(),
+              e.bounds.height.round(),
+            ],
+            'maskDecision': e.maskDecision.wireName,
+          },
+        )
+        .toList(),
+  };
+  return const JsonEncoder.withIndent('  ').convert(json);
 }

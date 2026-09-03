@@ -1,7 +1,10 @@
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 
+import '../../models/configuration.dart' show AutoMaskedView;
 import '../../models/masking_directive.dart';
+import '../../models/wireframe.dart';
+import '../../models/wireframes_options.dart' show MaskDecision;
 import '../../widgets/widgets.dart';
 
 /// Mask context propagated down the tree during traversal.
@@ -16,6 +19,8 @@ enum MaskContext {
   unmask,
 }
 
+enum _ComponentWireframeKind { none, button, textField }
+
 /// Result of mask detection
 class MaskDetectionResult {
   /// Mask regions to apply with source information
@@ -25,44 +30,85 @@ class MaskDetectionResult {
   /// would cause mask coordinate mismatch (route transitions, overscroll stretch).
   final bool shouldSkipCapture;
 
+  /// Raw wireframe elements collected during the walk. Non-null only when
+  /// `MaskDetector.collectWireframes` was true. Elements carry the initial
+  /// mask decision from the detector; geometric leak prevention and user
+  /// sensitive rules are applied downstream by `WireframeEmitter`.
+  final List<WireframeElement>? rawWireframes;
+
   MaskDetectionResult({
     required this.maskRegions,
     this.shouldSkipCapture = false,
+    this.rawWireframes,
   });
 }
 
 /// Detects widgets that should be masked in screenshots
 class MaskDetector {
+  static final Map<Type, String> _widgetTypeNames = <Type, String>{};
+  static final Map<Type, WidgetType?> _fallbackRenderTypes =
+      <Type, WidgetType?>{};
+  static final Map<Type, bool> _fallbackScrollableWidgetTypes = <Type, bool>{};
+  static final Map<Type, bool> _fallbackViewportRenderTypes = <Type, bool>{};
+  static final Map<Type, _ComponentWireframeKind> _componentWireframeKinds =
+      <Type, _ComponentWireframeKind>{};
+
   /// Configuration for auto-masking
   final MaskingDirective directive;
 
   /// Whether to track unmask region bounds for debug overlay
   final bool trackUnmaskBounds;
 
-  MaskDetector({required this.directive, this.trackUnmaskBounds = false});
+  /// Whether to collect wireframe elements during the walk. When true, the
+  /// result's `rawWireframes` field is populated with the detector's
+  /// initial mask decision per element.
+  final bool collectWireframes;
+
+  /// Whether an element with no text of its own may fall back to its
+  /// accessibility label. Mirrors
+  /// `WireframesOptions.useAccessibilityLabelFallback`; only consulted when
+  /// [collectWireframes] is true.
+  final bool useAccessibilityLabelFallback;
+
+  MaskDetector({
+    required this.directive,
+    this.trackUnmaskBounds = false,
+    this.collectWireframes = false,
+    this.useAccessibilityLabelFallback = false,
+  });
 
   /// Traverse widget tree and collect mask regions
   ///
   /// Returns MaskDetectionResult with regions and bounds snapshot, or throws on error
-  MaskDetectionResult detectMaskRegions(RenderRepaintBoundary boundary) {
+  MaskDetectionResult detectMaskRegions(
+    RenderRepaintBoundary boundary, {
+    Element? boundaryElement,
+  }) {
     final maskRegions = <MaskRegionInfo>[];
-    bool shouldSkipCapture = false;
+    final wireframes = collectWireframes ? <WireframeElement>[] : null;
+    // Dedup wireframe emission by RenderObject identity. Non-RenderObjectElements
+    // (Text, MixpanelMask, etc.) return the same descendant render object from
+    // element.renderObject, so without this a single Text emits 2-3 duplicates.
+    final wireframeVisited = collectWireframes
+        ? Set<RenderObject>.identity()
+        : null;
+    final traversalState = _MaskTraversalState();
 
     try {
-      // Find the element that owns this boundary
-      final boundaryElement = _findElementForRenderObject(boundary);
-      if (boundaryElement == null) {
-        return MaskDetectionResult(maskRegions: []);
+      final resolvedBoundaryElement =
+          boundaryElement ?? _findElementForRenderObject(boundary);
+      if (resolvedBoundaryElement == null) {
+        return MaskDetectionResult(maskRegions: [], rawWireframes: wireframes);
       }
 
-      // Check for conditions that would cause mask coordinate mismatch
-      shouldSkipCapture = _shouldSkipCapture(boundaryElement);
-
-      // Traverse descendants and track TickerMode state to filter background routes
+      // Collect masks, wireframes, and unsafe visual state in one traversal.
       _traverseElementTree(
-        boundaryElement,
+        resolvedBoundaryElement,
         boundary,
         maskRegions,
+        traversalState: traversalState,
+        wireframes: wireframes,
+        wireframeVisited: wireframeVisited,
         maskContext: MaskContext.none,
         tickerEnabled: true, // Start with enabled (active route)
         viewportBounds: null, // Will be detected and cached during traversal
@@ -74,7 +120,8 @@ class MaskDetector {
 
     return MaskDetectionResult(
       maskRegions: maskRegions,
-      shouldSkipCapture: shouldSkipCapture,
+      shouldSkipCapture: traversalState.shouldSkipCapture,
+      rawWireframes: wireframes,
     );
   }
 
@@ -101,12 +148,22 @@ class MaskDetector {
     Element element,
     RenderRepaintBoundary boundary,
     List<MaskRegionInfo> maskRegions, {
+    required _MaskTraversalState traversalState,
     required MaskContext maskContext,
     required bool tickerEnabled,
     Rect?
     viewportBounds, // Cached viewport bounds (detected once, reused for all children)
+    List<WireframeElement>? wireframes,
+    Set<RenderObject>? wireframeVisited,
+    String? enclosingImageLabel,
+    String?
+    declaredText, // Developer-declared wireframe text handed down from an enclosing marker to its DIRECT child (one level only)
   }) {
     final widget = element.widget;
+
+    if (_hasUnsafeVisualState(widget)) {
+      traversalState.shouldSkipCapture = true;
+    }
 
     // PERFORMANCE: Track TickerMode state as we traverse (no expensive ancestor walks)
     // Navigator wraps background routes in TickerMode(enabled: false)
@@ -127,23 +184,8 @@ class MaskDetector {
       final renderObject = element.renderObject;
       final widget = element.widget;
 
-      // Detect scrollable viewports by widget type (fast) or render object name (slower fallback)
-      // Covers: SingleChildScrollView, ListView, GridView, CustomScrollView, PageView, TabBarView, NestedScrollView, ReorderableListView, TableView
-      const scrollablePatterns = [
-        'ScrollView',
-        'ListView',
-        'GridView',
-        'PageView',
-        'TableView',
-      ];
-
-      final widgetTypeName = widget.runtimeType.toString();
       final isScrollable =
-          scrollablePatterns.any(
-            (pattern) => widgetTypeName.contains(pattern),
-          ) ||
-          (renderObject != null &&
-              renderObject.runtimeType.toString().contains('RenderViewport'));
+          _isScrollableWidget(widget) || _isViewportRenderObject(renderObject);
 
       if (isScrollable && renderObject is RenderBox && renderObject.hasSize) {
         try {
@@ -177,8 +219,25 @@ class MaskDetector {
       return; // Skip this widget and all children
     }
 
+    // Track the nearest enclosing image accessibility label so a descendant
+    // `RenderImage` can adopt it. The `Image` widget applies `semanticLabel`
+    // by wrapping its `RawImage` in `Semantics(image: true, label: ...)` — the
+    // label is NOT on `RenderImage` itself — so we thread it DOWN the walk
+    // (never walking up). Gating on `image == true` targets image semantics
+    // only, so a generic `Semantics(label:)` around other content doesn't leak
+    // onto images. Cleared by a nested image-Semantics with an empty label.
+    String? currentImageLabel = enclosingImageLabel;
+    if (wireframes != null &&
+        widget is Semantics &&
+        widget.properties.image == true) {
+      final label = widget.properties.label;
+      currentImageLabel = (label != null && label.isNotEmpty) ? label : null;
+    }
+
     // --- Masking decision ---
     MaskContext currentContext = maskContext;
+    Rect? boundsResolvedByMasking;
+    var boundsWereResolvedByMasking = false;
 
     // SECURITY: TextField is always masked regardless of context or directives
     if (element.renderObject is RenderEditable) {
@@ -221,16 +280,93 @@ class MaskDetector {
           // Auto-masking: check directive rules for text/image
           final renderObject = element.renderObject;
           if (renderObject != null) {
-            final maskRegionInfo = _shouldMaskRenderObject(
+            boundsWereResolvedByMasking =
+                renderObject is RenderEditable ||
+                renderObject is RenderParagraph ||
+                renderObject is RenderImage;
+            final resolution = _resolveMaskableRenderObject(
               renderObject,
               boundary,
               currentViewportBounds,
             );
-            if (maskRegionInfo != null) {
-              maskRegions.add(maskRegionInfo);
+            boundsResolvedByMasking = resolution.bounds;
+            final maskRegion = resolution.maskRegion;
+            if (maskRegion != null) {
+              maskRegions.add(maskRegion);
             }
           }
       }
+    }
+
+    // Developer-declared wireframe text rides on MixpanelMask/MixpanelUnmask
+    // via their `wireframeText`. It is handed to the marker's DIRECT child (one
+    // level only — unlike mask context, it does NOT cascade further down) so
+    // the declared element carries the child's real role + bounds.
+    //
+    // When a marker declares text we suppress its OWN wireframe emission: a
+    // marker is a `StatelessWidget` with no render object of its own, so
+    // `element.renderObject` resolves to the child's render object. Letting the
+    // marker collect would consume (and mark visited) that shared render object
+    // first, and the direct child — which knows its true role (e.g. button) —
+    // could never apply the declared text.
+    String? childDeclaredText;
+    var skipsOwnCollection = false;
+    if (wireframes != null) {
+      childDeclaredText = widget is MixpanelMask
+          ? widget.wireframeText
+          : widget is MixpanelUnmask
+          ? widget.wireframeText
+          : null;
+      final declaresChildText = childDeclaredText != null;
+
+      // A marker never collects a wireframe element for ITSELF — the same
+      // shared-render-object reasoning as above, generalized. Because
+      // `element.renderObject` resolves to a descendant's, a marker wrapping a
+      // `Text` directly resolves to that `RenderParagraph`; collecting it here
+      // would stamp it with the marker's own MaskContext and mark it visited, so
+      // a marker nested below could never re-decide it. That made
+      // `MixpanelMask(child: MixpanelUnmask(child: Text(...)))` emit `explicit`
+      // with the inner unmask never consulted — while the same tree with any
+      // intervening render object resolved to `none` + a geometric strip.
+      //
+      // Skipping lets the descendant that actually owns the render object collect
+      // it under the fully resolved context, so both tree shapes agree: the inner
+      // unmask IS honored, and the enclosing mask's container rect — which
+      // MaskPainter still paints over the whole subtree — strips the text
+      // geometrically. Traversal always reaches that descendant, so skipping the
+      // marker loses nothing.
+      //
+      // The exception is a marker carrying `declaredText`: it is an enclosing
+      // declaring marker's direct child, and the declared text is applied here.
+      final isMarker = widget is MixpanelMask || widget is MixpanelUnmask;
+      skipsOwnCollection =
+          declaresChildText || (isMarker && declaredText == null);
+    }
+
+    // Wireframe collection — piggyback on the same walk. Uses the same
+    // MaskContext as masking. The detector's initial mask decision is
+    // derived here; geometric leak prevention and user sensitive rules
+    // are applied later by WireframeEmitter. `declaredText` (from an enclosing
+    // declaring marker, i.e. this element is that marker's direct child) is
+    // applied to this element's role + bounds.
+    final maskingAlreadyRejectedBounds =
+        boundsWereResolvedByMasking && boundsResolvedByMasking == null;
+    if (wireframes != null &&
+        wireframeVisited != null &&
+        !skipsOwnCollection &&
+        !maskingAlreadyRejectedBounds) {
+      _collectWireframeElement(
+        element,
+        boundary,
+        wireframes,
+        maskContext: currentContext,
+        visited: wireframeVisited,
+        imageLabel: currentImageLabel,
+        declaredText: declaredText,
+        viewportBounds: currentViewportBounds,
+        resolvedBounds: boundsResolvedByMasking,
+        boundsWereResolved: boundsWereResolvedByMasking,
+      );
     }
 
     // ALWAYS continue traversal to children (traversal never stops early)
@@ -240,71 +376,52 @@ class MaskDetector {
         child,
         boundary,
         maskRegions,
+        traversalState: traversalState,
         maskContext: currentContext,
         tickerEnabled: currentTickerEnabled,
         viewportBounds: currentViewportBounds,
+        wireframes: wireframes,
+        wireframeVisited: wireframeVisited,
+        enclosingImageLabel: currentImageLabel,
+        // Only a declaring marker passes text down (to its direct child); every
+        // other node passes null so declared text never cascades past one level.
+        declaredText: childDeclaredText,
       );
     });
   }
 
-  /// Detect conditions where mask coordinates would not match the visual output.
-  ///
-  /// Returns true if capture should be skipped. Currently detects:
-  /// 1. Route transitions — both routes are onstage with TickerMode(enabled: true),
-  ///    causing overlapping masks from outgoing and incoming routes.
-  /// 2. Overscroll stretch — StretchEffect widget with non-zero stretchStrength
-  ///    applies a paint-only transform not reflected in getTransformTo().
-  bool _shouldSkipCapture(Element root) {
-    bool skip = false;
+  bool _hasUnsafeVisualState(Widget widget) {
+    final widgetType = widget.runtimeType;
+    final typeName = _widgetTypeNames.putIfAbsent(
+      widgetType,
+      widgetType.toString,
+    );
 
-    void visit(Element element) {
-      if (skip) return;
-
-      final widget = element.widget;
-
-      // 1. Route transition detection
-      if (widget.runtimeType.toString() == '_ModalScopeStatus') {
-        try {
-          final route = (widget as dynamic).route;
-          if (route is ModalRoute) {
-            final animStatus = route.animation?.status;
-            final secondaryStatus = route.secondaryAnimation?.status;
-
-            // Route is being pushed behind, popped, or pushed in
-            if (animStatus == AnimationStatus.forward ||
-                animStatus == AnimationStatus.reverse ||
-                secondaryStatus == AnimationStatus.forward ||
-                secondaryStatus == AnimationStatus.reverse) {
-              skip = true;
-              return;
-            }
-          }
-        } catch (_) {
-          // If dynamic access fails, continue scanning
+    if (typeName == '_ModalScopeStatus') {
+      try {
+        final route = (widget as dynamic).route;
+        if (route is ModalRoute) {
+          final animationStatus = route.animation?.status;
+          final secondaryStatus = route.secondaryAnimation?.status;
+          return animationStatus == AnimationStatus.forward ||
+              animationStatus == AnimationStatus.reverse ||
+              secondaryStatus == AnimationStatus.forward ||
+              secondaryStatus == AnimationStatus.reverse;
         }
+      } catch (_) {
+        return false;
       }
-
-      // 2. Overscroll stretch detection
-      // StretchEffect is used by StretchingOverscrollIndicator but is not
-      // publicly exported. When stretchStrength != 0, a paint-only transform
-      // is active that getTransformTo() doesn't reflect, causing mask
-      // coordinate mismatch.
-      if (widget.runtimeType.toString() == 'StretchEffect') {
-        try {
-          if ((widget as dynamic).stretchStrength != 0.0) {
-            skip = true;
-            return;
-          }
-        } catch (_) {
-          // If dynamic access fails, continue scanning
-        }
-      }
-
-      element.visitChildren(visit);
     }
 
-    root.visitChildren(visit);
-    return skip;
+    if (typeName == 'StretchEffect') {
+      try {
+        return (widget as dynamic).stretchStrength != 0.0;
+      } catch (_) {
+        return false;
+      }
+    }
+
+    return false;
   }
 
   /// Add an element's bounds to mask rects
@@ -348,26 +465,32 @@ class MaskDetector {
 
   /// Check if a RenderObject should be masked
   ///
-  /// Returns the MaskRegionInfo to mask, or null if not masked
-  MaskRegionInfo? _shouldMaskRenderObject(
+  /// Returns both the visible bounds (when the node is a visible maskable
+  /// render type) and the optional mask region. Keeping these separate lets
+  /// wireframe collection reuse the transform even when the directive leaves a
+  /// visible node unmasked; a null bounds value remains reserved for nodes that
+  /// are not visible/positionable.
+  ({MaskRegionInfo? maskRegion, Rect? bounds}) _resolveMaskableRenderObject(
     RenderObject node,
     RenderRepaintBoundary boundary,
     Rect?
     viewportBounds, // Cached viewport bounds from traversal (avoids tree walk)
   ) {
-    if (node is! RenderBox) return null;
+    if (node is! RenderBox) return (maskRegion: null, bounds: null);
 
     // After is! check, node is promoted to RenderBox
-    if (!node.hasSize) return null;
+    if (!node.hasSize) return (maskRegion: null, bounds: null);
 
     // CRITICAL: Filter out widgets that aren't actually visible
     // This prevents masking widgets on inactive Navigator routes
-    if (!node.attached) return null; // Not attached to render tree
+    if (!node.attached) {
+      return (maskRegion: null, bounds: null); // Not attached to render tree
+    }
 
     // Skip if paint bounds are empty (widget doesn't contribute to final render)
     // This filters out widgets that exist in the tree but are visually hidden
     // behind other widgets (z-order issue)
-    if (node.paintBounds.isEmpty) return null;
+    if (node.paintBounds.isEmpty) return (maskRegion: null, bounds: null);
 
     // Detect widget type
     WidgetType? widgetType;
@@ -375,23 +498,20 @@ class MaskDetector {
     // PERFORMANCE: Check fast type checks first before expensive string operations
     // Check for text (any type of text rendering)
     // - RenderEditable: TextField, TextFormField (editable text)
-    if (node is RenderEditable) {
+    if (node is RenderEditable || node is RenderParagraph) {
       widgetType = WidgetType.text;
+    } else if (node is RenderImage) {
+      widgetType = WidgetType.image;
     } else {
-      // Only call toString() if type check failed (expensive operation)
-      final typeName = node.runtimeType.toString();
-
-      // - RenderParagraph: Text, RichText (non-editable text)
-      if (typeName.contains('RenderParagraph')) {
-        widgetType = WidgetType.text;
-      }
-      // Check for images (RenderImage)
-      else if (typeName.contains('RenderImage')) {
-        widgetType = WidgetType.image;
-      }
+      widgetType = _fallbackRenderTypes.putIfAbsent(node.runtimeType, () {
+        final typeName = node.runtimeType.toString();
+        if (typeName.contains('RenderParagraph')) return WidgetType.text;
+        if (typeName.contains('RenderImage')) return WidgetType.image;
+        return null;
+      });
     }
 
-    if (widgetType == null) return null;
+    if (widgetType == null) return (maskRegion: null, bounds: null);
 
     // Get bounds relative to the boundary's RENDERED position (viewport)
     // Use matrix transforms to correctly handle rotation, scaling, skewing, etc.
@@ -407,7 +527,7 @@ class MaskDetector {
       bounds = MatrixUtils.transformRect(transform, node.paintBounds);
     } catch (_) {
       // Can't get transform to boundary, skip
-      return null;
+      return (maskRegion: null, bounds: null);
     }
 
     // Define boundary bounds (the visible area we're capturing)
@@ -421,7 +541,7 @@ class MaskDetector {
     // CRITICAL: Filter out widgets that are completely outside the visible boundary
     // This includes widgets on inactive Navigator routes, which are positioned offscreen.
     if (!boundaryBounds.overlaps(bounds)) {
-      return null;
+      return (maskRegion: null, bounds: null);
     }
 
     // Check if widget is inside a scrollable viewport and if so, verify it's within viewport bounds
@@ -430,33 +550,676 @@ class MaskDetector {
     if (viewportBounds != null) {
       // Widget is inside a scrollable - check if it's within the viewport
       if (!viewportBounds.overlaps(bounds)) {
-        return null; // Scrolled completely out of view
+        return (
+          maskRegion: null,
+          bounds: null,
+        ); // Scrolled completely out of view
       }
+    }
+
+    var clippedBounds = bounds.intersect(boundaryBounds);
+    if (viewportBounds != null) {
+      clippedBounds = clippedBounds.intersect(viewportBounds);
+    }
+    if (clippedBounds.isEmpty ||
+        clippedBounds.width <= 0 ||
+        clippedBounds.height <= 0) {
+      return (maskRegion: null, bounds: null);
     }
 
     // Check if this widget should be masked based on directive
     if (directive.shouldMask(bounds, widgetType)) {
-      // Clip mask bounds to boundary - only mask the portion that's actually visible
-      var clippedBounds = bounds.intersect(boundaryBounds);
-
-      // Also clip to viewport bounds if inside a scrollable (only mask visible portion)
-      if (viewportBounds != null) {
-        clippedBounds = clippedBounds.intersect(viewportBounds);
-      }
-
-      // CRITICAL: Filter out masks that don't have any actual visible area
-      // This handles edge cases like content scrolled completely out of view
-      if (clippedBounds.isEmpty ||
-          clippedBounds.width <= 0 ||
-          clippedBounds.height <= 0) {
-        return null;
-      }
-
-      return MaskRegionInfo(clippedBounds, MaskSource.auto);
+      return (
+        maskRegion: MaskRegionInfo(clippedBounds, MaskSource.auto),
+        bounds: clippedBounds,
+      );
     }
 
-    return null;
+    return (maskRegion: null, bounds: clippedBounds);
   }
+
+  bool _isScrollableWidget(Widget widget) {
+    if (widget is ScrollView ||
+        widget is SingleChildScrollView ||
+        widget is PageView ||
+        widget is TwoDimensionalScrollView ||
+        widget is NestedScrollView) {
+      return true;
+    }
+
+    return _fallbackScrollableWidgetTypes.putIfAbsent(widget.runtimeType, () {
+      final typeName = widget.runtimeType.toString();
+      return typeName.contains('ScrollView') ||
+          typeName.contains('ListView') ||
+          typeName.contains('GridView') ||
+          typeName.contains('PageView') ||
+          typeName.contains('TableView');
+    });
+  }
+
+  bool _isViewportRenderObject(RenderObject? renderObject) {
+    if (renderObject == null) return false;
+    if (renderObject is RenderViewport ||
+        renderObject is RenderShrinkWrappingViewport) {
+      return true;
+    }
+    return _fallbackViewportRenderTypes.putIfAbsent(
+      renderObject.runtimeType,
+      () => renderObject.runtimeType.toString().contains('RenderViewport'),
+    );
+  }
+
+  /// Widget type name substrings identifying button-like widgets. Detection
+  /// is intentionally string-based to match the existing idiom in this file
+  /// (see the RenderParagraph / RenderImage / RenderViewport checks) and to
+  /// keep buttons opt-in for common Material/Cupertino types without pulling
+  /// in a semantics tree walk.
+  static const List<String> _buttonWidgetPatterns = [
+    'ElevatedButton',
+    'TextButton',
+    'OutlinedButton',
+    'FilledButton',
+    'IconButton',
+    'FloatingActionButton',
+    'MaterialButton',
+    'CupertinoButton',
+    'RawMaterialButton',
+  ];
+
+  /// Collect at most one wireframe element for [element], with initial
+  /// [MaskDecision] derived from [maskContext] plus widget type.
+  ///
+  /// Elements that don't map to a wireframe role (containers, layout
+  /// widgets, etc.) contribute nothing here — but traversal continues into
+  /// their children so descendants can still emit.
+  ///
+  /// [viewportBounds] is the enclosing scrollable's rect (null outside a
+  /// scrollable). Elements scrolled fully out of it are not emitted at all —
+  /// see [_boundaryRelativeBounds].
+  void _collectWireframeElement(
+    Element element,
+    RenderRepaintBoundary boundary,
+    List<WireframeElement> out, {
+    required MaskContext maskContext,
+    required Set<RenderObject> visited,
+    String? imageLabel,
+    String? declaredText,
+    Rect? viewportBounds,
+    Rect? resolvedBounds,
+    required bool boundsWereResolved,
+  }) {
+    final ownsRenderObject = element is RenderObjectElement;
+    var isButton = false;
+    var isTextField = false;
+
+    // Most nodes in a Flutter element tree are layout/paint render objects that
+    // can never produce a wireframe element. Reject those before touching the
+    // visited set or doing any ComponentElement descendant lookup. This branch
+    // is especially important for long SingleChildScrollViews, whose offscreen
+    // children remain mounted and are all visited by the masking traversal.
+    RenderObject? renderObject;
+    if (ownsRenderObject) {
+      renderObject = element.renderObject;
+      if (declaredText == null &&
+          renderObject is! RenderEditable &&
+          renderObject is! RenderParagraph &&
+          renderObject is! RenderImage) {
+        return;
+      }
+    } else {
+      final kind = _componentWireframeKind(element.widget);
+      isButton = kind == _ComponentWireframeKind.button;
+      isTextField = kind == _ComponentWireframeKind.textField;
+    }
+
+    // ComponentElement.renderObject searches downward for the first render
+    // object. Ordinary wrappers cannot own a wireframe role, and resolving the
+    // same descendant through every wrapper turns this walk superlinear. Only
+    // widgets whose public type carries meaning (buttons/fields) and elements
+    // receiving declared text need that fallback lookup.
+    if (declaredText == null &&
+        !isButton &&
+        !isTextField &&
+        !ownsRenderObject) {
+      return;
+    }
+
+    renderObject ??= element.renderObject;
+    if (renderObject == null || visited.contains(renderObject)) return;
+
+    // Developer-declared text (from an enclosing MixpanelMask/MixpanelUnmask
+    // `wireframeText`) is applied to this element — the marker's direct child —
+    // with the child's real role + bounds. Declared text is authored, not
+    // scraped: it is emitted with `MaskDecision.declared`, so downstream it
+    // bypasses the geometric strip (surviving even when the marker masks the
+    // pixels) but still runs through user SensitiveRules.
+    //
+    // Text-entry fields are included: an authored label describes the field
+    // ("Card number") without ever revealing the typed value, because declared
+    // text REPLACES scraped text rather than adding to it. The field's pixels
+    // stay masked either way.
+    if (declaredText != null) {
+      final bounds = boundsWereResolved
+          ? resolvedBounds
+          : _boundaryRelativeBounds(
+              renderObject,
+              boundary,
+              viewportBounds: viewportBounds,
+            );
+      if (bounds == null) return;
+      final WireframeRole role;
+      if (isButton) {
+        role = WireframeRole.button;
+        // Consume descendant paragraphs / nested buttons so the button's own
+        // label doesn't re-emit as standalone elements — same as the normal
+        // button path, but the declared text replaces the scraped label.
+        // Result discarded: declared text is authored, so it replaces whatever the
+        // descendants say and their masking has no bearing on it. The call still
+        // runs to consume them so they don't re-emit as standalone elements.
+        _collectDescendantParagraphText(
+          element,
+          visited,
+          maskContext: maskContext,
+        );
+      } else if (renderObject is RenderEditable || isTextField) {
+        role = WireframeRole.input;
+        // A `TextField` builds its RenderEditable well below the widget the
+        // developer wrapped. Consume it so the field emits once, as the input
+        // it is, rather than a declared shell plus a textless input shell.
+        _markDescendantEditablesVisited(element, visited);
+      } else {
+        role = renderObject is RenderImage
+            ? WireframeRole.image
+            // RenderParagraph, custom-drawn content (CustomPaint/Canvas), or any
+            // other opaque render object the developer explicitly labeled.
+            : WireframeRole.text;
+      }
+      visited.add(renderObject);
+      out.add(
+        WireframeElement(
+          role: role,
+          text: declaredText,
+          bounds: bounds,
+          maskDecision: MaskDecision.declared,
+        ),
+      );
+      return;
+    }
+
+    // Input fields — always masked, cannot be overridden.
+    if (renderObject is RenderEditable) {
+      final bounds = boundsWereResolved
+          ? resolvedBounds
+          : _boundaryRelativeBounds(
+              renderObject,
+              boundary,
+              viewportBounds: viewportBounds,
+            );
+      if (bounds == null) return;
+      visited.add(renderObject);
+      out.add(
+        WireframeElement(
+          role: WireframeRole.input,
+          text: null,
+          bounds: bounds,
+          maskDecision: MaskDecision.textEntry,
+        ),
+      );
+      return;
+    }
+
+    // Buttons — role identified by widget type name. Descendant paragraphs
+    // are absorbed into the button label and marked visited so they don't
+    // re-emit as standalone text elements. An icon-only button carries no
+    // visible text, so when unmasked we fall back to an accessibility label
+    // (tooltip / semanticLabel). The descendant walk always runs — even
+    // when masked — so its paragraphs are consumed and never re-emit as
+    // separate shells.
+    if (isButton) {
+      final bounds = boundsWereResolved
+          ? resolvedBounds
+          : _boundaryRelativeBounds(
+              renderObject,
+              boundary,
+              viewportBounds: viewportBounds,
+            );
+      if (bounds == null) return;
+      final decision = _wireframeDecision(
+        role: WireframeRole.button,
+        maskContext: maskContext,
+      );
+      final aggregated = _collectDescendantParagraphText(
+        element,
+        visited,
+        maskContext: maskContext,
+      );
+      // A masked contributor demotes the whole label. `geometric` rather than a new
+      // decision because that is what Layer 2 already reports for the same shape
+      // when the contributor happens to be on screen — the clipped and visible
+      // cases now agree instead of diverging. The accessibility fallback is skipped
+      // too: a label describing masked content is the same leak by another route.
+      // Only ever *adds* a demotion. If the button is already masked in its own
+      // right — inside a MixpanelMask, or auto-masked — that decision is the more
+      // specific one and stands; overwriting it with `geometric` would report a
+      // developer's explicit mask as an incidental overlap.
+      final effectiveDecision =
+          decision == MaskDecision.none && aggregated.hasMaskedContributor
+          ? MaskDecision.geometric
+          : decision;
+      final label = effectiveDecision == MaskDecision.none
+          ? (aggregated.text ??
+                (useAccessibilityLabelFallback
+                    ? _collectDescendantSemanticLabel(
+                        element,
+                        maskContext: maskContext,
+                      )
+                    : null))
+          : null;
+      visited.add(renderObject);
+      // Composite buttons build on inner buttons (e.g. FloatingActionButton
+      // wraps a RawMaterialButton). Mark those nested button render objects
+      // visited so the ongoing top-down walk doesn't emit them as duplicate
+      // shells now that textless shells are kept.
+      out.add(
+        WireframeElement(
+          role: WireframeRole.button,
+          text: label,
+          bounds: bounds,
+          maskDecision: effectiveDecision,
+        ),
+      );
+      return;
+    }
+
+    // Text — RenderParagraph.
+    if (renderObject is RenderParagraph) {
+      final bounds = boundsWereResolved
+          ? resolvedBounds
+          : _boundaryRelativeBounds(
+              renderObject,
+              boundary,
+              viewportBounds: viewportBounds,
+            );
+      if (bounds == null) return;
+      final text = _extractParagraphText(renderObject);
+      final decision = _wireframeDecision(
+        role: WireframeRole.text,
+        maskContext: maskContext,
+      );
+      visited.add(renderObject);
+      out.add(
+        WireframeElement(
+          role: WireframeRole.text,
+          text: decision == MaskDecision.none ? text : null,
+          bounds: bounds,
+          maskDecision: decision,
+        ),
+      );
+      return;
+    }
+
+    // Image — RenderImage. The accessibility label comes from the enclosing
+    // `Semantics(image: true, label: ...)` threaded down as [imageLabel] (the
+    // `Image` widget puts the label there, not on `RenderImage`).
+    if (renderObject is RenderImage) {
+      final bounds = boundsWereResolved
+          ? resolvedBounds
+          : _boundaryRelativeBounds(
+              renderObject,
+              boundary,
+              viewportBounds: viewportBounds,
+            );
+      if (bounds == null) return;
+      final label = useAccessibilityLabelFallback ? imageLabel : null;
+      final decision = _wireframeDecision(
+        role: WireframeRole.image,
+        maskContext: maskContext,
+      );
+      visited.add(renderObject);
+      out.add(
+        WireframeElement(
+          role: WireframeRole.image,
+          text: decision == MaskDecision.none ? label : null,
+          bounds: bounds,
+          maskDecision: decision,
+        ),
+      );
+      return;
+    }
+  }
+
+  /// Compute bounds relative to the capture boundary. Returns null if the
+  /// element has no size / not attached / doesn't overlap the boundary, or
+  /// if the effective bounds are sub-pixel (nothing meaningful to emit).
+  ///
+  /// When [viewportBounds] is non-null the node sits inside a scrollable, so
+  /// bounds are additionally clipped to that viewport — mirroring what
+  /// [_resolveMaskableRenderObject] does for mask rects. A node scrolled fully out
+  /// of view clips to nothing and yields null, so the caller emits no element:
+  /// the screenshot paints nothing there, and text the screenshot never showed
+  /// must not reach the wireframe. A partially visible node keeps its text and
+  /// reports only the visible slice as its bounds.
+  Rect? _boundaryRelativeBounds(
+    RenderObject node,
+    RenderRepaintBoundary boundary, {
+    Rect? viewportBounds,
+  }) {
+    if (node is! RenderBox) return null;
+    if (!node.hasSize || !node.attached) return null;
+    try {
+      final transform = node.getTransformTo(boundary);
+      final bounds = MatrixUtils.transformRect(transform, node.paintBounds);
+      final boundaryBounds = Rect.fromLTWH(
+        0,
+        0,
+        boundary.size.width,
+        boundary.size.height,
+      );
+      if (!boundaryBounds.overlaps(bounds)) return null;
+      var clipped = bounds.intersect(boundaryBounds);
+      if (viewportBounds != null) {
+        if (!viewportBounds.overlaps(clipped)) return null;
+        clipped = clipped.intersect(viewportBounds);
+      }
+      if (clipped.width < 1 || clipped.height < 1) return null;
+      return clipped;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Initial mask decision for a wireframe element. Buttons/text/images
+  /// inside a `MixpanelMask` subtree are `explicit`. Text/image widgets are
+  /// further evaluated against `autoMaskTypes`. `MaskContext.unmask`
+  /// cascades safety down — descendants use `none`.
+  MaskDecision _wireframeDecision({
+    required WireframeRole role,
+    required MaskContext maskContext,
+  }) {
+    if (maskContext == MaskContext.mask) return MaskDecision.explicit;
+    if (maskContext == MaskContext.unmask) return MaskDecision.none;
+    // MaskContext.none — apply auto-mask rules.
+    switch (role) {
+      case WireframeRole.text:
+        return directive.autoMaskTypes.contains(AutoMaskedView.text)
+            ? MaskDecision.auto
+            : MaskDecision.none;
+      case WireframeRole.image:
+        return directive.autoMaskTypes.contains(AutoMaskedView.image)
+            ? MaskDecision.auto
+            : MaskDecision.none;
+      case WireframeRole.button:
+      case WireframeRole.input:
+        return MaskDecision.none;
+    }
+  }
+
+  bool _isButtonWidget(Widget widget) {
+    return _componentWireframeKind(widget) == _ComponentWireframeKind.button;
+  }
+
+  _ComponentWireframeKind _componentWireframeKind(Widget widget) {
+    return _componentWireframeKinds.putIfAbsent(widget.runtimeType, () {
+      final name = widget.runtimeType.toString();
+      for (final pattern in _buttonWidgetPatterns) {
+        if (name.contains(pattern)) return _ComponentWireframeKind.button;
+      }
+      if (name.contains('TextField') || name.contains('EditableText')) {
+        return _ComponentWireframeKind.textField;
+      }
+      return _ComponentWireframeKind.none;
+    });
+  }
+
+  /// Mark every descendant [RenderEditable] of [element] visited.
+  ///
+  /// Only used by the declared-text path, and only on a node already known to
+  /// be a text field. A `TextField` builds its `RenderEditable` several levels
+  /// below the widget the developer wrapped, so without this the field emits
+  /// twice: the authored label on the outer node, then a textless input shell
+  /// for the editable inside it.
+  ///
+  /// Descendants only — never walks up.
+  void _markDescendantEditablesVisited(
+    Element element,
+    Set<RenderObject> visited,
+  ) {
+    void visit(Element child) {
+      final renderObject = child.renderObject;
+      if (renderObject is RenderEditable) visited.add(renderObject);
+      child.debugVisitOnstageChildren(visit);
+    }
+
+    element.debugVisitOnstageChildren(visit);
+  }
+
+  /// Walk descendants of [buttonElement] and join text from any
+  /// `RenderParagraph` found. Skips `RenderEditable` so a masked text field
+  /// nested in a button never leaks into the button's label. Marks each
+  /// consumed paragraph in [visited] so it doesn't re-emit as a standalone
+  /// text element.
+  ///
+  /// Bare icon glyphs (an [Icon] renders as a `RenderParagraph` holding a
+  /// single private-use codepoint) are still consumed and marked visited —
+  /// so they never re-emit — but are NOT added to the label, since a glyph
+  /// is not human-readable text. Such buttons fall back to
+  /// [_collectDescendantSemanticLabel].
+  /// Folded descendant text, plus whether any contributor to it was masked.
+  ///
+  /// The second field is the whole point: a label synthesized from descendants is
+  /// only as safe as the least safe descendant that fed it.
+  _AggregatedLabel _collectDescendantParagraphText(
+    Element buttonElement,
+    Set<RenderObject> visited, {
+    required MaskContext maskContext,
+  }) {
+    final buffer = <String>[];
+    var hasMaskedContributor = false;
+
+    // Auto-masking is evaluated per contributor rather than once up front, because
+    // an unmask below this point overrides it (and an explicit mask below does not).
+    final autoMasksText = directive.autoMaskTypes.contains(AutoMaskedView.text);
+
+    void visit(Element child, MaskContext context) {
+      // Markers below the button still apply to what they wrap. Resolved here so a
+      // MixpanelMask around one child of a composite button is honored even though
+      // that child never emits an element of its own.
+      var childContext = context;
+      final widget = child.widget;
+      if (widget is MixpanelMask) {
+        childContext = MaskContext.mask;
+      } else if (widget is MixpanelUnmask) {
+        childContext = MaskContext.unmask;
+      }
+
+      final renderObject = child.renderObject;
+      if (_isButtonWidget(widget) && renderObject != null) {
+        visited.add(renderObject);
+      }
+      // `child is RenderObjectElement` is load-bearing, not a micro-optimization.
+      //
+      // `Element.renderObject` on a component element resolves *downward* to the
+      // first descendant render object, so every wrapper above a Text reports that
+      // Text's RenderParagraph as its own. Collecting at the first element that
+      // reports it means collecting at the outermost wrapper — before any marker
+      // below it has been seen. That is how a masked subtitle leaked: `ListTile`
+      // builds `AnimatedDefaultTextStyle(child: MixpanelMask(child: Text(...)))`,
+      // the wrapper claimed the paragraph with pre-mask context and marked it
+      // visited, and the MixpanelMask below then had nothing left to flag.
+      //
+      // Deferring to the render object's real owner means every marker on the path
+      // has already been folded into `childContext` by the time it is judged.
+      if (renderObject != null &&
+          child is RenderObjectElement &&
+          renderObject is! RenderEditable &&
+          !visited.contains(renderObject)) {
+        final typeName = renderObject.runtimeType.toString();
+        if (typeName.contains('RenderParagraph')) {
+          visited.add(renderObject);
+          // Deliberately independent of this paragraph's *bounds*. Layer 2 can only
+          // strip what it can intersect, and a contributor scrolled out of the
+          // viewport has no rect to intersect — which is exactly how masked text
+          // used to reach the wire inside a synthesized label. Provenance is known
+          // here, so it is decided here rather than left to geometry.
+          final masked =
+              childContext == MaskContext.mask ||
+              (childContext == MaskContext.none && autoMasksText);
+          if (masked) {
+            hasMaskedContributor = true;
+          } else {
+            final text = _extractParagraphText(renderObject);
+            if (text.isNotEmpty && wireframeTextIsHumanReadable(text)) {
+              buffer.add(text);
+            }
+          }
+        }
+      }
+      child.debugVisitOnstageChildren((c) => visit(c, childContext));
+    }
+
+    buttonElement.debugVisitOnstageChildren((c) => visit(c, maskContext));
+    return _AggregatedLabel(
+      buffer.isEmpty ? null : buffer.join(' '),
+      hasMaskedContributor,
+    );
+  }
+
+  /// Best-effort human-readable label for an icon-only [buttonElement],
+  /// pulled from accessibility metadata in its subtree. Priority order
+  /// (first non-empty match in traversal order wins): a `Tooltip` message,
+  /// an [Icon]/[ImageIcon] `semanticLabel`, then a `Semantics(label:)`.
+  /// Returns null when none is set.
+  ///
+  /// Only descendants are inspected — never walks up — consistent with the
+  /// traversal performance rules. Callers must gate this on an unmasked
+  /// decision so a masked button stays textless. `Tooltip` is matched by
+  /// runtime-type name (it lives in the Material library, which this file
+  /// intentionally does not import) with a dynamic property read.
+  ///
+  /// An explicit mask anywhere in the subtree refuses the label outright, which
+  /// is the same rule [_collectDescendantParagraphText] applies to the text it
+  /// folds together: a label synthesized from descendants is only as safe as the
+  /// least safe descendant that fed it. Two shapes both have to be caught, and
+  /// only the first is about the label's own position:
+  ///
+  ///   - the mask wraps the label — `MixpanelMask(child: Tooltip(...))`;
+  ///   - the label wraps the mask — `Semantics(label: ..., child:
+  ///     MixpanelMask(...))`, where a first-match-wins walk would take the label
+  ///     and return before ever reaching the marker below it.
+  ///
+  /// The second is why the walk no longer stops at the first match. A wrapper
+  /// label describes what is beneath it, and what is beneath it is masked.
+  ///
+  /// Layer 2 cannot be left to catch either: the geometric pass strips text only
+  /// when a mask rect intersects the *emitted* bounds, so a masked descendant
+  /// that is clipped, scrolled out of the viewport, or simply painted clear of
+  /// its button has no rect to intersect. Provenance is known here, so it is
+  /// decided here.
+  ///
+  /// A developer who does want text on a masked control has the API built for
+  /// saying so — `MixpanelMask(wireframeText: ...)`, which is authored rather
+  /// than scraped and documented as being sent even when masked. Refusing a
+  /// scraped accessibility label does not remove that capability; it routes the
+  /// intent through the explicit call.
+  String? _collectDescendantSemanticLabel(
+    Element buttonElement, {
+    required MaskContext maskContext,
+  }) {
+    // Evaluated per contributor rather than once up front, matching
+    // [_collectDescendantParagraphText]: an unmask below this point overrides
+    // auto-masking, and an explicit mask below does not get overridden.
+    final autoMasksText = directive.autoMaskTypes.contains(AutoMaskedView.text);
+    final autoMasksImage = directive.autoMaskTypes.contains(
+      AutoMaskedView.image,
+    );
+
+    String? found;
+    // Seeded from the caller's context so a masked button refuses a label even if
+    // its own subtree carries no marker of its own.
+    var hasMaskedDescendant = maskContext == MaskContext.mask;
+
+    void visit(Element child, MaskContext context) {
+      var childContext = context;
+      final widget = child.widget;
+      if (widget is MixpanelMask) {
+        childContext = MaskContext.mask;
+      } else if (widget is MixpanelUnmask) {
+        childContext = MaskContext.unmask;
+      }
+      if (childContext == MaskContext.mask) {
+        hasMaskedDescendant = true;
+      }
+
+      // An `Icon` renders as a `RenderParagraph` and an `ImageIcon` as a
+      // `RenderImage`, so each answers to the auto-mask type its own pixels
+      // would be masked under. `Tooltip` and `Semantics` paint nothing of their
+      // own, so only an explicit marker can mask them.
+      bool maskedFor(bool autoMasks) =>
+          childContext == MaskContext.mask ||
+          (childContext == MaskContext.none && autoMasks);
+
+      // A wrapper label describes the visual content beneath it. Carry the
+      // automatic mask status of the render object's real owner back to that
+      // label, just as explicit mask context is carried above. Restrict this to
+      // RenderObjectElement so a component wrapper cannot claim a descendant's
+      // render object before an intervening MixpanelUnmask is visited.
+      final renderObject = child.renderObject;
+      if (child is RenderObjectElement) {
+        if (renderObject is RenderParagraph && maskedFor(autoMasksText)) {
+          hasMaskedDescendant = true;
+        } else if (renderObject is RenderImage && maskedFor(autoMasksImage)) {
+          hasMaskedDescendant = true;
+        }
+      }
+
+      if (found == null) {
+        if (widget is Icon) {
+          final label = widget.semanticLabel;
+          if (label != null && label.isNotEmpty && !maskedFor(autoMasksText)) {
+            found = label;
+          }
+        } else if (widget is ImageIcon) {
+          final label = widget.semanticLabel;
+          if (label != null && label.isNotEmpty && !maskedFor(autoMasksImage)) {
+            found = label;
+          }
+        } else if (widget is Semantics) {
+          final label = widget.properties.label;
+          if (label != null && label.isNotEmpty && !maskedFor(false)) {
+            found = label;
+          }
+        } else if (widget.runtimeType.toString() == 'Tooltip') {
+          try {
+            final message = (widget as dynamic).message as String?;
+            if (message != null && message.isNotEmpty && !maskedFor(false)) {
+              found = message;
+            }
+          } catch (_) {
+            // Not the Material Tooltip we expected — ignore and keep walking.
+          }
+        }
+      }
+      child.debugVisitOnstageChildren((c) => visit(c, childContext));
+    }
+
+    buttonElement.debugVisitOnstageChildren((c) => visit(c, maskContext));
+    // First match wins for *which* label is chosen; any mask in the subtree
+    // refuses all of them.
+    return hasMaskedDescendant ? null : found;
+  }
+
+  String _extractParagraphText(RenderObject node) {
+    try {
+      final text = (node as dynamic).text as InlineSpan?;
+      return text?.toPlainText() ?? '';
+    } catch (_) {
+      return '';
+    }
+  }
+}
+
+class _MaskTraversalState {
+  bool shouldSkipCapture = false;
 }
 
 /// Exception thrown when mask detection fails
@@ -467,4 +1230,21 @@ class MaskDetectionException implements Exception {
 
   @override
   String toString() => 'MaskDetectionException: $message';
+}
+
+/// Text folded up from a composite widget's descendants, with the masking verdict
+/// for the set that produced it.
+///
+/// Kept as a pair rather than just a nullable string so the caller cannot forget
+/// to ask: a synthesized label is only as safe as its least safe contributor, and
+/// geometry alone cannot answer that when a contributor has no rect.
+class _AggregatedLabel {
+  const _AggregatedLabel(this.text, this.hasMaskedContributor);
+
+  /// The joined contributor text, or null when nothing contributed.
+  final String? text;
+
+  /// True when at least one contributor was masked, whether by an enclosing
+  /// [MixpanelMask] or by auto-masking. The label must then be dropped.
+  final bool hasMaskedContributor;
 }

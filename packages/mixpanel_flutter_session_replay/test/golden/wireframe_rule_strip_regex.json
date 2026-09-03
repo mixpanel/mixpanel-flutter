@@ -1,0 +1,19 @@
+{
+  "viewport": [
+    800,
+    600
+  ],
+  "elements": [
+    {
+      "role": "text",
+      "text": null,
+      "bounds": [
+        356,
+        290,
+        88,
+        20
+      ],
+      "maskDecision": "RULE_STRIP"
+    }
+  ]
+}

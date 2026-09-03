@@ -15,6 +15,9 @@ class ConfigModel extends ChangeNotifier {
   bool _showDebugMaskOverlay = false;
   bool _autoMaskText = true;
   bool _autoMaskImage = true;
+  bool _enableWireframes = false;
+  bool _enableWireframeDebugEmitter = true;
+  bool _useAccessibilityLabelFallback = false;
 
   String? _tokenError;
   String? _distinctIdError;
@@ -34,6 +37,9 @@ class ConfigModel extends ChangeNotifier {
   bool get showDebugMaskOverlay => _showDebugMaskOverlay;
   bool get autoMaskText => _autoMaskText;
   bool get autoMaskImage => _autoMaskImage;
+  bool get enableWireframes => _enableWireframes;
+  bool get enableWireframeDebugEmitter => _enableWireframeDebugEmitter;
+  bool get useAccessibilityLabelFallback => _useAccessibilityLabelFallback;
 
   String? get tokenError => _tokenError;
   String? get distinctIdError => _distinctIdError;
@@ -102,6 +108,21 @@ class ConfigModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  void setEnableWireframes(bool value) {
+    _enableWireframes = value;
+    notifyListeners();
+  }
+
+  void setEnableWireframeDebugEmitter(bool value) {
+    _enableWireframeDebugEmitter = value;
+    notifyListeners();
+  }
+
+  void setUseAccessibilityLabelFallback(bool value) {
+    _useAccessibilityLabelFallback = value;
+    notifyListeners();
+  }
+
   /// Validate all fields
   bool validate() {
     bool isValid = true;
@@ -159,6 +180,9 @@ class ConfigModel extends ChangeNotifier {
       showDebugMaskOverlay: _showDebugMaskOverlay,
       autoMaskText: _autoMaskText,
       autoMaskImage: _autoMaskImage,
+      enableWireframes: _enableWireframes,
+      enableWireframeDebugEmitter: _enableWireframeDebugEmitter,
+      useAccessibilityLabelFallback: _useAccessibilityLabelFallback,
     );
   }
 }

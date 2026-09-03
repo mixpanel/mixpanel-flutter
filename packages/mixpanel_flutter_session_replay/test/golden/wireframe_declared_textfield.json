@@ -1,0 +1,19 @@
+{
+  "viewport": [
+    800,
+    600
+  ],
+  "elements": [
+    {
+      "role": "input",
+      "text": "Card number",
+      "bounds": [
+        250,
+        276,
+        300,
+        48
+      ],
+      "maskDecision": "DECLARED"
+    }
+  ]
+}

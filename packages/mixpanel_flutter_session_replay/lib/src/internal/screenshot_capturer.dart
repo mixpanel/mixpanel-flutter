@@ -6,6 +6,7 @@ import 'package:clock/clock.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:flutter/widgets.dart';
 import 'package:image/image.dart' as img;
 
 import '../models/configuration.dart';
@@ -14,6 +15,7 @@ import '../models/masking_directive.dart';
 import 'masking/mask_detector.dart';
 import 'masking/mask_painter.dart';
 import 'native_image_compressor.dart';
+import 'wireframe/wireframe_emitter.dart';
 import 'logger.dart';
 
 /// Compression strategy for captured screenshots.
@@ -46,9 +48,51 @@ class ScreenshotCapturer {
   /// Native image compressor for platform-accelerated JPEG encoding
   final NativeImageCompressor? _nativeCompressor;
 
+  /// Optional wireframe emitter. When non-null, wireframes are collected on
+  /// the same walk as mask detection and enqueued alongside each screenshot.
+  final WireframeEmitter? _wireframeEmitter;
+
+  /// Mirrors `WireframesOptions.useAccessibilityLabelFallback`; only consulted
+  /// when [_wireframeEmitter] is non-null.
+  final bool _useAccessibilityLabelFallback;
+
+  /// The server's verdict on wireframe capture, or null until `/settings`
+  /// answers.
+  ///
+  /// Unlike the other platforms — where remote settings resolve before the
+  /// instance is built and the kill switch simply clears `wireframesOptions` —
+  /// the emitter here is constructed at SDK init and the settings fetch lands
+  /// on first foreground. Recording can be started manually in between, so the
+  /// verdict starts unknown and capture is **suppressed until it arrives**:
+  /// nothing can be captured, queued, and then flushed before the server has
+  /// been asked.
+  bool? _wireframesRemotelyEnabled;
+
+  /// Whether wireframes are collected on the next capture: opted in locally and
+  /// affirmatively allowed by the server.
+  bool get wireframesEnabled =>
+      _wireframeEmitter != null && (_wireframesRemotelyEnabled ?? false);
+
   /// Compression strategy to use for production captures.
   /// Change this value to compare performance between strategies.
   CompressionMode compressionMode;
+
+  /// Clears wireframe dedup state at a recording-session boundary.
+  ///
+  /// Forwarded rather than exposing [_wireframeEmitter] itself: the capturer owns the
+  /// emitter, and the coordinator — which knows when a session starts — already holds
+  /// the capturer. No-op when wireframes are off. See [WireframeEmitter.resetDedup].
+  void resetWireframeDedup() => _wireframeEmitter?.resetDedup();
+
+  /// Records the server's verdict on wireframe capture.
+  ///
+  /// Called by the coordinator once `/settings` answers — including the
+  /// cached-fallback answer a failed fetch produces. Until then wireframes are
+  /// suppressed; see [_wireframesRemotelyEnabled]. Screenshots are unaffected
+  /// either way: when the verdict is `false` the traversal stops collecting
+  /// elements and only the wireframe payload is dropped.
+  void applyRemoteWireframeVerdict({required bool isEnabled}) =>
+      _wireframesRemotelyEnabled = isEnabled;
 
   /// Mask painter (reusable across captures)
   late final MaskPainter _maskPainter;
@@ -58,10 +102,14 @@ class ScreenshotCapturer {
     required MixpanelLogger logger,
     required bool debugOverlayEnabled,
     NativeImageCompressor? nativeCompressor,
+    WireframeEmitter? wireframeEmitter,
+    bool useAccessibilityLabelFallback = false,
     this.compressionMode = CompressionMode.nativeJpeg,
   }) : _logger = logger,
        _debugOverlayEnabled = debugOverlayEnabled,
-       _nativeCompressor = nativeCompressor {
+       _nativeCompressor = nativeCompressor,
+       _wireframeEmitter = wireframeEmitter,
+       _useAccessibilityLabelFallback = useAccessibilityLabelFallback {
     _maskPainter = MaskPainter();
   }
 
@@ -75,6 +123,7 @@ class ScreenshotCapturer {
   /// Returns CaptureResult with compressed image data or error
   Future<CaptureResult> capture(
     RenderRepaintBoundary boundary, {
+    required Element boundaryElement,
     Set<AutoMaskedView>? maskTypes,
   }) async {
     final captureStart = clock.now();
@@ -85,6 +134,8 @@ class ScreenshotCapturer {
             ? MaskingDirective(autoMaskTypes: maskTypes)
             : directive,
         trackUnmaskBounds: _debugOverlayEnabled,
+        collectWireframes: wireframesEnabled,
+        useAccessibilityLabelFallback: _useAccessibilityLabelFallback,
       );
 
       // Using endOfFrame ensures both detectMaskRegions() and toImage() see the same painted state
@@ -94,7 +145,10 @@ class ScreenshotCapturer {
       final maskDetectionStart = clock.now();
       MaskDetectionResult maskResult;
       try {
-        maskResult = maskDetector.detectMaskRegions(boundary);
+        maskResult = maskDetector.detectMaskRegions(
+          boundary,
+          boundaryElement: boundaryElement,
+        );
       } catch (e) {
         return CaptureFailure(
           CaptureError.maskDetectionFailed,
@@ -191,6 +245,21 @@ class ScreenshotCapturer {
         );
       }
 
+      final rawWireframes = maskResult.rawWireframes;
+      // Spelled out rather than via [wireframesEnabled] so Dart promotes
+      // [_wireframeEmitter] to non-null for the emit call below.
+      final wireframePayload =
+          (_wireframeEmitter != null &&
+              (_wireframesRemotelyEnabled ?? false) &&
+              rawWireframes != null)
+          ? _wireframeEmitter.emit(
+              rawElements: rawWireframes,
+              maskRegions: maskRegions,
+              viewport: boundary.size,
+              timestamp: captureTimestamp,
+            )
+          : null;
+
       final totalTime = clock.now().difference(captureStart);
       _logger.debug(
         'Total capture time: ${totalTime.inMilliseconds}ms (${imageWidth}x$imageHeight, ${(compressedBytes.length / 1024).toStringAsFixed(1)}KB)',
@@ -203,6 +272,7 @@ class ScreenshotCapturer {
         maskCount: imageMaskCount,
         timestamp: captureTimestamp,
         maskRegions: maskRegions,
+        wireframes: wireframePayload,
       );
     } catch (e) {
       final totalTime = clock.now().difference(captureStart);

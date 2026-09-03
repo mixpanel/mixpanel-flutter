@@ -14,6 +14,7 @@ void main() {
     final testToken = 'test-token';
     final enabledKey = 'mp_sr_flutter_${testToken}_enabled';
     final sdkConfigKey = 'mp_sr_flutter_${testToken}_sdk_config';
+    final wireframeKey = 'mp_sr_flutter_${testToken}_wireframe_enabled';
 
     SettingsStorageProvider createProvider({
       Map<String, Object> initialData = const {},
@@ -55,6 +56,41 @@ void main() {
 
         // WHEN
         final result = await provider.getRecordingEnabled();
+
+        // THEN
+        expect(result, true);
+      });
+    });
+
+    group('wireframe state', () {
+      test('defaults to true when no cache exists', () async {
+        // GIVEN
+        final provider = createProvider();
+
+        // WHEN
+        final result = await provider.getWireframeEnabled();
+
+        // THEN
+        expect(result, true);
+      });
+
+      test('returns false when cached as disabled', () async {
+        // GIVEN
+        final provider = createProvider(initialData: {wireframeKey: false});
+
+        // WHEN
+        final result = await provider.getWireframeEnabled();
+
+        // THEN
+        expect(result, false);
+      });
+
+      test('is independent of the recording state cache', () async {
+        // GIVEN - recording is off remotely, wireframes were never killed
+        final provider = createProvider(initialData: {enabledKey: false});
+
+        // WHEN
+        final result = await provider.getWireframeEnabled();
 
         // THEN
         expect(result, true);
@@ -131,6 +167,30 @@ void main() {
         expect(result.sdkConfig, isNotNull);
         expect(result.sdkConfig!.recordSessionsPercent, 75.0);
         expect(result.isFromCache, true);
+      });
+
+      test('carries the cached wireframe kill switch', () async {
+        // GIVEN - the kill switch fired on an earlier launch
+        final provider = createProvider(initialData: {wireframeKey: false});
+
+        // WHEN
+        final result = await provider.getCachedSettingsResult();
+
+        // THEN - it survives the network failure that sent us to the cache
+        expect(result.isWireframeEnabled, false);
+        expect(result.isRecordingEnabled, true);
+        expect(result.isFromCache, true);
+      });
+
+      test('defaults isWireframeEnabled to true with no cache', () async {
+        // GIVEN
+        final provider = createProvider();
+
+        // WHEN
+        final result = await provider.getCachedSettingsResult();
+
+        // THEN
+        expect(result.isWireframeEnabled, true);
       });
 
       test(
