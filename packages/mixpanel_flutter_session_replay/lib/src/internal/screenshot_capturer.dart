@@ -6,6 +6,7 @@ import 'package:clock/clock.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:flutter/widgets.dart';
 import 'package:image/image.dart' as img;
 
 import '../models/configuration.dart';
@@ -75,6 +76,7 @@ class ScreenshotCapturer {
   /// Returns CaptureResult with compressed image data or error
   Future<CaptureResult> capture(
     RenderRepaintBoundary boundary, {
+    required Element boundaryElement,
     Set<AutoMaskedView>? maskTypes,
   }) async {
     final captureStart = clock.now();
@@ -94,7 +96,10 @@ class ScreenshotCapturer {
       final maskDetectionStart = clock.now();
       MaskDetectionResult maskResult;
       try {
-        maskResult = maskDetector.detectMaskRegions(boundary);
+        maskResult = maskDetector.detectMaskRegions(
+          boundary,
+          boundaryElement: boundaryElement,
+        );
       } catch (e) {
         return CaptureFailure(
           CaptureError.maskDetectionFailed,
