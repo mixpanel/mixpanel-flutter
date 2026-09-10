@@ -609,23 +609,6 @@ class MaskDetector {
     );
   }
 
-  /// Widget type name substrings identifying button-like widgets. Detection
-  /// is intentionally string-based to match the existing idiom in this file
-  /// (see the RenderParagraph / RenderImage / RenderViewport checks) and to
-  /// keep buttons opt-in for common Material/Cupertino types without pulling
-  /// in a semantics tree walk.
-  static const List<String> _buttonWidgetPatterns = [
-    'ElevatedButton',
-    'TextButton',
-    'OutlinedButton',
-    'FilledButton',
-    'IconButton',
-    'FloatingActionButton',
-    'MaterialButton',
-    'CupertinoButton',
-    'RawMaterialButton',
-  ];
-
   /// Collect at most one wireframe element for [element], with initial
   /// [MaskDecision] derived from [maskContext] plus widget type.
   ///
@@ -961,8 +944,12 @@ class MaskDetector {
   _ComponentWireframeKind _componentWireframeKind(Widget widget) {
     return _componentWireframeKinds.putIfAbsent(widget.runtimeType, () {
       final name = widget.runtimeType.toString();
-      for (final pattern in _buttonWidgetPatterns) {
-        if (name.contains(pattern)) return _ComponentWireframeKind.button;
+      final genericStart = name.indexOf('<');
+      final baseName = genericStart == -1
+          ? name
+          : name.substring(0, genericStart);
+      if (baseName.endsWith('Button')) {
+        return _ComponentWireframeKind.button;
       }
       if (name.contains('TextField') || name.contains('EditableText')) {
         return _ComponentWireframeKind.textField;
@@ -1211,7 +1198,14 @@ class MaskDetector {
   String _extractParagraphText(RenderObject node) {
     try {
       final text = (node as dynamic).text as InlineSpan?;
-      return text?.toPlainText() ?? '';
+      // A semanticsLabel is accessibility-only, not painted text. A
+      // PlaceholderSpan contributes U+FFFC to the flattened string, while its
+      // actual WidgetSpan child is rendered and collected separately.
+      return text?.toPlainText(
+            includeSemanticsLabels: false,
+            includePlaceholders: false,
+          ) ??
+          '';
     } catch (_) {
       return '';
     }
