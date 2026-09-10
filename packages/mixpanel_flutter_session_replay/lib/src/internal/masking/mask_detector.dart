@@ -1211,7 +1211,14 @@ class MaskDetector {
   String _extractParagraphText(RenderObject node) {
     try {
       final text = (node as dynamic).text as InlineSpan?;
-      return text?.toPlainText() ?? '';
+      // A semanticsLabel is accessibility-only, not painted text. A
+      // PlaceholderSpan contributes U+FFFC to the flattened string, while its
+      // actual WidgetSpan child is rendered and collected separately.
+      return text?.toPlainText(
+            includeSemanticsLabels: false,
+            includePlaceholders: false,
+          ) ??
+          '';
     } catch (_) {
       return '';
     }

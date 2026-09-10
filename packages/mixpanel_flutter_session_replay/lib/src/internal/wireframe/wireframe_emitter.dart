@@ -114,6 +114,10 @@ class WireframeEmitter {
     // over it as a safety net.
     if (el.maskDecision != MaskDecision.none) return el;
     for (final region in maskRegions) {
+      // Unmask regions are visualization metadata collected only for the debug
+      // overlay. MaskPainter deliberately does not paint them, so treating one
+      // as a geometric mask would make the wireframe disagree with the image.
+      if (region.source == MaskSource.unmask) continue;
       if (region.bounds.overlaps(el.bounds)) {
         return el.copyWith(
           clearText: true,

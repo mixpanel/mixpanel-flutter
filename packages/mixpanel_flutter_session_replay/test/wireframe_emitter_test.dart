@@ -208,6 +208,33 @@ void main() {
       expect(payload!.elements.single.text, 'hello');
     });
 
+    test('ignores an overlapping debug-only unmask region', () {
+      // GIVEN — unmask bounds exist only to visualize MixpanelUnmask in the
+      // debug overlay. MaskPainter does not paint them over the screenshot, so
+      // they must not participate in geometric leak prevention either.
+      final emitter = WireframeEmitter(
+        sensitiveRules: const [],
+        debugEmitter: null,
+        logger: logger,
+      );
+      final input = [el(bounds: const Rect.fromLTWH(10, 10, 100, 20))];
+      final regions = [
+        MaskRegionInfo(const Rect.fromLTWH(10, 10, 100, 20), MaskSource.unmask),
+      ];
+
+      // WHEN
+      final payload = emitter.emit(
+        rawElements: input,
+        maskRegions: regions,
+        viewport: defaultViewport,
+        timestamp: defaultTimestamp,
+      );
+
+      // THEN
+      expect(payload!.elements.single.text, 'hello');
+      expect(payload.elements.single.maskDecision, MaskDecision.none);
+    });
+
     test('does not run for elements already decided by the mask detector', () {
       // GIVEN — element with decision != none should not be re-marked GEOMETRIC
       final emitter = WireframeEmitter(

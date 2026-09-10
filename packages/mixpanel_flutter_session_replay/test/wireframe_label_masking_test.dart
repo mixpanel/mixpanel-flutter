@@ -35,6 +35,7 @@ void main() {
     WidgetTester tester,
     Widget widget, {
     Set<AutoMaskedView> autoMask = const {},
+    bool useAccessibilityLabelFallback = true,
   }) async {
     await tester.pumpWidget(
       MaterialApp(
@@ -52,13 +53,60 @@ void main() {
       directive: MaskingDirective(autoMaskTypes: autoMask),
       trackUnmaskBounds: false,
       collectWireframes: true,
-      useAccessibilityLabelFallback: true,
+      useAccessibilityLabelFallback: useAccessibilityLabelFallback,
     );
     return detector.detectMaskRegions(boundary).rawWireframes ?? const [];
   }
 
   WireframeElement buttonOf(List<WireframeElement> elements) =>
       elements.firstWhere((e) => e.role == WireframeRole.button);
+
+  group('visible paragraph text excludes accessibility-only content', () {
+    testWidgets('a TextSpan semanticsLabel is never scraped as painted text', (
+      tester,
+    ) async {
+      final elements = await collect(
+        tester,
+        const Text.rich(
+          TextSpan(
+            text: 'Visible total',
+            semanticsLabel: 'Account balance: 1234 dollars',
+          ),
+        ),
+        useAccessibilityLabelFallback: false,
+      );
+
+      final paragraph = elements.singleWhere(
+        (element) => element.role == WireframeRole.text,
+      );
+      expect(paragraph.text, 'Visible total');
+    });
+
+    testWidgets('a WidgetSpan does not add an object replacement character', (
+      tester,
+    ) async {
+      final elements = await collect(
+        tester,
+        const Text.rich(
+          TextSpan(
+            children: [
+              TextSpan(text: 'Status: '),
+              WidgetSpan(child: Text('Ready')),
+            ],
+          ),
+        ),
+        useAccessibilityLabelFallback: false,
+      );
+
+      final texts = elements
+          .where((element) => element.role == WireframeRole.text)
+          .map((element) => element.text)
+          .whereType<String>()
+          .toList();
+      expect(texts, containsAll(<String>['Status: ', 'Ready']));
+      expect(texts.join(), isNot(contains('\u{fffc}')));
+    });
+  });
 
   group('accessibility label fallback respects descendant masking', () {
     testWidgets('a masked Semantics label is not harvested by its button', (
@@ -144,43 +192,41 @@ void main() {
       expect(buttonOf(elements).text, 'Add item');
     });
 
-    testWidgets(
-      'a Semantics wrapper inherits its ImageIcon automatic mask',
-      (tester) async {
-        final elements = await collect(
-          tester,
-          IconButton(
-            onPressed: () {},
-            icon: Semantics(
-              label: 'Photo of Jane Doe',
-              child: ImageIcon(_testImage),
-            ),
+    testWidgets('a Semantics wrapper inherits its ImageIcon automatic mask', (
+      tester,
+    ) async {
+      final elements = await collect(
+        tester,
+        IconButton(
+          onPressed: () {},
+          icon: Semantics(
+            label: 'Photo of Jane Doe',
+            child: ImageIcon(_testImage),
           ),
-          autoMask: const {AutoMaskedView.image},
-        );
+        ),
+        autoMask: const {AutoMaskedView.image},
+      );
 
-        expect(buttonOf(elements).text, isNull);
-      },
-    );
+      expect(buttonOf(elements).text, isNull);
+    });
 
-    testWidgets(
-      'a Tooltip wrapper inherits its ImageIcon automatic mask',
-      (tester) async {
-        final elements = await collect(
-          tester,
-          IconButton(
-            onPressed: () {},
-            icon: Tooltip(
-              message: 'Photo of Jane Doe',
-              child: ImageIcon(_testImage),
-            ),
+    testWidgets('a Tooltip wrapper inherits its ImageIcon automatic mask', (
+      tester,
+    ) async {
+      final elements = await collect(
+        tester,
+        IconButton(
+          onPressed: () {},
+          icon: Tooltip(
+            message: 'Photo of Jane Doe',
+            child: ImageIcon(_testImage),
           ),
-          autoMask: const {AutoMaskedView.image},
-        );
+        ),
+        autoMask: const {AutoMaskedView.image},
+      );
 
-        expect(buttonOf(elements).text, isNull);
-      },
-    );
+      expect(buttonOf(elements).text, isNull);
+    });
 
     testWidgets(
       'an explicit unmask allows a wrapper label around an ImageIcon',
@@ -191,9 +237,7 @@ void main() {
             onPressed: () {},
             icon: Semantics(
               label: 'Add item',
-              child: MixpanelUnmask(
-                child: ImageIcon(_testImage),
-              ),
+              child: MixpanelUnmask(child: ImageIcon(_testImage)),
             ),
           ),
           autoMask: const {AutoMaskedView.image},
