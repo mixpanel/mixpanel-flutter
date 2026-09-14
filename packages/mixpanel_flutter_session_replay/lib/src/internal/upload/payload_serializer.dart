@@ -1,7 +1,8 @@
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:clock/clock.dart';
+
+import '../platform/gzip_compress.dart';
 
 import '../../models/session_event.dart';
 import '../../models/session.dart';
@@ -111,6 +112,6 @@ class PayloadSerializer {
   /// GZIP compress a string
   Future<List<int>> _gzipCompress(String data) async {
     final bytes = utf8.encode(data);
-    return gzip.encode(bytes);
+    return gzipCompressAsync(bytes);
   }
 }

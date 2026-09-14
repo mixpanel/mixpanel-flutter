@@ -1,6 +1,7 @@
 import 'package:flutter/widgets.dart';
 
 import '../internal/widget_coordinator.dart';
+import '../internal/platform/web_page_lifecycle.dart';
 
 /// Observes app lifecycle state changes and flushes queued events when the app
 /// is backgrounded or minimized.
@@ -32,6 +33,8 @@ class LifecycleObserver extends StatefulWidget {
 class _LifecycleObserverState extends State<LifecycleObserver>
     with WidgetsBindingObserver {
   AppLifecycleState? _lastState;
+  void Function()? _disposeWebPageLifecycle;
+  bool _isInForeground = false;
 
   @override
   void initState() {
@@ -45,13 +48,23 @@ class _LifecycleObserverState extends State<LifecycleObserver>
         'LifecycleObserver detected initial resume state',
       );
       widget.coordinator.onAppForegrounded();
+      _isInForeground = true;
     }
     _lastState = initialState;
+    // Flutter normally maps document visibility into AppLifecycleState, but a
+    // pagehide (notably a back-forward-cache transition) is a separate browser
+    // signal. Mixpanel JS listens to both, so replay does too. The shared gate
+    // prevents duplicate callbacks when both signals describe one transition.
+    _disposeWebPageLifecycle = registerWebPageLifecycle(
+      onHidden: _leaveForeground,
+      onVisible: _enterForeground,
+    );
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _disposeWebPageLifecycle?.call();
     super.dispose();
   }
 
@@ -72,15 +85,16 @@ class _LifecycleObserverState extends State<LifecycleObserver>
         ? _getVisibilityLevel(_lastState!)
         : null;
 
-    // Detect transition to inactive
-    // Only trigger if coming from a MORE visible state (resumed)
-    if (state == AppLifecycleState.inactive &&
-        lastLevel != null &&
-        lastLevel > currentLevel) {
+    // Detect the first transition away from fully visible. Flutter web may
+    // report resumed -> hidden directly, while mobile commonly passes through
+    // inactive. Restricting this to a previous resumed state produces exactly
+    // one background callback for either lifecycle shape.
+    if (lastLevel == _getVisibilityLevel(AppLifecycleState.resumed) &&
+        currentLevel < lastLevel!) {
       widget.coordinator.logger.info(
-        'LifecycleObserver detected app becoming inactive',
+        'LifecycleObserver detected app leaving the foreground',
       );
-      widget.coordinator.onAppBackgrounded();
+      _leaveForeground();
     }
 
     // Detect transition to resumed
@@ -88,10 +102,22 @@ class _LifecycleObserverState extends State<LifecycleObserver>
     if (state == AppLifecycleState.resumed &&
         (lastLevel == null || lastLevel < currentLevel)) {
       widget.coordinator.logger.info('LifecycleObserver detected app resuming');
-      widget.coordinator.onAppForegrounded();
+      _enterForeground();
     }
 
     _lastState = state;
+  }
+
+  void _leaveForeground() {
+    if (!_isInForeground) return;
+    _isInForeground = false;
+    widget.coordinator.onAppBackgrounded();
+  }
+
+  void _enterForeground() {
+    if (_isInForeground) return;
+    _isInForeground = true;
+    widget.coordinator.onAppForegrounded();
   }
 
   @override

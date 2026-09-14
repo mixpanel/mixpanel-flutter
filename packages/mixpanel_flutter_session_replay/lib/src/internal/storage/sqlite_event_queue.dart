@@ -175,6 +175,27 @@ class SqliteEventQueue implements EventQueue {
   }
 
   @override
+  Future<QueuedEventHeader?> fetchOldestHeader() => _fetchHeader('ASC');
+
+  @override
+  Future<QueuedEventHeader?> fetchNewestHeader() => _fetchHeader('DESC');
+
+  Future<QueuedEventHeader?> _fetchHeader(String direction) async {
+    if (_db == null) {
+      throw StateError('Storage not initialized');
+    }
+
+    final rows = await _db!.query(
+      'events',
+      columns: ['id', 'session_id', 'distinct_id', 'timestamp'],
+      orderBy: 'id $direction',
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return QueuedEventHeader.fromDbRow(rows.first);
+  }
+
+  @override
   Future<List<PersistedSessionReplayEvent>> fetchBatch({
     required String sessionId,
     required String distinctId,
@@ -228,7 +249,7 @@ class SqliteEventQueue implements EventQueue {
     return rows.first['boundary_id'] as int;
   }
 
-  /// Fetch events with cumulative size limit (uses correlated subquery for running totals)
+  /// Fetch events with cumulative size and count limits.
   Future<List<Map<String, Object?>>> _fetchEventsWithSizeLimit({
     required String sessionId,
     required int? boundaryId,
@@ -237,30 +258,30 @@ class SqliteEventQueue implements EventQueue {
   }) async {
     // Use a very large number as the boundary if none exists
     // This allows us to use a single query for both cases
-    final effectiveBoundary =
-        boundaryId ?? 9223372036854775807; // Max 64-bit int
+    final effectiveBoundary = boundaryId ?? (1 << 62); // Large boundary value
 
-    return await _db!.rawQuery(
+    final rows = await _db!.rawQuery(
       '''
-      SELECT id, session_id, distinct_id, timestamp, type, payload_metadata, payload_binary, data_size
-      FROM (
-        SELECT
-          id, session_id, distinct_id, timestamp, type, payload_metadata, payload_binary, data_size,
-          (SELECT SUM(e2.data_size)
-           FROM events e2
-           WHERE e2.session_id = events.session_id
-             AND e2.id < ?
-             AND e2.id <= events.id) as running_total
-        FROM events
-        WHERE session_id = ?
-          AND id < ?
-        ORDER BY id ASC
-        LIMIT ?
-      )
-      WHERE running_total <= ?
+      SELECT id, session_id, distinct_id, timestamp, type,
+             payload_metadata, payload_binary, data_size
+      FROM events
+      WHERE session_id = ?
+        AND id < ?
+      ORDER BY id ASC
+      LIMIT ?
       ''',
-      [effectiveBoundary, sessionId, effectiveBoundary, maxCount, maxBytes],
+      [sessionId, effectiveBoundary, maxCount],
     );
+
+    final batch = <Map<String, Object?>>[];
+    var totalBytes = 0;
+    for (final row in rows) {
+      final dataSize = row['data_size'] as int;
+      if (batch.isNotEmpty && totalBytes + dataSize > maxBytes) break;
+      batch.add(row);
+      totalBytes += dataSize;
+    }
+    return batch;
   }
 
   @override
