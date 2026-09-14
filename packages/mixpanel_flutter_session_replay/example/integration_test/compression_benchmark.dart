@@ -15,8 +15,8 @@ import 'package:mixpanel_flutter_session_replay/src/models/results.dart';
 
 /// Runs the compression benchmark on the current widget tree.
 ///
-/// Finds the first [RenderRepaintBoundary], iterates all [CompressionMode]s,
-/// and prints timing + size results.
+/// Finds the first [RenderRepaintBoundary], captures screenshots using
+/// native JPEG compression, and prints timing + size results.
 Future<void> runBenchmark(
   WidgetTester tester, {
   required String label,
@@ -30,75 +30,65 @@ Future<void> runBenchmark(
   );
 
   final logger = MixpanelLogger(LogLevel.info);
-  final nativeCompressor = NativeImageCompressor();
 
-  final results = <CompressionMode, List<int>>{
-    for (final mode in CompressionMode.values) mode: [],
-  };
-  final sizes = <CompressionMode, int>{};
+  final capturer = ScreenshotCapturer(
+    directive: MaskingDirective(autoMaskTypes: {}),
+    logger: logger,
+    debugOverlayEnabled: false,
+    compressor: NativeImageCompressor(),
+  );
 
-  for (final mode in CompressionMode.values) {
-    final capturer = ScreenshotCapturer(
-      directive: MaskingDirective(autoMaskTypes: {}),
-      logger: logger,
-      debugOverlayEnabled: false,
-      nativeCompressor: nativeCompressor,
-      compressionMode: mode,
+  final times = <int>[];
+  int? lastSize;
+
+  // Helper: start capture, pump frame for endOfFrame, then await result
+  Future<CaptureResult?> runCapture() async {
+    final future = tester.runAsync(
+      () => capturer.capture(
+        boundary,
+        getCurrentSession: SessionManager().getCurrentSession,
+        getDistinctId: () => 'benchmark-distinct-id',
+        boundaryElement: boundaryElement,
+      ),
     );
+    await tester.pump();
+    return await future;
+  }
 
-    // Helper: start capture, pump frame for endOfFrame, then await result
-    Future<CaptureResult?> runCapture() async {
-      final future = tester.runAsync(
-        () => capturer.capture(
-          boundary,
-          getCurrentSession: SessionManager().getCurrentSession,
-          getDistinctId: () => 'benchmark-distinct-id',
-          boundaryElement: boundaryElement,
-        ),
-      );
-      await tester.pump();
-      return await future;
-    }
+  // Warmup run
+  await runCapture();
 
-    // Warmup run
-    await runCapture();
+  for (var i = 0; i < iterations; i++) {
+    final stopwatch = Stopwatch()..start();
+    final result = await runCapture();
+    stopwatch.stop();
 
-    for (var i = 0; i < iterations; i++) {
-      final stopwatch = Stopwatch()..start();
-      final result = await runCapture();
-      stopwatch.stop();
-
-      expect(result, isNotNull);
-      expect(result, isA<CaptureSuccess>());
-      final success = result! as CaptureSuccess;
-      results[mode]!.add(stopwatch.elapsedMilliseconds);
-      sizes[mode] = success.data.length;
-    }
+    expect(result, isNotNull);
+    expect(result, isA<CaptureSuccess>());
+    final success = result! as CaptureSuccess;
+    times.add(stopwatch.elapsedMilliseconds);
+    lastSize = success.data.length;
   }
 
   // Print results
   debugPrint('');
   debugPrint('=== $label ($iterations iterations) ===');
   debugPrint('');
-  for (final mode in CompressionMode.values) {
-    final times = results[mode]!;
-    if (times.isEmpty) continue;
-    times.sort();
-    final avg = times.reduce((a, b) => a + b) / times.length;
-    final median = times[times.length ~/ 2];
-    final min = times.first;
-    final max = times.last;
-    final sizeKB = (sizes[mode]! / 1024).toStringAsFixed(1);
+  times.sort();
+  final avg = times.reduce((a, b) => a + b) / times.length;
+  final median = times[times.length ~/ 2];
+  final min = times.first;
+  final max = times.last;
+  final sizeKB = (lastSize! / 1024).toStringAsFixed(1);
 
-    debugPrint(
-      '${mode.name.padRight(12)} | '
-      'avg: ${avg.toStringAsFixed(1).padLeft(6)}ms | '
-      'median: ${median.toString().padLeft(4)}ms | '
-      'min: ${min.toString().padLeft(4)}ms | '
-      'max: ${max.toString().padLeft(4)}ms | '
-      'size: ${sizeKB.padLeft(6)}KB',
-    );
-  }
+  debugPrint(
+    'native JPEG  | '
+    'avg: ${avg.toStringAsFixed(1).padLeft(6)}ms | '
+    'median: ${median.toString().padLeft(4)}ms | '
+    'min: ${min.toString().padLeft(4)}ms | '
+    'max: ${max.toString().padLeft(4)}ms | '
+    'size: ${sizeKB.padLeft(6)}KB',
+  );
   debugPrint('');
 }
 

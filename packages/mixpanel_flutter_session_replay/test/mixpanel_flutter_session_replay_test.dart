@@ -429,6 +429,58 @@ void main() {
       expect(result.errorMessage, contains('storageQuotaMB must be positive'));
     });
 
+    test('negative web idleTimeout prevents initialization', () async {
+      final queue = await createQueue('negative-web-idle-timeout-test');
+      final invalidOptions = SessionReplayOptions(
+        logLevel: LogLevel.none,
+        platformOptions: const PlatformOptions(
+          web: WebOptions(idleTimeout: Duration(seconds: -1)),
+        ),
+      );
+
+      final result = await MixpanelSessionReplay.initializeWithDependencies(
+        token: 'negative-web-idle-timeout-test',
+        distinctId: testDistinctId,
+        options: invalidOptions,
+        eventQueue: queue,
+      );
+
+      expect(result.success, false);
+      expect(result.error, InitializationError.invalidToken);
+      expect(result.errorMessage, contains('idleTimeout cannot be negative'));
+    });
+
+    test(
+      'non-positive web maxSessionDuration prevents initialization',
+      () async {
+        for (final duration in [Duration.zero, const Duration(seconds: -1)]) {
+          final queue = await createQueue(
+            'invalid-web-max-duration-${duration.inSeconds}',
+          );
+          final invalidOptions = SessionReplayOptions(
+            logLevel: LogLevel.none,
+            platformOptions: PlatformOptions(
+              web: WebOptions(maxSessionDuration: duration),
+            ),
+          );
+
+          final result = await MixpanelSessionReplay.initializeWithDependencies(
+            token: 'invalid-web-max-duration-${duration.inSeconds}',
+            distinctId: testDistinctId,
+            options: invalidOptions,
+            eventQueue: queue,
+          );
+
+          expect(result.success, false);
+          expect(result.error, InitializationError.invalidToken);
+          expect(
+            result.errorMessage,
+            contains('maxSessionDuration must be positive'),
+          );
+        }
+      },
+    );
+
     test(
       'invalid autoRecordSessionsPercent via initializeWithDependencies prevents initialization',
       () async {

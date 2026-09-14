@@ -25,6 +25,9 @@ abstract class WidgetCoordinator {
   /// Whether app is currently in foreground
   bool get isAppInForeground;
 
+  /// Whether screenshots read the already-rendered platform surface.
+  bool get capturesRenderedSurface;
+
   /// Logger instance
   MixpanelLogger get logger;
 
@@ -54,4 +57,10 @@ abstract class WidgetCoordinator {
     RenderRepaintBoundary boundary, {
     required Element boundaryElement,
   });
+
+  /// Notify coordinator of user activity (even when not recording).
+  ///
+  /// Used on web to restart recording after an idle timeout.
+  /// On native (or when no idle timeout is configured), this is a no-op.
+  void onUserActivity();
 }

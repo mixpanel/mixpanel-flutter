@@ -1,5 +1,4 @@
-import 'dart:io' show Platform;
-import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
+import 'package:flutter/foundation.dart';
 import 'package:mixpanel_flutter_session_replay/mixpanel_flutter_session_replay.dart';
 
 /// Configuration data for SDK initialization
@@ -57,10 +56,10 @@ class SdkConfig {
   }
 
   /// Check if platform is mobile (Android or iOS)
-  static bool get isMobilePlatform {
-    if (kIsWeb) return false;
-    return Platform.isAndroid || Platform.isIOS;
-  }
+  static bool get isMobilePlatform =>
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.iOS);
 
   /// Convert to SessionReplayOptions.
   ///

@@ -22,6 +22,65 @@ Session Replay provides powerful insights into user behavior, but it also introd
 | iOS      | 13.0+          |
 | Android  | API 24 (7.0+)  |
 | macOS    | 10.15+         |
+| Web      | Chrome 80+, Firefox 113+, Safari 16.4+ |
+
+### Flutter Web requirements
+
+Web replay deliberately requires browser-native background processing. JPEG
+encoding, privacy-mask painting, and gzip compression run in Web Workers so
+large replay frames do not perform codec work on the browser UI thread. If the
+browser cannot create the workers or provide the required worker APIs,
+initialization fails and no replay is recorded. The SDK does not fall back to
+main-thread JPEG or gzip processing.
+
+The web build requires:
+
+* Web Workers and transferable `ArrayBuffer` values
+* `OffscreenCanvas`, its 2D context, and JPEG support from `convertToBlob()` in
+  a worker
+* `CompressionStream('gzip')` in a worker
+* IndexedDB for durable storage; when IndexedDB is unavailable, the SDK logs a
+  warning and uses a page-lifetime in-memory queue
+
+The minimum browser versions above are determined by the newest required API.
+Applications should still test the browser versions and devices represented in
+their own audience, particularly at desktop viewport sizes.
+
+#### Content Security Policy
+
+The SDK creates its workers from generated `blob:` URLs. A restrictive Content
+Security Policy must allow those workers and the configured Mixpanel endpoints.
+For example, adapt the following directives to your existing policy and data
+residency:
+
+```text
+worker-src 'self' blob:;
+child-src 'self' blob:;
+connect-src 'self' https://api.mixpanel.com;
+```
+
+`child-src` is a compatibility fallback for browsers or policies that do not
+honor `worker-src`. For EU or India residency, allow `https://api-eu.mixpanel.com` or
+`https://api-in.mixpanel.com` instead. If `serverUrl` points at a proxy, its
+origin must be in `connect-src`. The application should be served over HTTPS
+in production (localhost remains suitable for development).
+
+Web replay events and session metadata are stored together in IndexedDB; JPEG
+bytes are stored as binary values rather than base64 strings. The queue is
+bounded by `storageQuotaMB`, coordinates uploads across tabs, and removes
+unuploaded events and abandoned session metadata after five days. The
+`mobile.wifiOnly` option does not apply on web.
+
+### Capture resolution
+
+To bound capture cost, screenshot rasters are downscaled when the logical
+viewport exceeds the pixel area of 1280×720. Aspect ratio is preserved and the
+longest raster edge is additionally limited to 1920 pixels. The limiting ratio
+is calculated exactly so the raster retains as much detail as that budget
+allows. Replay metadata, interactions, and wireframes remain in the original
+logical coordinate space, so downscaling does not change replay layout or
+pointer alignment. Typical phone viewports are already below this limit and
+are captured at their native logical size.
 
 ## Installation
 
@@ -168,7 +227,7 @@ Upon initialization you can provide a `SessionReplayOptions` object to customize
 | `logLevel` | Controls the level of debugging logs printed to the console | `LogLevel.none` |
 | `storageQuotaMB` | Maximum MB for the local event queue | `50` |
 | `debugOptions` | Debug configuration for mask overlay visualization. See [Debug options](#debug-options) | `null` (disabled) |
-| `platformOptions` | Platform-specific options. See [Platform options](#platform-options-mobile-only) | `PlatformOptions()` |
+| `platformOptions` | Platform-specific options. See [Platform options](#platform-options) | `PlatformOptions()` |
 
 **Example usage:**
 
@@ -183,17 +242,32 @@ final result = await MixpanelSessionReplay.initialize(
     flushInterval: Duration(seconds: 10),
     platformOptions: PlatformOptions(
       mobile: MobileOptions(wifiOnly: true),
+      web: WebOptions(
+        platformViewCapturePolicy:
+            WebPlatformViewCapturePolicy.maskEntireFrame,
+      ),
     ),
   ),
 );
 ```
 
-#### Platform options (mobile only)
+Initialize `mixpanel_flutter` before Session Replay. While recording is active,
+the SDK automatically registers `$mp_replay_id` as a Mixpanel super property
+and removes it when recording stops. On Flutter web this delegates to
+Mixpanel JS through `mixpanel_flutter`; macOS uses the same direct plugin
+channel. If the analytics SDK is not installed or initialized, replay recording
+continues but analytics events cannot be linked to the replay automatically.
+
+#### Platform options
 
 | Option | Description | Default |
 |--------|-------------|---------|
 | `mobile` | Mobile-specific options (iOS/Android). See properties below | `MobileOptions()` |
 | `mobile.wifiOnly` | When `true`, replay events will only be flushed when the device has WiFi. When `false`, replay events will be flushed with any network connection including cellular | `true` |
+| `web` | Flutter web-specific options. See properties below | `WebOptions()` |
+| `web.idleTimeout` | Inactivity duration after which a web replay session ends. `Duration.zero` disables it | `30 minutes` |
+| `web.maxSessionDuration` | Maximum duration of one web replay session | `24 hours` |
+| `web.platformViewCapturePolicy` | `maskEntireFrame` masks the whole replay image whenever an HTML platform view is present. `captureNormally` captures the Flutter canvas without adding that mask; the platform-view pixels are not guaranteed to appear | `maskEntireFrame` |
 
 #### Debug options
 

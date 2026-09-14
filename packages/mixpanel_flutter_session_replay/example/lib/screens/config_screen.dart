@@ -1,6 +1,5 @@
-import 'dart:io' show Platform;
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:mixpanel_flutter_session_replay/mixpanel_flutter_session_replay.dart';
 import 'package:provider/provider.dart';
 
@@ -26,10 +25,10 @@ class _ConfigScreenState extends State<ConfigScreen> {
   late TextEditingController _autoRecordController;
   late TextEditingController _storageQuotaController;
 
-  bool get _isMobilePlatform {
-    if (kIsWeb) return false;
-    return Platform.isAndroid || Platform.isIOS;
-  }
+  bool get _isMobilePlatform =>
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.iOS);
 
   @override
   void initState() {
@@ -92,9 +91,9 @@ class _ConfigScreenState extends State<ConfigScreen> {
       final config = configVm.getConfig();
       wireframeVm.clear();
 
-      // Initialize analytics SDK first so its native broadcast receiver /
-      // notification observer is ready before session replay registers
-      // the $mp_replay_id super property.
+      // Initialize analytics first so its native property bridge (mobile) or
+      // Mixpanel JS instance (web) is ready before replay registers the
+      // $mp_replay_id super property.
       await MixpanelAnalytics.initialize(
         token: config.token,
         distinctId: config.distinctId,

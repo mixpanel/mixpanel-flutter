@@ -212,8 +212,74 @@ void main() {
 
       // THEN
       expect(fake.capturedInteractions.map((i) => i.interactionType), [
-        RRWebMouseInteraction.touchStart,
-        RRWebMouseInteraction.touchEnd,
+        RRWebMouseInteraction.mouseDown,
+        RRWebMouseInteraction.mouseUp,
+        RRWebMouseInteraction.click,
+      ]);
+    });
+
+    testWidgets('does not emit click after a mouse drag', (tester) async {
+      // GIVEN
+      final fake = FakeWidgetCoordinator(
+        recordingState: RecordingState.recording,
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: InteractionDetector(
+            coordinator: fake,
+            child: Container(
+              width: 200,
+              height: 200,
+              color: const Color(0xFFFFFFFF),
+            ),
+          ),
+        ),
+      );
+
+      // WHEN
+      final center = tester.getCenter(find.byType(Container));
+      final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await gesture.down(center);
+      await gesture.moveTo(center + const Offset(40, 0));
+      await gesture.up();
+
+      // THEN
+      expect(fake.capturedInteractions.map((i) => i.interactionType), [
+        RRWebMouseInteraction.mouseDown,
+        RRWebMouseInteraction.mouseUp,
+      ]);
+      expect(fake.capturedTouchMoves, isEmpty);
+    });
+
+    testWidgets('does not emit click when a mouse gesture is cancelled', (
+      tester,
+    ) async {
+      final fake = FakeWidgetCoordinator(
+        recordingState: RecordingState.recording,
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: InteractionDetector(
+            coordinator: fake,
+            child: Container(
+              key: const Key('cancel-target'),
+              width: 200,
+              height: 200,
+              color: const Color(0xFFFFFFFF),
+            ),
+          ),
+        ),
+      );
+
+      final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await gesture.down(
+        tester.getCenter(find.byKey(const Key('cancel-target'))),
+      );
+      await gesture.cancel();
+
+      expect(fake.capturedInteractions.map((i) => i.interactionType), [
+        RRWebMouseInteraction.mouseDown,
+        RRWebMouseInteraction.mouseUp,
       ]);
     });
 
@@ -276,6 +342,79 @@ void main() {
 
       // THEN - no interaction captured (disabled check comes first)
       expect(fake.capturedInteractions, isEmpty);
+    });
+
+    testWidgets(
+      'calls onUserActivity on pointer down even when not recording',
+      (tester) async {
+        // GIVEN
+        final fake = FakeWidgetCoordinator(
+          recordingState: RecordingState.notRecording,
+        );
+
+        await tester.pumpWidget(
+          MaterialApp(
+            home: InteractionDetector(
+              coordinator: fake,
+              child: Container(
+                width: 200,
+                height: 200,
+                color: const Color(0xFFFFFFFF),
+              ),
+            ),
+          ),
+        );
+
+        // WHEN
+        final center = tester.getCenter(find.byType(Container));
+        final gesture = await tester.createGesture(
+          kind: PointerDeviceKind.touch,
+        );
+        await gesture.down(center);
+        await tester.pump();
+        await gesture.up();
+
+        // THEN — onUserActivity called even though not recording
+        expect(fake.onUserActivityCallCount, 1);
+        // No interaction captured (recording is off)
+        expect(fake.capturedInteractions, isEmpty);
+      },
+    );
+
+    testWidgets('calls onUserActivity on pointer down when recording', (
+      tester,
+    ) async {
+      // GIVEN
+      final fake = FakeWidgetCoordinator(
+        recordingState: RecordingState.recording,
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: InteractionDetector(
+            coordinator: fake,
+            child: Container(
+              width: 200,
+              height: 200,
+              color: const Color(0xFFFFFFFF),
+            ),
+          ),
+        ),
+      );
+
+      // WHEN
+      final center = tester.getCenter(find.byType(Container));
+      final gesture = await tester.createGesture(kind: PointerDeviceKind.touch);
+      await gesture.down(center);
+      await tester.pump();
+      await gesture.up();
+
+      // THEN — activity is reported once and both gesture boundaries are kept
+      expect(fake.onUserActivityCallCount, 1);
+      expect(fake.capturedInteractions.map((event) => event.interactionType), [
+        RRWebMouseInteraction.touchStart,
+        RRWebMouseInteraction.touchEnd,
+      ]);
     });
   });
 
@@ -693,6 +832,28 @@ void main() {
       },
     );
 
+    testWidgets(
+      'calls onAppBackgrounded for direct resumed to hidden transition',
+      (tester) async {
+        final fake = FakeWidgetCoordinator();
+
+        await tester.pumpWidget(
+          MaterialApp(
+            home: LifecycleObserver(coordinator: fake, child: const SizedBox()),
+          ),
+        );
+
+        tester.binding.handleAppLifecycleStateChanged(
+          AppLifecycleState.resumed,
+        );
+        await tester.pump();
+        tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+        await tester.pump();
+
+        expect(fake.onAppBackgroundedCallCount, 1);
+      },
+    );
+
     testWidgets('removes observer on dispose without crash', (tester) async {
       // GIVEN
       final fake = FakeWidgetCoordinator();
@@ -1069,6 +1230,35 @@ void main() {
       );
 
       // THEN - debug overlay should be rendered (kDebugMode is true in tests)
+      expect(find.byType(MaskOverlay), findsOneWidget);
+    });
+
+    testWidgets('excludes the debug overlay for rendered-surface capture', (
+      tester,
+    ) async {
+      final fake = FakeWidgetCoordinator(
+        recordingState: RecordingState.recording,
+        capturesRenderedSurface: true,
+      );
+      final frameNotifier = ChangeNotifier();
+      fake.onCaptureSnapshot = () {
+        expect(find.byType(MaskOverlay), findsNothing);
+      };
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: FrameMonitor(
+            frameNotifier: frameNotifier,
+            coordinator: fake,
+            debugOptions: const DebugOptions(),
+            child: const SizedBox(width: 100, height: 100),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      expect(fake.captureSnapshotCallCount, 1);
       expect(find.byType(MaskOverlay), findsOneWidget);
     });
 

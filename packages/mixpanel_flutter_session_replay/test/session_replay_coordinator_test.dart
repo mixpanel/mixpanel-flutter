@@ -10,6 +10,7 @@ import 'package:http/testing.dart' as http_testing;
 import 'package:mixpanel_flutter_session_replay/src/internal/session_replay_coordinator.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/event_recorder.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/screenshot_capturer.dart';
+import 'package:mixpanel_flutter_session_replay/src/internal/native_image_compressor.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/upload/upload_service.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/settings/settings_service.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/settings/settings_storage_provider.dart';
@@ -112,6 +113,7 @@ void main() {
         directive: MaskingDirective(autoMaskTypes: {}),
         logger: logger,
         debugOverlayEnabled: false,
+        compressor: DartPngCompressor(),
       );
     });
 
@@ -198,6 +200,7 @@ void main() {
           directive: MaskingDirective(autoMaskTypes: {}),
           logger: logger,
           debugOverlayEnabled: false,
+          compressor: DartPngCompressor(),
           wireframeEmitter: emitter,
         );
 
@@ -851,6 +854,7 @@ void main() {
         directive: MaskingDirective(autoMaskTypes: {}),
         logger: logger,
         debugOverlayEnabled: false,
+        compressor: DartPngCompressor(),
         wireframeEmitter: WireframeEmitter(
           sensitiveRules: const [],
           debugEmitter: null,
@@ -1795,6 +1799,7 @@ class _PendingScreenshotCapturer extends ScreenshotCapturer {
     : super(
         directive: MaskingDirective(autoMaskTypes: {}),
         debugOverlayEnabled: false,
+        compressor: DartPngCompressor(),
       );
 
   final Completer<CaptureResult> pendingCapture = Completer<CaptureResult>();

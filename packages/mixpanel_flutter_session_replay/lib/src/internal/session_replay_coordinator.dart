@@ -1,4 +1,5 @@
 import 'dart:math' show Random;
+import 'package:clock/clock.dart';
 import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
@@ -8,6 +9,7 @@ import '../models/debug_overlay_colors.dart';
 import '../models/masking_directive.dart';
 import '../models/results.dart';
 import '../models/session_event.dart' show TouchPosition;
+import '../models/session.dart';
 import 'background_task_manager.dart';
 import 'event_recorder.dart';
 import 'screenshot_capturer.dart';
@@ -15,6 +17,7 @@ import 'triggers/trigger_service.dart';
 import 'upload/upload_service.dart';
 import 'settings/settings_service.dart';
 import 'session/session_manager.dart';
+import 'session/idle_timeout_timer.dart';
 import 'widget_coordinator.dart';
 import 'session_replay_sender.dart';
 import 'logger.dart';
@@ -52,6 +55,10 @@ class SessionReplayCoordinator implements WidgetCoordinator {
   bool _isAppInForeground = false;
   bool _isDisposed = false;
 
+  @override
+  bool get capturesRenderedSurface =>
+      _screenshotCapturer.capturesRenderedSurface;
+
   // Store the result of the settings check
   RemoteEnablementState _remoteEnablementState = RemoteEnablementState.pending;
 
@@ -71,6 +78,39 @@ class SessionReplayCoordinator implements WidgetCoordinator {
   // Reusable random instance for sampling decisions
   static final Random _random = Random();
 
+  // -- Web idle timeout / session resume --
+
+  /// Idle timeout timer (web only, null on native)
+  final IdleTimeoutTimer? _idleTimer;
+
+  /// Max session duration (web only, null on native)
+  final Duration? _maxSessionDuration;
+
+  /// Absolute expiry time for the current session's max duration
+  DateTime? _maxSessionExpiry;
+
+  /// A persisted web session waiting for the fresh remote enablement verdict.
+  /// Keeping it staged prevents screenshots and interactions from being
+  /// captured locally before the project has allowed recording this launch.
+  Session? _pendingResumableSession;
+
+  /// True when recording was stopped due to idle timeout (awaiting next interaction)
+  bool _isIdledOut = false;
+
+  /// Callback to persist idle expiry to IndexedDB (web only)
+  final Future<void> Function(
+    String sessionId,
+    int idleExpiresMs,
+    int maxExpiresMs,
+  )?
+  _persistIdleExpiry;
+
+  /// Debounce: last time we persisted idle expiry to IndexedDB
+  DateTime? _lastExpiryWriteTime;
+
+  /// Debounce interval for expiry writes (avoid excessive IDB writes)
+  static const _expiryWriteDebounce = Duration(seconds: 5);
+
   SessionReplayCoordinator({
     required ScreenshotCapturer screenshotCapturer,
     required EventRecorder eventRecorder,
@@ -82,6 +122,14 @@ class SessionReplayCoordinator implements WidgetCoordinator {
     required RemoteSettingsMode remoteSettingsMode,
     required DebugOptions? debugOptions,
     BackgroundTaskManager? backgroundTaskManager,
+    IdleTimeoutTimer? idleTimer,
+    Duration? maxSessionDuration,
+    Future<void> Function(
+      String sessionId,
+      int idleExpiresMs,
+      int maxExpiresMs,
+    )?
+    persistIdleExpiry,
   }) : _screenshotCapturer = screenshotCapturer,
        _eventRecorder = eventRecorder,
        _uploadService = uploadService,
@@ -92,7 +140,10 @@ class SessionReplayCoordinator implements WidgetCoordinator {
        _logger = logger,
        _autoRecordSessionsPercent = autoRecordSessionsPercent,
        _remoteSettingsMode = remoteSettingsMode,
-       _debugOptions = debugOptions {
+       _debugOptions = debugOptions,
+       _idleTimer = idleTimer,
+       _maxSessionDuration = maxSessionDuration,
+       _persistIdleExpiry = persistIdleExpiry {
     // Note: We do NOT auto-start recording in constructor
     // Recording will be started by LifecycleObserver when it detects app is resumed
     if (autoRecordSessionsPercent > 0) {
@@ -184,6 +235,9 @@ class SessionReplayCoordinator implements WidgetCoordinator {
       return;
     }
 
+    // Check max session duration (web only)
+    if (_checkMaxSessionExpired()) return;
+
     _logger.debug('Capturing snapshot', tag: 'coordinator');
 
     // Get JPG bytes from screenshot capturer
@@ -236,6 +290,9 @@ class SessionReplayCoordinator implements WidgetCoordinator {
             distinctId: distinctId,
           );
         }
+
+        // Reset idle timer and persist expiry (web only)
+        _onActivity();
       case CaptureFailure(:final error, :final errorMessage):
         _logger.debug(
           'Capture failed: $error - $errorMessage',
@@ -258,11 +315,17 @@ class SessionReplayCoordinator implements WidgetCoordinator {
   ) {
     if (!_canRecordTouch('interaction')) return;
 
+    // Check max session duration (web only)
+    if (_checkMaxSessionExpired()) return;
+
     _logger.debug(
       'recordInteraction called with type: $interactionType, position: $position',
       tag: 'coordinator',
     );
     _eventRecorder.recordInteraction(interactionType, position, timestamp);
+
+    // Reset idle timer and persist expiry (web only)
+    _onActivity();
   }
 
   /// Capture a batch of sampled drag positions
@@ -349,7 +412,7 @@ class SessionReplayCoordinator implements WidgetCoordinator {
 
     // stopRecording() must execute synchronously (state transitions immediately).
     // It triggers a fire-and-forget flush internally.
-    stopRecording();
+    stopRecording(cancelPendingResume: false);
 
     // Call flush() to join the in-progress flush via the completer,
     // then end the background task when it completes.
@@ -417,6 +480,17 @@ class SessionReplayCoordinator implements WidgetCoordinator {
                 tag: 'coordinator',
               );
 
+              // A previous page may have persisted events without completing
+              // its page-hide flush. Drain that backlog even when this page's
+              // sampling decision does not start a new recording.
+              _uploadService.flush().catchError((error) {
+                _logger.warning(
+                  'Failed to flush persisted replay backlog: $error',
+                  tag: 'coordinator',
+                );
+                return FlushResult();
+              });
+
               // Verify still in foreground after async settings check
               if (!_isAppInForeground) {
                 _logger.debug(
@@ -426,8 +500,9 @@ class SessionReplayCoordinator implements WidgetCoordinator {
                 return;
               }
 
-              // Auto-start recording after settings are resolved
-              startRecording(sessionsPercent: _autoRecordSessionsPercent);
+              // Resume a persisted session only after the fresh enablement
+              // verdict. Otherwise apply the normal auto-record decision.
+              _startOrResumeRecording();
             })
             .catchError((error) {
               _logger.error(
@@ -440,7 +515,7 @@ class SessionReplayCoordinator implements WidgetCoordinator {
             });
 
       case RemoteEnablementState.enabled:
-        startRecording(sessionsPercent: _autoRecordSessionsPercent);
+        _startOrResumeRecording();
 
       case RemoteEnablementState.disabled:
         _logger.debug(
@@ -448,6 +523,16 @@ class SessionReplayCoordinator implements WidgetCoordinator {
           tag: 'coordinator',
         );
     }
+  }
+
+  void _startOrResumeRecording() {
+    final pendingSession = _pendingResumableSession;
+    if (pendingSession != null) {
+      _pendingResumableSession = null;
+      resumeSession(pendingSession);
+      return;
+    }
+    startRecording(sessionsPercent: _autoRecordSessionsPercent);
   }
 
   /// Hands the server's wireframe verdict to the capturer.
@@ -602,6 +687,11 @@ class SessionReplayCoordinator implements WidgetCoordinator {
       // Transition to initializing immediately to prevent double-starts
       _recordingState = RecordingState.initializing;
 
+      // Set max session expiry (web only)
+      if (_maxSessionDuration != null) {
+        _maxSessionExpiry = clock.now().add(_maxSessionDuration);
+      }
+
       // Register replay ID as super property with the main Mixpanel SDK
       SessionReplaySender.register({'\$mp_replay_id': session.id});
 
@@ -626,6 +716,10 @@ class SessionReplayCoordinator implements WidgetCoordinator {
         }
         _recordingState = RecordingState.recording;
         _uploadService.startAutoFlush();
+        _idleTimer?.start();
+        // Persist initial expiry to IndexedDB (web only, force write)
+        _lastExpiryWriteTime = null;
+        _persistExpiryDebounced();
         _logger.debug(
           'Session metadata persisted, recording enabled',
           tag: 'coordinator',
@@ -647,7 +741,7 @@ class SessionReplayCoordinator implements WidgetCoordinator {
   ///
   /// Called automatically on app backgrounding to end the current replay session.
   /// Also flushes pending events to ensure data is uploaded (matches iOS behavior).
-  void stopRecording() {
+  void stopRecording({bool cancelPendingResume = true}) {
     // Check if disposed first
     if (_isDisposed) {
       _logger.debug(
@@ -659,6 +753,10 @@ class SessionReplayCoordinator implements WidgetCoordinator {
 
     _logger.debug('stopRecording called', tag: 'coordinator');
 
+    if (cancelPendingResume) {
+      _pendingResumableSession = null;
+    }
+
     // Transition to notRecording state
     _recordingState = RecordingState.notRecording;
 
@@ -668,8 +766,10 @@ class SessionReplayCoordinator implements WidgetCoordinator {
       _maskRegions.value = const <MaskRegionInfo>[];
     }
 
-    // Stop automatic uploads
+    // Stop automatic uploads and idle timer
     _uploadService.stopAutoFlush();
+    _idleTimer?.stop();
+    _maxSessionExpiry = null;
 
     // Unregister replay ID from the main Mixpanel SDK
     SessionReplaySender.unregister('\$mp_replay_id');
@@ -689,6 +789,130 @@ class SessionReplayCoordinator implements WidgetCoordinator {
     _logger.debug('Recording stopped, state reset', tag: 'coordinator');
   }
 
+  // -- Web idle timeout / session resume methods --
+
+  /// Notify coordinator of user activity (even when not recording).
+  ///
+  /// Used on web to restart recording after an idle timeout.
+  /// On native (or when no idle timeout is configured), this is a no-op.
+  @override
+  void onUserActivity() {
+    if (_isIdledOut) {
+      _logger.info(
+        'User activity detected after idle timeout, starting new session',
+        tag: 'coordinator',
+      );
+      _isIdledOut = false;
+      startRecording(sessionsPercent: _autoRecordSessionsPercent);
+    }
+  }
+
+  /// Handle idle timeout expiry.
+  ///
+  /// Called by [IdleTimeoutTimer] when the idle timeout fires.
+  /// Stops recording and sets [_isIdledOut] so the next user interaction
+  /// triggers a new session via [onUserActivity].
+  void handleIdleTimeout() {
+    if (_isDisposed || _recordingState == RecordingState.notRecording) return;
+
+    _logger.info('Idle timeout fired, stopping recording', tag: 'coordinator');
+    stopRecording();
+    _isIdledOut = true;
+  }
+
+  /// Resume a previously persisted session (web only).
+  ///
+  /// Called during initialization when a valid non-expired session is found
+  /// in IndexedDB. Restores the session without creating a new one or
+  /// re-rolling sampling.
+  void resumeSession(Session session) {
+    if (_isDisposed) return;
+
+    _logger.info('Resuming session: ${session.id}', tag: 'coordinator');
+
+    _pendingResumableSession = null;
+
+    _sessionManager.resumeSession(session);
+
+    // Set max session expiry based on original start time
+    if (_maxSessionDuration != null) {
+      _maxSessionExpiry = session.startTime.add(_maxSessionDuration);
+    }
+
+    // Register replay ID as super property
+    SessionReplaySender.register({'\$mp_replay_id': session.id});
+
+    _recordingState = RecordingState.recording;
+    _uploadService.startAutoFlush();
+    _idleTimer?.start();
+  }
+
+  /// Stage a persisted web session until remote recording enablement has been
+  /// checked for this page load.
+  void prepareSessionResume(Session session) {
+    if (_isDisposed) return;
+    _pendingResumableSession = session;
+    _logger.info(
+      'Session ${session.id} is eligible for resume; waiting for remote settings',
+      tag: 'coordinator',
+    );
+  }
+
+  /// Reset idle timer and persist expiry (debounced). Called on every
+  /// successful capture or interaction.
+  void _onActivity() {
+    _idleTimer?.reset();
+    _persistExpiryDebounced();
+  }
+
+  /// Check if max session duration has been exceeded.
+  /// Returns true if expired (and triggers idle-out flow).
+  bool _checkMaxSessionExpired() {
+    if (_maxSessionExpiry == null) return false;
+    if (clock.now().isAfter(_maxSessionExpiry!)) {
+      _logger.info(
+        'Max session duration exceeded, stopping recording',
+        tag: 'coordinator',
+      );
+      stopRecording();
+      _isIdledOut = true;
+      return true;
+    }
+    return false;
+  }
+
+  /// Persist idle expiry to IndexedDB (debounced to avoid excessive writes).
+  void _persistExpiryDebounced() {
+    if (_persistIdleExpiry == null ||
+        _idleTimer == null ||
+        _maxSessionExpiry == null) {
+      return;
+    }
+
+    final now = clock.now();
+    if (_lastExpiryWriteTime != null &&
+        now.difference(_lastExpiryWriteTime!) < _expiryWriteDebounce) {
+      return;
+    }
+
+    _lastExpiryWriteTime = now;
+    final sessionId = _sessionManager.getCurrentSession().id;
+    final idleExpiresMs = now.add(_idleTimer.timeout).millisecondsSinceEpoch;
+
+    _persistIdleExpiry(
+      sessionId,
+      idleExpiresMs,
+      _maxSessionExpiry!.millisecondsSinceEpoch,
+    ).catchError((e) {
+      _logger.error(
+        'Failed to persist idle expiry: $e',
+        null,
+        null,
+        'coordinator',
+      );
+    });
+  }
+
   /// Dispose resources
   ///
   /// Stops all captures, flushes pending events, then closes connections.
@@ -703,6 +927,7 @@ class SessionReplayCoordinator implements WidgetCoordinator {
     // STEP 1: Stop all captures (prevents race condition with flush)
     _isDisposed = true;
     _recordingState = RecordingState.notRecording;
+    _pendingResumableSession = null;
     _logger.debug(
       'Marked as disposed - no more captures will be accepted',
       tag: 'coordinator',
@@ -715,6 +940,7 @@ class SessionReplayCoordinator implements WidgetCoordinator {
     await _triggerService.dispose();
     _uploadService.dispose();
     _settingsService.dispose();
+    _idleTimer?.dispose();
     await _eventRecorder.dispose(); // Closes database connection
     _maskRegions.dispose();
     await _screenshotCapturer.dispose(); // Releases native cached resources
