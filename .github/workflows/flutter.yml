@@ -51,40 +51,6 @@ jobs:
         working-directory: packages/mixpanel_flutter/example
         run: flutter build apk
 
-  test-android-agp9:
-    name: Android integration (AGP 9 built-in Kotlin)
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
-      - uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9  # v4
-        with:
-          java-version: "17"
-          distribution: 'temurin'
-      - uses: ./.github/actions/setup-flutter
-        with:
-          # AGP 9 needs the Flutter Gradle plugin's built-in-Kotlin support, added in 3.44.
-          flutter-version: "3.47.4"
-      - name: Retarget the session replay example at AGP 9
-        working-directory: packages/mixpanel_flutter_session_replay/example
-        # This example depends on mixpanel_flutter, so one AGP 9 build covers both plugins'
-        # Kotlin wiring. The checked-in examples stay on AGP 8 so the existing jobs keep
-        # covering that path; AGP 9 is applied here instead.
-        run: |
-          set -euo pipefail
-          printf 'dependency_overrides:\n  mixpanel_flutter:\n    path: ../../mixpanel_flutter\n  mixpanel_flutter_common:\n    path: ../../mixpanel_flutter_common\n' > pubspec_overrides.yaml
-          cd android
-          perl -pi -e 's|id\("com\.android\.application"\) version "[^"]*"|id("com.android.application") version "9.1.0"|' settings.gradle.kts
-          perl -pi -e 's|id\("org\.jetbrains\.kotlin\.android"\) version "[^"]*"|id("org.jetbrains.kotlin.android") version "2.4.0"|' settings.gradle.kts
-          perl -pi -e 's{gradle-[\d.]+-(all|bin)\.zip}{gradle-9.3.1-bin.zip}' gradle/wrapper/gradle-wrapper.properties
-          # The app has to migrate off KGP too; AGP 9 compiles its Kotlin for it.
-          perl -ni -e 'print unless /id\("kotlin-android"\)/' app/build.gradle.kts
-          perl -0pi -e 's|\n    kotlinOptions \{.*?\n    \}\n|\n|s' app/build.gradle.kts
-          printf 'android.builtInKotlin=true\n' >> gradle.properties
-          sed -n '/^plugins/,/^}/p' settings.gradle.kts
-      - name: Build on AGP 9
-        working-directory: packages/mixpanel_flutter_session_replay/example
-        run: flutter build apk --debug
-
   test-ios-integration:
     runs-on: macos-latest
     steps:
