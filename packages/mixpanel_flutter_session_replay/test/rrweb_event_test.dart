@@ -43,10 +43,10 @@ void main() {
         expect(rrweb.data['height'], expectedHeight);
       });
 
-      test('converts interaction event to rrweb incremental snapshot', () {
+      test('converts click event to rrweb incremental snapshot', () {
         // GIVEN
         final expectedTimestampMs = 3000;
-        final expectedInteractionType = RRWebMouseInteraction.touchStart;
+        final expectedInteractionType = RRWebMouseInteraction.click;
         final expectedX = 150;
         final expectedY = 300;
         final event = SessionReplayEvent(

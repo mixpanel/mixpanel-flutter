@@ -26,6 +26,9 @@ class FakeWidgetCoordinator implements WidgetCoordinator {
   bool isAppInForeground;
 
   @override
+  bool capturesRenderedSurface;
+
+  @override
   final MixpanelLogger logger;
 
   @override
@@ -36,8 +39,10 @@ class FakeWidgetCoordinator implements WidgetCoordinator {
   int onAppForegroundedCallCount = 0;
   int onAppBackgroundedCallCount = 0;
   int captureSnapshotCallCount = 0;
+  void Function()? onCaptureSnapshot;
   final List<({RenderRepaintBoundary boundary, Element boundaryElement})>
   capturedSnapshots = [];
+  int onUserActivityCallCount = 0;
 
   final List<({int interactionType, Offset position, DateTime timestamp})>
   capturedInteractions = [];
@@ -49,6 +54,7 @@ class FakeWidgetCoordinator implements WidgetCoordinator {
     this.recordingState = RecordingState.notRecording,
     this.remoteEnablementState = RemoteEnablementState.enabled,
     this.isAppInForeground = true,
+    this.capturesRenderedSurface = false,
     MixpanelLogger? logger,
     ValueNotifier<List<MaskRegionInfo>>? maskRegionsNotifier,
   }) : logger = logger ?? MixpanelLogger(LogLevel.none),
@@ -88,10 +94,16 @@ class FakeWidgetCoordinator implements WidgetCoordinator {
     RenderRepaintBoundary boundary, {
     required Element boundaryElement,
   }) async {
+    onCaptureSnapshot?.call();
     captureSnapshotCallCount++;
     capturedSnapshots.add((
       boundary: boundary,
       boundaryElement: boundaryElement,
     ));
+  }
+
+  @override
+  void onUserActivity() {
+    onUserActivityCallCount++;
   }
 }

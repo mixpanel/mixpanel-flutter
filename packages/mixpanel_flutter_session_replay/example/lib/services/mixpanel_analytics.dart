@@ -1,11 +1,10 @@
-import 'dart:io' show Platform;
-
+import 'package:flutter/foundation.dart';
 import 'package:mixpanel_flutter/mixpanel_flutter.dart';
 
 /// Wrapper around the Mixpanel Flutter Analytics SDK.
 ///
 /// Compartmentalizes all analytics calls and no-ops on unsupported platforms
-/// (web, Linux, Windows) so the rest of the app doesn't need platform checks.
+/// (Linux and Windows) so the rest of the app doesn't need platform checks.
 class MixpanelAnalytics {
   MixpanelAnalytics._(this._mixpanel);
 
@@ -17,7 +16,10 @@ class MixpanelAnalytics {
   static MixpanelAnalytics? get instance => _instance;
 
   static bool get _isSupported =>
-      Platform.isAndroid || Platform.isIOS || Platform.isMacOS;
+      kIsWeb ||
+      defaultTargetPlatform == TargetPlatform.android ||
+      defaultTargetPlatform == TargetPlatform.iOS ||
+      defaultTargetPlatform == TargetPlatform.macOS;
 
   /// Initialize the analytics SDK. No-ops on unsupported platforms.
   static Future<void> initialize({

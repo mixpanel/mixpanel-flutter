@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/widgets.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
@@ -32,6 +34,8 @@ class FrameMonitor extends StatefulWidget {
 class _FrameMonitorState extends State<FrameMonitor> {
   final GlobalKey _repaintBoundaryKey = GlobalKey();
   late final CaptureScheduler _scheduler;
+  bool _hideDebugOverlayForCapture = false;
+  int _internalOverlayFrames = 0;
 
   @override
   void initState() {
@@ -52,6 +56,10 @@ class _FrameMonitorState extends State<FrameMonitor> {
 
   void _onFrame() {
     if (!mounted) return;
+    if (_internalOverlayFrames > 0) {
+      _internalOverlayFrames--;
+      return;
+    }
 
     // Skip processing if remotely disabled
     if (widget.coordinator.remoteEnablementState ==
@@ -109,26 +117,49 @@ class _FrameMonitorState extends State<FrameMonitor> {
     // Double-check we can capture (prevents race condition between timer and frame callbacks)
     if (!_scheduler.canCapture()) return;
 
-    final boundaryElement = _repaintBoundaryKey.currentContext;
-    if (boundaryElement is! Element) return;
-
-    final boundary = boundaryElement.findRenderObject();
-    if (boundary is! RenderRepaintBoundary) return;
-
     // Tell scheduler we're starting
     _scheduler.markCaptureStarted();
+    unawaited(_captureWithoutWebDebugOverlay());
+  }
 
-    // Simple call to coordinator (like interactions)
-    widget.coordinator
-        .captureSnapshot(boundary, boundaryElement: boundaryElement)
-        .whenComplete(() {
-          if (mounted) {
-            // Tell scheduler we completed (500ms starts now)
-            // This runs whether capture succeeded or failed, ensuring we always
-            // wait 500ms before the next attempt (prevents excessive retries on failure)
-            _scheduler.markCaptureCompleted();
-          }
-        });
+  Future<void> _captureWithoutWebDebugOverlay() async {
+    final shouldHideOverlay =
+        widget.coordinator.capturesRenderedSurface &&
+        kDebugMode &&
+        widget.debugOptions?.overlayColors != null;
+    if (shouldHideOverlay && mounted) {
+      _internalOverlayFrames++;
+      setState(() => _hideDebugOverlayForCapture = true);
+      // Web captures the browser's rendered canvas rather than only the
+      // RepaintBoundary. Wait until the overlay-free frame is presented before
+      // selecting that canvas, otherwise the diagnostic paint can enter replay.
+      await WidgetsBinding.instance.endOfFrame;
+    }
+
+    try {
+      if (!mounted) return;
+      await _captureCurrentBoundary();
+    } finally {
+      if (mounted) {
+        if (_hideDebugOverlayForCapture) {
+          _internalOverlayFrames++;
+          setState(() => _hideDebugOverlayForCapture = false);
+        }
+        // The 500 ms rate limit starts whether capture succeeded or failed.
+        _scheduler.markCaptureCompleted();
+      }
+    }
+  }
+
+  Future<void> _captureCurrentBoundary() async {
+    final boundaryElement = _repaintBoundaryKey.currentContext;
+    if (boundaryElement is! Element) return;
+    final boundary = boundaryElement.findRenderObject();
+    if (boundary is! RenderRepaintBoundary) return;
+    await widget.coordinator.captureSnapshot(
+      boundary,
+      boundaryElement: boundaryElement,
+    );
   }
 
   @override
@@ -147,7 +178,7 @@ class _FrameMonitorState extends State<FrameMonitor> {
 
     // Conditionally wrap with mask overlay for debugging (only in debug mode)
     final overlayColors = widget.debugOptions?.overlayColors;
-    if (overlayColors != null && kDebugMode) {
+    if (overlayColors != null && kDebugMode && !_hideDebugOverlayForCapture) {
       child = ValueListenableBuilder<List<MaskRegionInfo>>(
         valueListenable: widget.coordinator.maskRegionsNotifier,
         builder: (context, maskRegions, child) {
