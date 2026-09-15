@@ -31,6 +31,10 @@ class EventRecorder {
   /// Stores dimensions as Offset(width, height) for compact representation
   Offset? _lastMetadataDimensions;
 
+  /// Session the cached dimensions were emitted under, so each session emits
+  /// its own metadata even when the dimensions are unchanged
+  String? _lastMetadataSessionId;
+
   EventRecorder({
     required this.eventQueue,
     required this.sessionManager,
@@ -44,10 +48,6 @@ class EventRecorder {
   /// This is called when startRecording() is invoked to ensure we have the correct
   /// replay_start_time for old sessions.
   Future<void> recordSession(Session session) async {
-    // Reset metadata dimensions so the first screenshot of this session
-    // always emits a metadata event with screen dimensions.
-    _lastMetadataDimensions = null;
-
     try {
       await eventQueue.createSessionMetadata(session);
       _logger.debug('Session metadata created for ${session.id}');
@@ -60,11 +60,14 @@ class EventRecorder {
   /// Record a screenshot event
   ///
   /// Saves the provided screenshot data as an event.
+  /// [sessionId] and [distinctId] are the identity pinned at capture time.
   Future<void> recordSnapshot({
     required Uint8List imageData,
     required int width,
     required int height,
     required DateTime timestamp,
+    required String sessionId,
+    required String distinctId,
   }) async {
     _logger.debug('Recording snapshot...');
 
@@ -74,6 +77,8 @@ class EventRecorder {
       width: width,
       height: height,
       timestamp: timestamp,
+      sessionId: sessionId,
+      distinctId: distinctId,
     );
   }
 
@@ -103,7 +108,13 @@ class EventRecorder {
   /// or if dimensions change.
   /// Uses the capture [timestamp] so metadata and its accompanying screenshot
   /// share the same time reference, keeping ID order and timestamp order aligned.
-  Future<void> recordMetadata(int width, int height, DateTime timestamp) async {
+  Future<void> recordMetadata(
+    int width,
+    int height,
+    DateTime timestamp, {
+    String? sessionId,
+    String? distinctId,
+  }) async {
     try {
       _logger.debug('Recording metadata: ${width}x$height');
 
@@ -113,6 +124,8 @@ class EventRecorder {
         type: EventType.metadata,
         payload: payload,
         timestamp: timestamp,
+        sessionId: sessionId,
+        distinctId: distinctId,
       );
     } catch (e) {
       _logger.error('Failed to record metadata: $e');
@@ -126,17 +139,28 @@ class EventRecorder {
     required int width,
     required int height,
     required DateTime timestamp,
+    required String sessionId,
+    required String distinctId,
   }) async {
     _logger.debug('Result dimensions: ${width}x$height');
 
     // Record metadata event if:
-    // 1. This is the first screenshot (dimensions never set), OR
+    // 1. This is the first screenshot of this session, OR
     // 2. The dimensions have changed (e.g., window was resized)
     final currentDimensions = Offset(width.toDouble(), height.toDouble());
-    final dimensionsChanged = _lastMetadataDimensions != currentDimensions;
+    final needsMetadata =
+        _lastMetadataSessionId != sessionId ||
+        _lastMetadataDimensions != currentDimensions;
 
-    if (dimensionsChanged) {
-      await recordMetadata(width, height, timestamp);
+    if (needsMetadata) {
+      await recordMetadata(
+        width,
+        height,
+        timestamp,
+        sessionId: sessionId,
+        distinctId: distinctId,
+      );
+      _lastMetadataSessionId = sessionId;
       _lastMetadataDimensions = currentDimensions;
     }
 
@@ -146,6 +170,8 @@ class EventRecorder {
       type: EventType.screenshot,
       payload: payload,
       timestamp: timestamp,
+      sessionId: sessionId,
+      distinctId: distinctId,
     );
   }
 
@@ -173,17 +199,19 @@ class EventRecorder {
     required EventType type,
     required EventPayload payload,
     required DateTime timestamp,
+    String? sessionId,
+    String? distinctId,
   }) async {
     try {
-      final session = sessionManager.getCurrentSession();
+      final eventSessionId = sessionId ?? sessionManager.getCurrentSession().id;
 
       _logger.debug(
-        'Saving ${type.name} event to queue (session: ${session.id})',
+        'Saving ${type.name} event to queue (session: $eventSessionId)',
       );
 
       final event = SessionReplayEvent(
-        sessionId: session.id,
-        distinctId: getDistinctId(),
+        sessionId: eventSessionId,
+        distinctId: distinctId ?? getDistinctId(),
         timestamp: timestamp,
         type: type,
         payload: payload,

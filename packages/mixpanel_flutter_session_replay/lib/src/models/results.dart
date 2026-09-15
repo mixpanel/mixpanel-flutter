@@ -124,12 +124,20 @@ final class CaptureSuccess extends CaptureResult {
   /// Mask regions that were detected (for debug overlay)
   final List<MaskRegionInfo> maskRegions;
 
+  /// Session the frame was painted under, pinned at capture time
+  final String sessionId;
+
+  /// Distinct ID the frame was painted under, pinned at capture time
+  final String distinctId;
+
   const CaptureSuccess({
     required this.data,
     required this.width,
     required this.height,
     required this.maskCount,
     required this.timestamp,
+    required this.sessionId,
+    required this.distinctId,
     this.maskRegions = const [],
   });
 

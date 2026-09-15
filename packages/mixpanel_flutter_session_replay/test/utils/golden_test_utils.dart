@@ -9,6 +9,7 @@ import 'package:mixpanel_flutter_session_replay/src/models/configuration.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/results.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/masking_directive.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/screenshot_capturer.dart';
+import 'package:mixpanel_flutter_session_replay/src/internal/session/session_manager.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/logger.dart';
 
 /// Whether the test font has been loaded in this test run.
@@ -114,7 +115,11 @@ Future<void> captureGolden(
 
   // Start capture in background
   final captureFuture = tester.runAsync(() async {
-    final result = await capturer.capture(boundary);
+    final result = await capturer.capture(
+      boundary,
+      getCurrentSession: SessionManager().getCurrentSession,
+      getDistinctId: () => 'golden-test-distinct-id',
+    );
 
     // Verify capture succeeded
     if (result is! CaptureSuccess) {
