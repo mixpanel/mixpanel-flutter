@@ -104,7 +104,6 @@ sealed class CaptureResult {
   const CaptureResult();
 }
 
-/// Successful capture result
 /// Session and distinct ID pinned at the moment a frame was captured.
 class CaptureIdentity {
   final String sessionId;
@@ -116,6 +115,7 @@ class CaptureIdentity {
   String toString() => 'CaptureIdentity($sessionId, $distinctId)';
 }
 
+/// Successful capture result
 final class CaptureSuccess extends CaptureResult {
   /// Captured screenshot data (JPEG bytes)
   final Uint8List data;
