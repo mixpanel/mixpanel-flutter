@@ -182,20 +182,21 @@ class SessionReplayCoordinator implements WidgetCoordinator {
 
     _logger.debug('Capturing snapshot', tag: 'coordinator');
 
-    // Events are stamped with whatever session and distinct ID are current when
-    // they reach the queue, so pin both before the capture and compare after.
-    final captureSessionId = _sessionManager.getCurrentSession().id;
-    final captureDistinctId = _eventRecorder.getDistinctId();
+    // Identity is pinned again inside the capturer, at the frame itself; this
+    // value only stands in if the capturer returned none.
+    final fallbackIdentity = _currentCaptureIdentity();
 
     // Get JPG bytes from screenshot capturer
-    final result = await _screenshotCapturer.capture(boundary);
+    final result = await _screenshotCapturer.capture(
+      boundary,
+      identityProvider: _currentCaptureIdentity,
+    );
 
-    if (_isDisposed ||
-        _recordingState != RecordingState.recording ||
-        _sessionManager.getCurrentSession().id != captureSessionId ||
-        _eventRecorder.getDistinctId() != captureDistinctId) {
+    // A frame that resolves after shutdown or after recording stopped has
+    // nowhere to go; one whose identity moved is re-attributed, not dropped.
+    if (_isDisposed || _recordingState != RecordingState.recording) {
       _logger.debug(
-        'Recording stopped or identity changed during capture, dropping frame',
+        'Recording stopped during capture, dropping frame',
         tag: 'coordinator',
       );
       return;
@@ -209,6 +210,7 @@ class SessionReplayCoordinator implements WidgetCoordinator {
         :final height,
         :final timestamp,
         :final maskRegions,
+        :final identity,
       ):
         // Update mask regions for debug overlay (only if overlay is enabled)
         // Diff check prevents feedback loop: overlay rebuild → new frame → capture → repeat
@@ -218,11 +220,14 @@ class SessionReplayCoordinator implements WidgetCoordinator {
         }
 
         // Pass JPG bytes to event recorder to save with the capture timestamp
+        final captureIdentity = identity ?? fallbackIdentity;
         await _eventRecorder.recordSnapshot(
           imageData: data,
           width: width,
           height: height,
           timestamp: timestamp,
+          sessionId: captureIdentity.sessionId,
+          distinctId: captureIdentity.distinctId,
         );
       case CaptureFailure(:final error, :final errorMessage):
         _logger.debug(
@@ -231,6 +236,11 @@ class SessionReplayCoordinator implements WidgetCoordinator {
         );
     }
   }
+
+  CaptureIdentity _currentCaptureIdentity() => CaptureIdentity(
+    sessionId: _sessionManager.getCurrentSession().id,
+    distinctId: _eventRecorder.getDistinctId(),
+  );
 
   /// Capture an interaction event with a specific type
   ///

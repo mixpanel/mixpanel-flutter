@@ -16,6 +16,9 @@ import 'masking/mask_painter.dart';
 import 'native_image_compressor.dart';
 import 'logger.dart';
 
+/// Supplies the identity to stamp on a frame at the moment it is captured.
+typedef CaptureIdentityProvider = CaptureIdentity Function();
+
 /// Compression strategy for captured screenshots.
 ///
 /// Change [ScreenshotCapturer.compressionMode] to switch between strategies
@@ -72,10 +75,12 @@ class ScreenshotCapturer {
   /// Parameters:
   /// - [boundary]: The render boundary to capture
   /// - [maskTypes]: Set of view types to auto-mask (overrides directive if provided)
+  /// - [identityProvider]: Supplies the identity to pin to the captured frame
   /// Returns CaptureResult with compressed image data or error
   Future<CaptureResult> capture(
     RenderRepaintBoundary boundary, {
     Set<AutoMaskedView>? maskTypes,
+    CaptureIdentityProvider? identityProvider,
   }) async {
     final captureStart = clock.now();
     try {
@@ -89,6 +94,9 @@ class ScreenshotCapturer {
 
       // Using endOfFrame ensures both detectMaskRegions() and toImage() see the same painted state
       await SchedulerBinding.instance.endOfFrame;
+
+      // Pinned here because every step below yields, letting identity move.
+      final identity = identityProvider?.call();
 
       // Detect masks after paint is complete
       final maskDetectionStart = clock.now();
@@ -203,6 +211,7 @@ class ScreenshotCapturer {
         maskCount: imageMaskCount,
         timestamp: captureTimestamp,
         maskRegions: maskRegions,
+        identity: identity,
       );
     } catch (e) {
       final totalTime = clock.now().difference(captureStart);

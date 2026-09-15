@@ -1192,51 +1192,58 @@ void main() {
         return coordinator;
       }
 
-      test('drops the frame when the session rotates during capture', () async {
-        // GIVEN - a capture is in flight
-        final coordinator = await startRecordingWithPendingCapture();
-        final capture = coordinator.captureSnapshot(RenderRepaintBoundary());
-        await pumpEventQueue();
+      test(
+        'should record the frame under the captured session when the session rotates during capture',
+        () async {
+          // GIVEN - a capture is in flight
+          final coordinator = await startRecordingWithPendingCapture();
+          final capturedSessionId = sessionManager.getCurrentSession().id;
+          final capture = coordinator.captureSnapshot(RenderRepaintBoundary());
+          await pumpEventQueue();
 
-        // WHEN - a stop/start cycle rotates the session before it resolves
-        coordinator.stopRecording();
-        coordinator.startRecording(sessionsPercent: 100.0);
-        await pumpEventQueue();
-        final rotatedSessionId = sessionManager.getCurrentSession().id;
-        expect(coordinator.recordingState, RecordingState.recording);
-        pendingCapturer.pendingCapture.complete(_fakeCaptureSuccess());
-        await capture;
-        await pumpEventQueue();
+          // WHEN - a stop/start cycle rotates the session before it resolves
+          coordinator.stopRecording();
+          coordinator.startRecording(sessionsPercent: 100.0);
+          await pumpEventQueue();
+          final rotatedSessionId = sessionManager.getCurrentSession().id;
+          expect(rotatedSessionId, isNot(equals(capturedSessionId)));
+          pendingCapturer.completeWithPinnedIdentity();
+          await capture;
+          await pumpEventQueue();
 
-        // THEN - nothing is enqueued under the new session
-        expect(eventQueue.eventCount, 0);
-        final events = await eventQueue.fetchBatch(
-          sessionId: rotatedSessionId,
-          distinctId: currentDistinctId,
-          maxBytes: 100000,
-          maxCount: 10,
-        );
-        expect(events, isEmpty);
-      });
-
-      test('drops the frame when recording stops during capture', () async {
-        // GIVEN - a capture is in flight
-        final coordinator = await startRecordingWithPendingCapture();
-        final capture = coordinator.captureSnapshot(RenderRepaintBoundary());
-        await pumpEventQueue();
-
-        // WHEN - recording stops before it resolves
-        coordinator.stopRecording();
-        pendingCapturer.pendingCapture.complete(_fakeCaptureSuccess());
-        await capture;
-        await pumpEventQueue();
-
-        // THEN
-        expect(eventQueue.eventCount, 0);
-      });
+          // THEN - the frame lands under the session it was captured in
+          final events = await eventQueue.fetchBatch(
+            sessionId: capturedSessionId,
+            distinctId: currentDistinctId,
+            maxBytes: 100000,
+            maxCount: 10,
+          );
+          expect(events.where((e) => e.type == EventType.screenshot).length, 1);
+          expect(events.every((e) => e.sessionId == capturedSessionId), isTrue);
+        },
+      );
 
       test(
-        'drops the frame when the distinct ID changes during capture',
+        'should drop the frame when recording stops during capture',
+        () async {
+          // GIVEN - a capture is in flight
+          final coordinator = await startRecordingWithPendingCapture();
+          final capture = coordinator.captureSnapshot(RenderRepaintBoundary());
+          await pumpEventQueue();
+
+          // WHEN - recording stops before it resolves
+          coordinator.stopRecording();
+          pendingCapturer.completeWithPinnedIdentity();
+          await capture;
+          await pumpEventQueue();
+
+          // THEN
+          expect(eventQueue.eventCount, 0);
+        },
+      );
+
+      test(
+        'should record the frame under the captured distinct ID when identify runs during capture',
         () async {
           // GIVEN - a capture is in flight
           final coordinator = await startRecordingWithPendingCapture();
@@ -1246,25 +1253,23 @@ void main() {
 
           // WHEN - identify() swaps the distinct ID with recording still active
           currentDistinctId = 'user-2';
-          pendingCapturer.pendingCapture.complete(_fakeCaptureSuccess());
+          pendingCapturer.completeWithPinnedIdentity();
           await capture;
           await pumpEventQueue();
 
-          // THEN - the session never rotated, but the frame is still dropped
-          expect(coordinator.recordingState, RecordingState.recording);
-          expect(sessionManager.getCurrentSession().id, sessionId);
-          expect(eventQueue.eventCount, 0);
+          // THEN - the frame keeps the distinct ID it was captured under
           final events = await eventQueue.fetchBatch(
             sessionId: sessionId,
-            distinctId: 'user-2',
+            distinctId: 'user-1',
             maxBytes: 100000,
             maxCount: 10,
           );
-          expect(events, isEmpty);
+          expect(events.where((e) => e.type == EventType.screenshot).length, 1);
+          expect(events.every((e) => e.distinctId == 'user-1'), isTrue);
         },
       );
 
-      test('records the frame when identity is unchanged', () async {
+      test('should record the frame when identity is unchanged', () async {
         // GIVEN - a capture is in flight
         final coordinator = await startRecordingWithPendingCapture();
         final sessionId = sessionManager.getCurrentSession().id;
@@ -1272,7 +1277,7 @@ void main() {
         await pumpEventQueue();
 
         // WHEN - it resolves with session and distinct ID untouched
-        pendingCapturer.pendingCapture.complete(_fakeCaptureSuccess());
+        pendingCapturer.completeWithPinnedIdentity();
         await capture;
         await pumpEventQueue();
 
@@ -1289,11 +1294,65 @@ void main() {
         expect(screenshots.length, 1);
       });
     });
+
+    group('capture identity across the metadata await', () {
+      late _PendingScreenshotCapturer pendingCapturer;
+      late _PausingMetadataEventQueue pausingQueue;
+
+      setUp(() async {
+        pausingQueue = _PausingMetadataEventQueue();
+        await pausingQueue.initialize();
+        eventQueue = pausingQueue;
+        eventRecorder = EventRecorder(
+          eventQueue: pausingQueue,
+          sessionManager: sessionManager,
+          getDistinctId: () => currentDistinctId,
+          logger: logger,
+        );
+        pendingCapturer = _PendingScreenshotCapturer(logger: logger);
+        screenshotCapturer = pendingCapturer;
+      });
+
+      test(
+        'should attribute the frame to the captured distinct ID when identify runs during the metadata await',
+        () async {
+          // GIVEN - a capture has resolved and its metadata write is pending
+          final coordinator = createCoordinator();
+          coordinator.startRecording(sessionsPercent: 100.0);
+          await pumpEventQueue();
+          final sessionId = sessionManager.getCurrentSession().id;
+
+          final capture = coordinator.captureSnapshot(RenderRepaintBoundary());
+          await pumpEventQueue();
+          pendingCapturer.completeWithPinnedIdentity();
+          await pumpEventQueue();
+          expect(pausingQueue.metadataAddStarted, isTrue);
+
+          // WHEN - identify() lands while metadata persistence is still blocked
+          currentDistinctId = 'user-2';
+          pausingQueue.releaseMetadata();
+          await capture;
+          await pumpEventQueue();
+
+          // THEN - both events stay under the identity pinned at capture time
+          expect(pausingQueue.eventCount, 2);
+          final events = await pausingQueue.fetchBatch(
+            sessionId: sessionId,
+            distinctId: 'user-1',
+            maxBytes: 100000,
+            maxCount: 10,
+          );
+          expect(events.where((e) => e.type == EventType.screenshot).length, 1);
+          expect(events.every((e) => e.distinctId == 'user-1'), isTrue);
+        },
+      );
+    });
   });
 }
 
 /// Screenshot capturer whose capture resolves only when the test completes
 /// [pendingCapture], holding a frame in flight across identity changes.
+/// Pins the identity when capture starts, as the real capturer does at the frame.
 class _PendingScreenshotCapturer extends ScreenshotCapturer {
   _PendingScreenshotCapturer({required super.logger})
     : super(
@@ -1302,18 +1361,49 @@ class _PendingScreenshotCapturer extends ScreenshotCapturer {
       );
 
   final Completer<CaptureResult> pendingCapture = Completer<CaptureResult>();
+  CaptureIdentity? pinnedIdentity;
 
   @override
   Future<CaptureResult> capture(
     RenderRepaintBoundary boundary, {
     Set<AutoMaskedView>? maskTypes,
-  }) => pendingCapture.future;
+    CaptureIdentityProvider? identityProvider,
+  }) {
+    pinnedIdentity = identityProvider?.call();
+    return pendingCapture.future;
+  }
+
+  /// Resolve the in-flight capture with the identity pinned when it started.
+  void completeWithPinnedIdentity() =>
+      pendingCapture.complete(_fakeCaptureSuccess(identity: pinnedIdentity));
 }
 
-CaptureSuccess _fakeCaptureSuccess() => CaptureSuccess(
-  data: Uint8List.fromList([1, 2, 3]),
-  width: 100,
-  height: 200,
-  maskCount: 0,
-  timestamp: DateTime.now(),
-);
+CaptureSuccess _fakeCaptureSuccess({CaptureIdentity? identity}) =>
+    CaptureSuccess(
+      data: Uint8List.fromList([1, 2, 3]),
+      width: 100,
+      height: 200,
+      maskCount: 0,
+      timestamp: DateTime.now(),
+      identity: identity,
+    );
+
+/// Event queue that blocks metadata writes until [releaseMetadata], holding the
+/// recorder inside its metadata await while a test changes the current identity.
+class _PausingMetadataEventQueue extends InMemoryEventQueue {
+  final Completer<void> _metadataGate = Completer<void>();
+  bool metadataAddStarted = false;
+
+  @override
+  Future<void> add(SessionReplayEvent event) async {
+    if (event.type == EventType.metadata) {
+      metadataAddStarted = true;
+      await _metadataGate.future;
+    }
+    await super.add(event);
+  }
+
+  void releaseMetadata() {
+    if (!_metadataGate.isCompleted) _metadataGate.complete();
+  }
+}
