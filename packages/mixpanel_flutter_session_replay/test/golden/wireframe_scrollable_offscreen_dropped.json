@@ -1,0 +1,52 @@
+{
+  "viewport": [
+    800,
+    600
+  ],
+  "elements": [
+    {
+      "role": "text",
+      "text": "Row 0",
+      "bounds": [
+        250,
+        250,
+        300,
+        30
+      ],
+      "maskDecision": "NONE"
+    },
+    {
+      "role": "text",
+      "text": "Row 1",
+      "bounds": [
+        250,
+        280,
+        300,
+        30
+      ],
+      "maskDecision": "NONE"
+    },
+    {
+      "role": "text",
+      "text": "Row 2",
+      "bounds": [
+        250,
+        310,
+        300,
+        30
+      ],
+      "maskDecision": "NONE"
+    },
+    {
+      "role": "text",
+      "text": "Row 3 CLIPPED",
+      "bounds": [
+        250,
+        340,
+        300,
+        10
+      ],
+      "maskDecision": "NONE"
+    }
+  ]
+}

@@ -1,6 +1,7 @@
 import 'models/configuration.dart';
 import 'models/data_residency.dart';
 import 'models/debug_overlay_colors.dart';
+import 'models/wireframes_options.dart';
 
 /// Configuration options for Mixpanel Session Replay
 ///
@@ -29,6 +30,7 @@ class SessionReplayOptions {
     this.platformOptions = const PlatformOptions(),
     this.debugOptions,
     this.serverUrl = DataResidency.us,
+    this.wireframesOptions,
   }) : assert(
          autoRecordSessionsPercent >= 0 && autoRecordSessionsPercent <= 100,
          'autoRecordSessionsPercent must be between 0 and 100',
@@ -96,4 +98,28 @@ class SessionReplayOptions {
   /// SessionReplayOptions(serverUrl: DataResidency.eu)
   /// ```
   final String serverUrl;
+
+  /// Opt-in configuration for wireframe capture.
+  ///
+  /// **Beta.** Wireframes are in beta. Before shipping to production, inspect
+  /// the wireframes your app produces and confirm that no sensitive information
+  /// is captured; see [WireframesOptions].
+  ///
+  /// When non-null, the SDK piggybacks on each screenshot pass to emit a
+  /// structured, per-frame list of visible UI elements (role, visible text,
+  /// bounds) into the replay stream.
+  ///
+  /// Defaults to `null` (wireframes disabled).
+  ///
+  /// Example:
+  /// ```dart
+  /// SessionReplayOptions(
+  ///   wireframesOptions: WireframesOptions(
+  ///     sensitiveRules: [
+  ///       RedactRegexRule(RegExp(r'\d{3}-\d{2}-\d{4}'), replacement: '[SSN]'),
+  ///     ],
+  ///   ),
+  /// )
+  /// ```
+  final WireframesOptions? wireframesOptions;
 }

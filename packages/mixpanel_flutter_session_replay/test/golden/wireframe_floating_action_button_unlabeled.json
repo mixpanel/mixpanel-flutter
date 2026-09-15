@@ -1,0 +1,19 @@
+{
+  "viewport": [
+    800,
+    600
+  ],
+  "elements": [
+    {
+      "role": "button",
+      "text": null,
+      "bounds": [
+        372,
+        272,
+        56,
+        56
+      ],
+      "maskDecision": "NONE"
+    }
+  ]
+}

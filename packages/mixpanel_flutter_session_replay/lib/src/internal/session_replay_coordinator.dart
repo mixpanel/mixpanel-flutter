@@ -7,6 +7,7 @@ import '../models/configuration.dart';
 import '../models/debug_overlay_colors.dart';
 import '../models/masking_directive.dart';
 import '../models/results.dart';
+import '../models/session_event.dart' show TouchPosition;
 import 'background_task_manager.dart';
 import 'event_recorder.dart';
 import 'screenshot_capturer.dart';
@@ -162,7 +163,10 @@ class SessionReplayCoordinator implements WidgetCoordinator {
   /// This is called by FrameMonitor when its scheduler determines a capture should happen.
   /// Coordinates the capture process: gets JPG from recorder, passes to event recorder.
   @override
-  Future<void> captureSnapshot(RenderRepaintBoundary boundary) async {
+  Future<void> captureSnapshot(
+    RenderRepaintBoundary boundary, {
+    required Element boundaryElement,
+  }) async {
     // Check if disposed first (prevents captures during shutdown)
     if (_isDisposed) {
       _logger.debug(
@@ -183,7 +187,10 @@ class SessionReplayCoordinator implements WidgetCoordinator {
     _logger.debug('Capturing snapshot', tag: 'coordinator');
 
     // Get JPG bytes from screenshot capturer
-    final result = await _screenshotCapturer.capture(boundary);
+    final result = await _screenshotCapturer.capture(
+      boundary,
+      boundaryElement: boundaryElement,
+    );
 
     // Handle result using pattern matching
     switch (result) {
@@ -193,6 +200,7 @@ class SessionReplayCoordinator implements WidgetCoordinator {
         :final height,
         :final timestamp,
         :final maskRegions,
+        :final wireframes,
       ):
         // Update mask regions for debug overlay (only if overlay is enabled)
         // Diff check prevents feedback loop: overlay rebuild → new frame → capture → repeat
@@ -208,6 +216,16 @@ class SessionReplayCoordinator implements WidgetCoordinator {
           height: height,
           timestamp: timestamp,
         );
+
+        // Emit wireframe alongside the screenshot with the same timestamp
+        // so downstream ordering by ID aligns wireframe → matching screenshot.
+        // Null when wireframes are disabled or the emitter deduped this frame.
+        if (wireframes != null) {
+          await _eventRecorder.recordWireframe(
+            payload: wireframes,
+            timestamp: timestamp,
+          );
+        }
       case CaptureFailure(:final error, :final errorMessage):
         _logger.debug(
           'Capture failed: $error - $errorMessage',
@@ -216,34 +234,63 @@ class SessionReplayCoordinator implements WidgetCoordinator {
     }
   }
 
-  /// Capture an interaction event with a specific type
+  /// Capture a gesture boundary with a specific type
   ///
-  /// [interactionType] - The RRWeb interaction type (e.g., touchStart, touchEnd, click)
+  /// [interactionType] - The RRWeb interaction type (touchStart, touchEnd,
+  /// touchCancel)
   /// [position] - The position where the interaction occurred
+  /// [timestamp] - When the pointer event happened
   @override
-  void captureInteraction(int interactionType, Offset position) {
-    // Check if disposed first (prevents captures during shutdown)
-    if (_isDisposed) {
-      _logger.debug(
-        'Coordinator disposed, skipping interaction capture',
-        tag: 'coordinator',
-      );
-      return;
-    }
-
-    if (_recordingState != RecordingState.recording) {
-      _logger.debug(
-        'Recording not active, skipping interaction capture',
-        tag: 'coordinator',
-      );
-      return;
-    }
+  void captureInteraction(
+    int interactionType,
+    Offset position,
+    DateTime timestamp,
+  ) {
+    if (!_canRecordTouch('interaction')) return;
 
     _logger.debug(
       'recordInteraction called with type: $interactionType, position: $position',
       tag: 'coordinator',
     );
-    _eventRecorder.recordInteraction(interactionType, position);
+    _eventRecorder.recordInteraction(interactionType, position, timestamp);
+  }
+
+  /// Capture a batch of sampled drag positions
+  ///
+  /// [positions] - Sampled positions, oldest first
+  /// [timestamp] - When the final position happened
+  @override
+  void captureTouchMove(List<TouchPosition> positions, DateTime timestamp) {
+    if (!_canRecordTouch('touch move')) return;
+
+    _logger.debug(
+      'recordTouchMove called with ${positions.length} positions',
+      tag: 'coordinator',
+    );
+    _eventRecorder.recordTouchMove(positions: positions, timestamp: timestamp);
+  }
+
+  /// Shared gate for the touch stream: never record while disposed or while
+  /// recording is inactive.
+  bool _canRecordTouch(String what) {
+    // Check if disposed first (prevents captures during shutdown)
+    if (_isDisposed) {
+      _logger.debug(
+        'Coordinator disposed, skipping $what capture',
+        tag: 'coordinator',
+      );
+      return false;
+    }
+
+    if (_recordingState != RecordingState.recording) {
+      _logger.debug(
+        'Recording not active, skipping $what capture',
+        tag: 'coordinator',
+      );
+      return false;
+    }
+
+    return true;
   }
 
   /// Flush queued events to server
@@ -333,6 +380,13 @@ class SessionReplayCoordinator implements WidgetCoordinator {
                   ? RemoteEnablementState.enabled
                   : RemoteEnablementState.disabled;
 
+              // The wireframe kill switch is an enablement switch, not remote
+              // config, so it is honored in every remote settings mode and
+              // regardless of whether recording itself is allowed. Forwarded
+              // before the recording branch below because until the capturer
+              // has the verdict it emits no wireframes at all.
+              _applyWireframeVerdict(result);
+
               if (!result.isRecordingEnabled) {
                 _logger.warning(
                   'Recording disabled by remote enablement check',
@@ -384,6 +438,26 @@ class SessionReplayCoordinator implements WidgetCoordinator {
           tag: 'coordinator',
         );
     }
+  }
+
+  /// Hands the server's wireframe verdict to the capturer.
+  ///
+  /// Always forwarded, including the `true` case: the capturer suppresses
+  /// wireframes until it hears a verdict, so a frame captured by a manually
+  /// started recording cannot ship a wireframe before `/settings` has answered.
+  /// When the verdict is `false`, replay keeps recording and only the wireframe
+  /// payload is dropped. No-op in effect when wireframes were never turned on
+  /// locally — the capturer has no emitter either way.
+  void _applyWireframeVerdict(RemoteSettingsResult result) {
+    if (!result.isWireframeEnabled) {
+      _logger.warning(
+        'Wireframe capture is disabled via remote settings',
+        tag: 'coordinator',
+      );
+    }
+    _screenshotCapturer.applyRemoteWireframeVerdict(
+      isEnabled: result.isWireframeEnabled,
+    );
   }
 
   /// Applies remote settings to the coordinator based on [_remoteSettingsMode].
@@ -506,6 +580,14 @@ class SessionReplayCoordinator implements WidgetCoordinator {
       // This generates a new session ID for each foreground
       final session = _sessionManager.startNewSession();
       _logger.debug('New session created: ${session.id}', tag: 'coordinator');
+
+      // Wireframe dedup is per session, not per SDK lifetime. The emitter is built once
+      // in initialize() and outlives a stop/start cycle, so without this the new
+      // session's first frame is compared against the previous session's last one — and
+      // a background/foreground onto an unchanged screen dedups it away, shipping an
+      // opening screenshot with no mp_wireframe to describe it. Matches iOS and Android,
+      // which reset at the same point.
+      _screenshotCapturer.resetWireframeDedup();
 
       // Transition to initializing immediately to prevent double-starts
       _recordingState = RecordingState.initializing;
