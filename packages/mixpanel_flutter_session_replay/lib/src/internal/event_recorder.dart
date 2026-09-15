@@ -147,6 +147,9 @@ class EventRecorder {
     final currentDimensions = Offset(width.toDouble(), height.toDouble());
 
     if (_lastMetadataDimensions != currentDimensions) {
+      // Assigned before the await so that a session rotating during
+      // persistence clears it last and still emits its own metadata.
+      _lastMetadataDimensions = currentDimensions;
       await recordMetadata(
         width,
         height,
@@ -154,7 +157,6 @@ class EventRecorder {
         sessionId: sessionId,
         distinctId: distinctId,
       );
-      _lastMetadataDimensions = currentDimensions;
     }
 
     final payload = ScreenshotPayload(imageData: imageData);

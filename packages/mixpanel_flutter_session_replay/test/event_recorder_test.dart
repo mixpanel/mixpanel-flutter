@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:clock/clock.dart';
@@ -125,6 +126,64 @@ void main() {
         expect(metadata.width, 375);
         expect(metadata.height, 812);
       });
+
+      test(
+        'should still emit metadata for the new session when the session rotates during metadata persistence',
+        () async {
+          // GIVEN - a recorder whose metadata write blocks mid-flight
+          final pausingQueue = _PausingMetadataEventQueue();
+          await pausingQueue.initialize();
+          final pausingRecorder = EventRecorder(
+            eventQueue: pausingQueue,
+            sessionManager: sessionManager,
+            getDistinctId: () => defaultDistinctId,
+            logger: MixpanelLogger(LogLevel.none),
+          );
+
+          // WHEN - the session rotates while that write is still pending
+          final inFlight = pausingRecorder.recordSnapshot(
+            imageData: Uint8List(0),
+            width: 375,
+            height: 812,
+            timestamp: clock.now(),
+            sessionId: session.id,
+            distinctId: defaultDistinctId,
+          );
+          await pumpEventQueue();
+          final newSession = sessionManager.startNewSession();
+          await pausingRecorder.recordSession(newSession);
+          pausingQueue.releaseMetadata();
+          await inFlight;
+
+          // Drain the previous session so the batch below holds only the new one
+          final previousEvents = await pausingQueue.fetchBatch(
+            sessionId: session.id,
+            distinctId: defaultDistinctId,
+            maxBytes: 100000,
+            maxCount: 10,
+          );
+          await pausingQueue.remove(previousEvents);
+
+          // THEN - the new session's first screenshot still emits its own
+          // metadata, even though its dimensions match the previous session's
+          await pausingRecorder.recordSnapshot(
+            imageData: Uint8List(0),
+            width: 375,
+            height: 812,
+            timestamp: clock.now(),
+            sessionId: newSession.id,
+            distinctId: defaultDistinctId,
+          );
+
+          final events = await pausingQueue.fetchBatch(
+            sessionId: newSession.id,
+            distinctId: defaultDistinctId,
+            maxBytes: 100000,
+            maxCount: 10,
+          );
+          expect(events.first.type, EventType.metadata);
+        },
+      );
     });
 
     group('recordSnapshot', () {
@@ -417,4 +476,22 @@ void main() {
       });
     });
   });
+}
+
+/// Event queue that blocks metadata writes until [releaseMetadata], holding the
+/// recorder inside its metadata await while the session rotates.
+class _PausingMetadataEventQueue extends InMemoryEventQueue {
+  final Completer<void> _metadataGate = Completer<void>();
+
+  @override
+  Future<void> add(SessionReplayEvent event) async {
+    if (event.type == EventType.metadata) {
+      await _metadataGate.future;
+    }
+    return super.add(event);
+  }
+
+  void releaseMetadata() {
+    if (!_metadataGate.isCompleted) _metadataGate.complete();
+  }
 }
