@@ -51,6 +51,38 @@ jobs:
         working-directory: packages/mixpanel_flutter/example
         run: flutter build apk
 
+  test-android-agp9:
+    name: Android integration (AGP 9 built-in Kotlin)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+      - uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9  # v4
+        with:
+          java-version: "17"
+          distribution: 'temurin'
+      - uses: ./.github/actions/setup-flutter
+        with:
+          # AGP 9 needs the Flutter Gradle plugin's built-in-Kotlin support, added in 3.44.
+          flutter-version: "3.47.4"
+      - name: Retarget the example app at AGP 9
+        working-directory: packages/mixpanel_flutter/example/android
+        # The checked-in example stays on AGP 8 so test-android-integration keeps covering
+        # that path. AGP 9 is applied here instead, so both toolchains get exercised.
+        run: |
+          set -euo pipefail
+          perl -pi -e 's|(id "com\.android\.application" version ).*|$1"9.1.0" apply false|' settings.gradle
+          grep -q 'org.jetbrains.kotlin.android' settings.gradle || perl -pi -e 's|^(    id "com\.android\.application")|    id "org.jetbrains.kotlin.android" version "2.4.0" apply false\n$1|' settings.gradle
+          perl -pi -e 's{gradle-[\d.]+-(all|bin)\.zip}{gradle-9.3.1-bin.zip}' gradle/wrapper/gradle-wrapper.properties
+          # The app has to migrate off KGP too; AGP 9 compiles its Kotlin for it.
+          perl -ni -e 'print unless /id "kotlin-android"/' app/build.gradle
+          perl -0pi -e 's|\n    kotlinOptions \{.*?\n    \}\n|\n|s' app/build.gradle
+          perl -pi -e 's|compileSdk 34|compileSdk 36|; s|targetSdkVersion 34|targetSdkVersion 36|; s|JavaVersion\.VERSION_1_8|JavaVersion.VERSION_17|g' app/build.gradle
+          printf 'android.builtInKotlin=true\n' >> gradle.properties
+          sed -n '/^plugins/,/^}/p' settings.gradle
+      - name: Build example on AGP 9
+        working-directory: packages/mixpanel_flutter/example
+        run: flutter build apk --debug
+
   test-ios-integration:
     runs-on: macos-latest
     steps:
