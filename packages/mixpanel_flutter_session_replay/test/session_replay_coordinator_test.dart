@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -36,6 +37,7 @@ void main() {
     late ScreenshotCapturer screenshotCapturer;
     late SettingsStorageProvider storageProvider;
     late MixpanelLogger logger;
+    late String currentDistinctId;
 
     SessionReplayCoordinator createCoordinator({
       double autoRecordSessionsPercent = 0,
@@ -73,10 +75,11 @@ void main() {
       await eventQueue.initialize();
       sessionManager = SessionManager();
 
+      currentDistinctId = 'user-1';
       eventRecorder = EventRecorder(
         eventQueue: eventQueue,
         sessionManager: sessionManager,
-        getDistinctId: () => 'user-1',
+        getDistinctId: () => currentDistinctId,
         logger: logger,
       );
 
@@ -1171,5 +1174,146 @@ void main() {
         expect(secondSession.id, isNot(equals(firstSession.id)));
       });
     });
+
+    group('capture in flight across identity changes', () {
+      late _PendingScreenshotCapturer pendingCapturer;
+
+      setUp(() {
+        pendingCapturer = _PendingScreenshotCapturer(logger: logger);
+        screenshotCapturer = pendingCapturer;
+      });
+
+      Future<SessionReplayCoordinator>
+      startRecordingWithPendingCapture() async {
+        final coordinator = createCoordinator();
+        coordinator.startRecording(sessionsPercent: 100.0);
+        await pumpEventQueue();
+        expect(coordinator.recordingState, RecordingState.recording);
+        return coordinator;
+      }
+
+      test('drops the frame when the session rotates during capture', () async {
+        // GIVEN - a capture is in flight
+        final coordinator = await startRecordingWithPendingCapture();
+        final capture = coordinator.captureSnapshot(RenderRepaintBoundary());
+        await pumpEventQueue();
+
+        // WHEN - a stop/start cycle rotates the session before it resolves
+        coordinator.stopRecording();
+        coordinator.startRecording(sessionsPercent: 100.0);
+        await pumpEventQueue();
+        final rotatedSessionId = sessionManager.getCurrentSession().id;
+        expect(coordinator.recordingState, RecordingState.recording);
+        pendingCapturer.pendingCapture.complete(_fakeCaptureSuccess());
+        await capture;
+        await pumpEventQueue();
+
+        // THEN - nothing is enqueued under the new session
+        expect(eventQueue.eventCount, 0);
+        final events = await eventQueue.fetchBatch(
+          sessionId: rotatedSessionId,
+          distinctId: currentDistinctId,
+          maxBytes: 100000,
+          maxCount: 10,
+        );
+        expect(events, isEmpty);
+      });
+
+      test('drops the frame when recording stops during capture', () async {
+        // GIVEN - a capture is in flight
+        final coordinator = await startRecordingWithPendingCapture();
+        final capture = coordinator.captureSnapshot(RenderRepaintBoundary());
+        await pumpEventQueue();
+
+        // WHEN - recording stops before it resolves
+        coordinator.stopRecording();
+        pendingCapturer.pendingCapture.complete(_fakeCaptureSuccess());
+        await capture;
+        await pumpEventQueue();
+
+        // THEN
+        expect(eventQueue.eventCount, 0);
+      });
+
+      test(
+        'drops the frame when the distinct ID changes during capture',
+        () async {
+          // GIVEN - a capture is in flight
+          final coordinator = await startRecordingWithPendingCapture();
+          final sessionId = sessionManager.getCurrentSession().id;
+          final capture = coordinator.captureSnapshot(RenderRepaintBoundary());
+          await pumpEventQueue();
+
+          // WHEN - identify() swaps the distinct ID with recording still active
+          currentDistinctId = 'user-2';
+          pendingCapturer.pendingCapture.complete(_fakeCaptureSuccess());
+          await capture;
+          await pumpEventQueue();
+
+          // THEN - the session never rotated, but the frame is still dropped
+          expect(coordinator.recordingState, RecordingState.recording);
+          expect(sessionManager.getCurrentSession().id, sessionId);
+          expect(eventQueue.eventCount, 0);
+          final events = await eventQueue.fetchBatch(
+            sessionId: sessionId,
+            distinctId: 'user-2',
+            maxBytes: 100000,
+            maxCount: 10,
+          );
+          expect(events, isEmpty);
+        },
+      );
+
+      test('records the frame when identity is unchanged', () async {
+        // GIVEN - a capture is in flight
+        final coordinator = await startRecordingWithPendingCapture();
+        final sessionId = sessionManager.getCurrentSession().id;
+        final capture = coordinator.captureSnapshot(RenderRepaintBoundary());
+        await pumpEventQueue();
+
+        // WHEN - it resolves with session and distinct ID untouched
+        pendingCapturer.pendingCapture.complete(_fakeCaptureSuccess());
+        await capture;
+        await pumpEventQueue();
+
+        // THEN
+        final events = await eventQueue.fetchBatch(
+          sessionId: sessionId,
+          distinctId: currentDistinctId,
+          maxBytes: 100000,
+          maxCount: 10,
+        );
+        final screenshots = events
+            .where((e) => e.type == EventType.screenshot)
+            .toList();
+        expect(screenshots.length, 1);
+      });
+    });
   });
 }
+
+/// Screenshot capturer whose capture resolves only when the test completes
+/// [pendingCapture], holding a frame in flight across identity changes.
+class _PendingScreenshotCapturer extends ScreenshotCapturer {
+  _PendingScreenshotCapturer({required super.logger})
+    : super(
+        directive: MaskingDirective(autoMaskTypes: {}),
+        debugOverlayEnabled: false,
+      );
+
+  final Completer<CaptureResult> pendingCapture = Completer<CaptureResult>();
+
+  @override
+  Future<CaptureResult> capture(
+    RenderRepaintBoundary boundary, {
+    Set<AutoMaskedView>? maskTypes,
+  }) => pendingCapture.future;
+}
+
+CaptureSuccess _fakeCaptureSuccess() => CaptureSuccess(
+  data: Uint8List.fromList([1, 2, 3]),
+  width: 100,
+  height: 200,
+  maskCount: 0,
+  timestamp: DateTime.now(),
+);
