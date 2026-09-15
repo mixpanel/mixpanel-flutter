@@ -76,7 +76,7 @@ void main() {
         await recorder.recordSession(newSession);
       });
 
-      test('resets metadata dimensions so new session emits metadata', () async {
+      test('emits metadata for the first screenshot of a new session', () async {
         // GIVEN - first session has a screenshot (sets _lastMetadataDimensions)
         await recorder.recordSnapshot(
           imageData: Uint8List(0),
@@ -226,6 +226,39 @@ void main() {
         final payload = screenshotEvent.payload as ScreenshotPayload;
         expect(payload.imageData, expectedImageData);
       });
+
+      test(
+        'pins metadata to the captured session when the session rotated during capture',
+        () async {
+          // GIVEN - the session rotates after the frame was captured
+          final capturedSessionId = session.id;
+          final newSession = sessionManager.startNewSession();
+          expect(newSession.id, isNot(equals(capturedSessionId)));
+
+          // WHEN - the in-flight frame is recorded under the captured session
+          await recorder.recordSnapshot(
+            imageData: Uint8List(0),
+            width: 375,
+            height: 812,
+            timestamp: clock.now(),
+            sessionId: capturedSessionId,
+            distinctId: defaultDistinctId,
+          );
+
+          // THEN - its metadata lands in the captured session, not the current
+          final events = await eventQueue.fetchBatch(
+            sessionId: capturedSessionId,
+            distinctId: defaultDistinctId,
+            maxBytes: 100000,
+            maxCount: 10,
+          );
+          expect(events.length, 2);
+          expect(events[0].type, EventType.metadata);
+          expect(events[0].sessionId, capturedSessionId);
+          expect(events[1].type, EventType.screenshot);
+          expect(events[1].sessionId, capturedSessionId);
+        },
+      );
 
       test('records metadata event on first screenshot', () async {
         // GIVEN

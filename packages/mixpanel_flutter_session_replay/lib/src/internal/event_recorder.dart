@@ -31,6 +31,10 @@ class EventRecorder {
   /// Stores dimensions as Offset(width, height) for compact representation
   Offset? _lastMetadataDimensions;
 
+  /// Session the cached dimensions were emitted under, so each session emits
+  /// its own metadata even when the dimensions are unchanged
+  String? _lastMetadataSessionId;
+
   EventRecorder({
     required this.eventQueue,
     required this.sessionManager,
@@ -44,10 +48,6 @@ class EventRecorder {
   /// This is called when startRecording() is invoked to ensure we have the correct
   /// replay_start_time for old sessions.
   Future<void> recordSession(Session session) async {
-    // Reset metadata dimensions so the first screenshot of this session
-    // always emits a metadata event with screen dimensions.
-    _lastMetadataDimensions = null;
-
     try {
       await eventQueue.createSessionMetadata(session);
       _logger.debug('Session metadata created for ${session.id}');
@@ -108,12 +108,11 @@ class EventRecorder {
   /// or if dimensions change.
   /// Uses the capture [timestamp] so metadata and its accompanying screenshot
   /// share the same time reference, keeping ID order and timestamp order aligned.
-  /// The session auto-assigns to the current one, keeping it aligned with the
-  /// dimension cache; [distinctId] pins because a batch stops at a user change.
   Future<void> recordMetadata(
     int width,
     int height,
     DateTime timestamp, {
+    String? sessionId,
     String? distinctId,
   }) async {
     try {
@@ -125,6 +124,7 @@ class EventRecorder {
         type: EventType.metadata,
         payload: payload,
         timestamp: timestamp,
+        sessionId: sessionId,
         distinctId: distinctId,
       );
     } catch (e) {
@@ -145,16 +145,23 @@ class EventRecorder {
     _logger.debug('Result dimensions: ${width}x$height');
 
     // Record metadata event if:
-    // 1. This is the first screenshot (dimensions never set), OR
+    // 1. This is the first screenshot of this session, OR
     // 2. The dimensions have changed (e.g., window was resized)
     final currentDimensions = Offset(width.toDouble(), height.toDouble());
-    final dimensionsChanged = _lastMetadataDimensions != currentDimensions;
+    final needsMetadata =
+        _lastMetadataSessionId != sessionId ||
+        _lastMetadataDimensions != currentDimensions;
 
-    if (dimensionsChanged) {
-      // Assigned before the await so a session rotating during persistence
-      // clears it last and still emits its own metadata.
+    if (needsMetadata) {
+      await recordMetadata(
+        width,
+        height,
+        timestamp,
+        sessionId: sessionId,
+        distinctId: distinctId,
+      );
+      _lastMetadataSessionId = sessionId;
       _lastMetadataDimensions = currentDimensions;
-      await recordMetadata(width, height, timestamp, distinctId: distinctId);
     }
 
     final payload = ScreenshotPayload(imageData: imageData);

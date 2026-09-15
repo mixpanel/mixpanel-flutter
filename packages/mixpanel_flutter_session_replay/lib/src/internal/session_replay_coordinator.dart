@@ -189,16 +189,6 @@ class SessionReplayCoordinator implements WidgetCoordinator {
       getDistinctId: _eventRecorder.getDistinctId,
     );
 
-    // Dispose closes the event queue's database, so a frame resolving after it
-    // has nowhere to land.
-    if (_isDisposed) {
-      _logger.debug(
-        'Coordinator disposed during capture, dropping frame',
-        tag: 'coordinator',
-      );
-      return;
-    }
-
     // Handle result using pattern matching
     switch (result) {
       case CaptureSuccess(

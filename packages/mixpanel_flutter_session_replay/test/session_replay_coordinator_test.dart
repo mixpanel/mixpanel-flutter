@@ -1260,7 +1260,7 @@ void main() {
       );
 
       test(
-        'should emit metadata for the new session when a cross-session frame lands after rotation',
+        'should pin metadata to the captured session when a cross-session frame lands after rotation',
         () async {
           // GIVEN - a capture is in flight
           final coordinator = await startRecordingWithPendingCapture();
@@ -1278,17 +1278,19 @@ void main() {
           await capture;
           await pumpEventQueue();
 
-          // THEN - the new session has metadata, so its replay can be sized
+          // THEN - the metadata sizing the frame lands in the same session as
+          // the frame, so the captured replay is not left without dimensions
           final metadata = recordingQueue.addedEvents
               .where((e) => e.type == EventType.metadata)
               .toList();
           expect(metadata.length, 1);
-          expect(metadata.single.sessionId, newSessionId);
+          expect(metadata.single.sessionId, capturedSessionId);
+          expect(metadata.single.sessionId, isNot(equals(newSessionId)));
         },
       );
 
       test(
-        'should drop the frame when the coordinator is disposed during capture',
+        'should not throw when a frame resolves after the coordinator is disposed',
         () async {
           // GIVEN - a capture is in flight
           final coordinator = await startRecordingWithPendingCapture();
@@ -1301,9 +1303,11 @@ void main() {
           await capture;
           await pumpEventQueue();
 
-          // THEN - the queue's database is closed, so the frame is never
-          // handed to the recorder
-          expect(recordingQueue.addedEvents, isEmpty);
+          // THEN - the frame still reaches the recorder, but the closed queue
+          // rejects the write and the recorder swallows it
+          expect(recordingQueue.isDisposed, isTrue);
+          expect(recordingQueue.addedEvents, isNotEmpty);
+          expect(recordingQueue.eventCount, 0);
         },
       );
 
