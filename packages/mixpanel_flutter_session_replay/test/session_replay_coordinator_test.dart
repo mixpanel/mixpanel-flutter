@@ -1356,32 +1356,34 @@ class _PendingScreenshotCapturer extends ScreenshotCapturer {
       );
 
   final Completer<CaptureResult> pendingCapture = Completer<CaptureResult>();
-  CaptureIdentity? pinnedIdentity;
+  late String pinnedSessionId;
+  late String pinnedDistinctId;
 
   @override
   Future<CaptureResult> capture(
     RenderRepaintBoundary boundary, {
+    required SessionManager sessionManager,
+    required String Function() getDistinctId,
     Set<AutoMaskedView>? maskTypes,
-    CaptureIdentityProvider? identityProvider,
   }) {
-    pinnedIdentity = identityProvider?.call();
+    pinnedSessionId = sessionManager.getCurrentSession().id;
+    pinnedDistinctId = getDistinctId();
     return pendingCapture.future;
   }
 
   /// Resolve the in-flight capture with the identity pinned when it started.
-  void completeWithPinnedIdentity() =>
-      pendingCapture.complete(_fakeCaptureSuccess(identity: pinnedIdentity));
-}
-
-CaptureSuccess _fakeCaptureSuccess({CaptureIdentity? identity}) =>
+  void completeWithPinnedIdentity() => pendingCapture.complete(
     CaptureSuccess(
       data: Uint8List.fromList([1, 2, 3]),
       width: 100,
       height: 200,
       maskCount: 0,
       timestamp: DateTime.now(),
-      identity: identity,
-    );
+      sessionId: pinnedSessionId,
+      distinctId: pinnedDistinctId,
+    ),
+  );
+}
 
 /// Event queue that blocks metadata writes until [releaseMetadata], holding the
 /// recorder inside its metadata await while a test changes the current identity.

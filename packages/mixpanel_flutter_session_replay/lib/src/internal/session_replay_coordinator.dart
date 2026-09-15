@@ -182,14 +182,11 @@ class SessionReplayCoordinator implements WidgetCoordinator {
 
     _logger.debug('Capturing snapshot', tag: 'coordinator');
 
-    // Identity is pinned again inside the capturer, at the frame itself; this
-    // value only stands in if the capturer returned none.
-    final fallbackIdentity = _currentCaptureIdentity();
-
     // Get JPG bytes from screenshot capturer
     final result = await _screenshotCapturer.capture(
       boundary,
-      identityProvider: _currentCaptureIdentity,
+      sessionManager: _sessionManager,
+      getDistinctId: _eventRecorder.getDistinctId,
     );
 
     // A frame that resolves after shutdown or after recording stopped has
@@ -210,14 +207,12 @@ class SessionReplayCoordinator implements WidgetCoordinator {
         :final height,
         :final timestamp,
         :final maskRegions,
-        :final identity,
+        :final sessionId,
+        :final distinctId,
       ):
-        final captureIdentity = identity ?? fallbackIdentity;
-
         // The session it was painted under has already been stopped and
         // flushed, so there is no replay left for it to join.
-        if (captureIdentity.sessionId !=
-            _sessionManager.getCurrentSession().id) {
+        if (sessionId != _sessionManager.getCurrentSession().id) {
           _logger.debug(
             'Session rotated during capture, dropping frame',
             tag: 'coordinator',
@@ -238,8 +233,8 @@ class SessionReplayCoordinator implements WidgetCoordinator {
           width: width,
           height: height,
           timestamp: timestamp,
-          sessionId: captureIdentity.sessionId,
-          distinctId: captureIdentity.distinctId,
+          sessionId: sessionId,
+          distinctId: distinctId,
         );
       case CaptureFailure(:final error, :final errorMessage):
         _logger.debug(
@@ -248,11 +243,6 @@ class SessionReplayCoordinator implements WidgetCoordinator {
         );
     }
   }
-
-  CaptureIdentity _currentCaptureIdentity() => CaptureIdentity(
-    sessionId: _sessionManager.getCurrentSession().id,
-    distinctId: _eventRecorder.getDistinctId(),
-  );
 
   /// Capture an interaction event with a specific type
   ///

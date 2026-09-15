@@ -104,17 +104,6 @@ sealed class CaptureResult {
   const CaptureResult();
 }
 
-/// Session and distinct ID pinned at the moment a frame was captured.
-class CaptureIdentity {
-  final String sessionId;
-  final String distinctId;
-
-  const CaptureIdentity({required this.sessionId, required this.distinctId});
-
-  @override
-  String toString() => 'CaptureIdentity($sessionId, $distinctId)';
-}
-
 /// Successful capture result
 final class CaptureSuccess extends CaptureResult {
   /// Captured screenshot data (JPEG bytes)
@@ -135,8 +124,11 @@ final class CaptureSuccess extends CaptureResult {
   /// Mask regions that were detected (for debug overlay)
   final List<MaskRegionInfo> maskRegions;
 
-  /// Identity pinned at the captured frame, null when no provider was supplied.
-  final CaptureIdentity? identity;
+  /// Session the frame was painted under, pinned at capture time
+  final String sessionId;
+
+  /// Distinct ID the frame was painted under, pinned at capture time
+  final String distinctId;
 
   const CaptureSuccess({
     required this.data,
@@ -144,8 +136,9 @@ final class CaptureSuccess extends CaptureResult {
     required this.height,
     required this.maskCount,
     required this.timestamp,
+    required this.sessionId,
+    required this.distinctId,
     this.maskRegions = const [],
-    this.identity,
   });
 
   @override
