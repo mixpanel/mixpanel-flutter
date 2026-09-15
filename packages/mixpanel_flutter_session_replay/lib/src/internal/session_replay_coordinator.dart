@@ -182,8 +182,24 @@ class SessionReplayCoordinator implements WidgetCoordinator {
 
     _logger.debug('Capturing snapshot', tag: 'coordinator');
 
+    // Events are stamped with whatever session and distinct ID are current when
+    // they reach the queue, so pin both before the capture and compare after.
+    final captureSessionId = _sessionManager.getCurrentSession().id;
+    final captureDistinctId = _eventRecorder.getDistinctId();
+
     // Get JPG bytes from screenshot capturer
     final result = await _screenshotCapturer.capture(boundary);
+
+    if (_isDisposed ||
+        _recordingState != RecordingState.recording ||
+        _sessionManager.getCurrentSession().id != captureSessionId ||
+        _eventRecorder.getDistinctId() != captureDistinctId) {
+      _logger.debug(
+        'Recording stopped or identity changed during capture, dropping frame',
+        tag: 'coordinator',
+      );
+      return;
+    }
 
     // Handle result using pattern matching
     switch (result) {
