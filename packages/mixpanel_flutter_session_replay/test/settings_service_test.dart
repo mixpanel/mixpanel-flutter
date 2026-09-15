@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
@@ -17,6 +18,8 @@ import 'package:mixpanel_flutter_session_replay/src/models/event_trigger.dart';
 import 'helpers/fake_http_client.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   group('SettingsService', () {
     final testToken = 'test-token-123';
     final testLogger = MixpanelLogger(LogLevel.none);
@@ -867,5 +870,135 @@ void main() {
         expect(uri.path, '/mp/settings');
       },
     );
+
+    group('app info query params', () {
+      const channel = MethodChannel('com.mixpanel.flutter_session_replay');
+
+      tearDown(() {
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(channel, null);
+      });
+
+      /// Stubs the native getAppInfo call with [response].
+      void stubAppInfo(Map<String, dynamic>? response) {
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(channel, (call) async {
+              if (call.method == 'getAppInfo') return response;
+              return null;
+            });
+      }
+
+      test('sends injected bundleId and buildNumber', () async {
+        // GIVEN
+        final recorder = createRecordingHttpClient(
+          statusCode: 200,
+          body: jsonEncode({
+            'recording': {'is_enabled': true},
+          }),
+        );
+        final service = SettingsService(
+          storageProvider: storageProvider,
+          token: testToken,
+          logger: testLogger,
+          httpClient: recorder.client,
+          bundleId: 'com.test.app',
+          buildNumber: '1234',
+        );
+
+        // WHEN
+        await service.checkRecordingEnabled();
+
+        // THEN
+        final uri = recorder.requests.single.url;
+        expect(uri.queryParameters['bundle_id'], 'com.test.app');
+        expect(uri.queryParameters['build_number'], '1234');
+
+        // Pre-existing params must be unaffected
+        expect(uri.queryParameters['recording'], '1');
+        expect(uri.queryParameters['sdk_config'], '1');
+        expect(uri.queryParameters['mp_lib'], 'flutter-sr');
+        expect(uri.queryParameters['\$lib_version'], sdkVersion);
+      });
+
+      test('resolves bundleId and buildNumber from the platform', () async {
+        // GIVEN
+        stubAppInfo({'bundleId': 'com.native.app', 'buildNumber': '99'});
+        final recorder = createRecordingHttpClient(
+          statusCode: 200,
+          body: jsonEncode({
+            'recording': {'is_enabled': true},
+          }),
+        );
+        final service = SettingsService(
+          storageProvider: storageProvider,
+          token: testToken,
+          logger: testLogger,
+          httpClient: recorder.client,
+        );
+
+        // WHEN
+        await service.checkRecordingEnabled();
+
+        // THEN
+        final uri = recorder.requests.single.url;
+        expect(uri.queryParameters['bundle_id'], 'com.native.app');
+        expect(uri.queryParameters['build_number'], '99');
+      });
+
+      test('omits both params when the platform supplies neither', () async {
+        // GIVEN — no mock handler, so the channel throws MissingPluginException
+        final recorder = createRecordingHttpClient(
+          statusCode: 200,
+          body: jsonEncode({
+            'recording': {'is_enabled': true},
+          }),
+        );
+        final service = SettingsService(
+          storageProvider: storageProvider,
+          token: testToken,
+          logger: testLogger,
+          httpClient: recorder.client,
+        );
+
+        // WHEN
+        await service.checkRecordingEnabled();
+
+        // THEN
+        final uri = recorder.requests.single.url;
+        expect(uri.queryParameters.containsKey('bundle_id'), isFalse);
+        expect(uri.queryParameters.containsKey('build_number'), isFalse);
+
+        // Pre-existing params must still be sent
+        expect(uri.queryParameters['recording'], '1');
+        expect(uri.queryParameters['sdk_config'], '1');
+        expect(uri.queryParameters['mp_lib'], 'flutter-sr');
+        expect(uri.queryParameters['\$lib_version'], sdkVersion);
+      });
+
+      test('omits only the param the platform cannot supply', () async {
+        // GIVEN — platform returns bundleId but no buildNumber
+        stubAppInfo({'bundleId': 'com.partial.app'});
+        final recorder = createRecordingHttpClient(
+          statusCode: 200,
+          body: jsonEncode({
+            'recording': {'is_enabled': true},
+          }),
+        );
+        final service = SettingsService(
+          storageProvider: storageProvider,
+          token: testToken,
+          logger: testLogger,
+          httpClient: recorder.client,
+        );
+
+        // WHEN
+        await service.checkRecordingEnabled();
+
+        // THEN
+        final uri = recorder.requests.single.url;
+        expect(uri.queryParameters['bundle_id'], 'com.partial.app');
+        expect(uri.queryParameters.containsKey('build_number'), isFalse);
+      });
+    });
   });
 }

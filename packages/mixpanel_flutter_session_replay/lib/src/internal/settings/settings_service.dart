@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../../version.dart';
+import '../app_info.dart';
 import '../endpoints.dart';
 import '../logger.dart';
 import 'remote_settings_result.dart';
@@ -32,6 +33,14 @@ class SettingsService {
   /// wireframe kill switch (`wireframe=1`) so the server can turn capture off
   /// remotely; otherwise the field is neither sent nor returned.
   final bool _wireframesRequested;
+
+  /// Explicit overrides for host app identity; when null the values are read
+  /// from the platform. Injected by tests.
+  final String? _bundleIdOverride;
+  final String? _buildNumberOverride;
+
+  /// Platform-resolved app info, fetched at most once per instance.
+  AppInfo? _appInfo;
 
   /// Full `/settings` endpoint, derived from the configured base URL.
   final String _endpoint;
@@ -63,12 +72,33 @@ class SettingsService {
     required http.Client httpClient,
     String serverUrl = EndPoints.defaultBaseUrl,
     bool wireframesRequested = false,
+    String? bundleId,
+    String? buildNumber,
   }) : _token = token,
        _logger = logger,
        _httpClient = httpClient,
        _storageProvider = storageProvider,
        _wireframesRequested = wireframesRequested,
+       _bundleIdOverride = bundleId,
+       _buildNumberOverride = buildNumber,
        _endpoint = EndPoints.settings(serverUrl);
+
+  /// Resolve host app identity, preferring injected overrides.
+  ///
+  /// Skips the platform channel entirely when both values are injected.
+  Future<AppInfo> _resolveAppInfo() async {
+    if (_bundleIdOverride != null && _buildNumberOverride != null) {
+      return AppInfo(
+        bundleId: _bundleIdOverride,
+        buildNumber: _buildNumberOverride,
+      );
+    }
+    final platform = _appInfo ??= await AppInfo.fromPlatform();
+    return AppInfo(
+      bundleId: _bundleIdOverride ?? platform.bundleId,
+      buildNumber: _buildNumberOverride ?? platform.buildNumber,
+    );
+  }
 
   /// Fetch remote settings including recording status and SDK config.
   ///
@@ -128,17 +158,30 @@ class SettingsService {
 
   /// Make network request to settings endpoint.
   Future<RemoteSettingsResult> _performRemoteSettingsFetch() async {
-    final uri = Uri.parse(_endpoint).replace(
-      queryParameters: {
-        'recording': '1',
-        'sdk_config': '1',
-        // Only ask for the wireframe kill switch when this app opted in to wireframes.
-        if (_wireframesRequested) 'wireframe': '1',
-        'mp_lib': 'flutter-sr',
-        '\$lib_version': sdkVersion,
-        '\$os': operatingSystem,
-      },
-    );
+    final appInfo = await _resolveAppInfo();
+
+    final queryParameters = <String, String>{
+      'recording': '1',
+      'sdk_config': '1',
+      // Only ask for the wireframe kill switch when this app opted in to wireframes.
+      if (_wireframesRequested) 'wireframe': '1',
+      'mp_lib': 'flutter-sr',
+      '\$lib_version': sdkVersion,
+      '\$os': operatingSystem,
+    };
+
+    // Include app bundle ID and build number to enable server-side SDK blocking
+    // per app ID and app build version
+    final bundleId = appInfo.bundleId;
+    if (bundleId != null) {
+      queryParameters['bundle_id'] = bundleId;
+    }
+    final buildNumber = appInfo.buildNumber;
+    if (buildNumber != null) {
+      queryParameters['build_number'] = buildNumber;
+    }
+
+    final uri = Uri.parse(_endpoint).replace(queryParameters: queryParameters);
 
     final credentials = base64Encode(utf8.encode('$_token:'));
     final authHeader = 'Basic $credentials';
