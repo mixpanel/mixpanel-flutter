@@ -64,23 +64,25 @@ jobs:
         with:
           # AGP 9 needs the Flutter Gradle plugin's built-in-Kotlin support, added in 3.44.
           flutter-version: "3.47.4"
-      - name: Retarget the example app at AGP 9
-        working-directory: packages/mixpanel_flutter/example/android
-        # The checked-in example stays on AGP 8 so test-android-integration keeps covering
-        # that path. AGP 9 is applied here instead, so both toolchains get exercised.
+      - name: Retarget the session replay example at AGP 9
+        working-directory: packages/mixpanel_flutter_session_replay/example
+        # This example depends on mixpanel_flutter, so one AGP 9 build covers both plugins'
+        # Kotlin wiring. The checked-in examples stay on AGP 8 so the existing jobs keep
+        # covering that path; AGP 9 is applied here instead.
         run: |
           set -euo pipefail
-          perl -pi -e 's|(id "com\.android\.application" version ).*|$1"9.1.0" apply false|' settings.gradle
-          grep -q 'org.jetbrains.kotlin.android' settings.gradle || perl -pi -e 's|^(    id "com\.android\.application")|    id "org.jetbrains.kotlin.android" version "2.4.0" apply false\n$1|' settings.gradle
+          printf 'dependency_overrides:\n  mixpanel_flutter:\n    path: ../../mixpanel_flutter\n  mixpanel_flutter_common:\n    path: ../../mixpanel_flutter_common\n' > pubspec_overrides.yaml
+          cd android
+          perl -pi -e 's|id\("com\.android\.application"\) version "[^"]*"|id("com.android.application") version "9.1.0"|' settings.gradle.kts
+          perl -pi -e 's|id\("org\.jetbrains\.kotlin\.android"\) version "[^"]*"|id("org.jetbrains.kotlin.android") version "2.4.0"|' settings.gradle.kts
           perl -pi -e 's{gradle-[\d.]+-(all|bin)\.zip}{gradle-9.3.1-bin.zip}' gradle/wrapper/gradle-wrapper.properties
           # The app has to migrate off KGP too; AGP 9 compiles its Kotlin for it.
-          perl -ni -e 'print unless /id "kotlin-android"/' app/build.gradle
-          perl -0pi -e 's|\n    kotlinOptions \{.*?\n    \}\n|\n|s' app/build.gradle
-          perl -pi -e 's|compileSdk 34|compileSdk 36|; s|targetSdkVersion 34|targetSdkVersion 36|; s|JavaVersion\.VERSION_1_8|JavaVersion.VERSION_17|g' app/build.gradle
+          perl -ni -e 'print unless /id\("kotlin-android"\)/' app/build.gradle.kts
+          perl -0pi -e 's|\n    kotlinOptions \{.*?\n    \}\n|\n|s' app/build.gradle.kts
           printf 'android.builtInKotlin=true\n' >> gradle.properties
-          sed -n '/^plugins/,/^}/p' settings.gradle
-      - name: Build example on AGP 9
-        working-directory: packages/mixpanel_flutter/example
+          sed -n '/^plugins/,/^}/p' settings.gradle.kts
+      - name: Build on AGP 9
+        working-directory: packages/mixpanel_flutter_session_replay/example
         run: flutter build apk --debug
 
   test-ios-integration:
