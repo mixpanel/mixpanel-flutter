@@ -162,7 +162,10 @@ class SessionReplayCoordinator implements WidgetCoordinator {
   /// This is called by FrameMonitor when its scheduler determines a capture should happen.
   /// Coordinates the capture process: gets JPG from recorder, passes to event recorder.
   @override
-  Future<void> captureSnapshot(RenderRepaintBoundary boundary) async {
+  Future<void> captureSnapshot(
+    RenderRepaintBoundary boundary, {
+    required Element boundaryElement,
+  }) async {
     // Check if disposed first (prevents captures during shutdown)
     if (_isDisposed) {
       _logger.debug(
@@ -183,7 +186,10 @@ class SessionReplayCoordinator implements WidgetCoordinator {
     _logger.debug('Capturing snapshot', tag: 'coordinator');
 
     // Get JPG bytes from screenshot capturer
-    final result = await _screenshotCapturer.capture(boundary);
+    final result = await _screenshotCapturer.capture(
+      boundary,
+      boundaryElement: boundaryElement,
+    );
 
     // Handle result using pattern matching
     switch (result) {

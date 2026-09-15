@@ -40,5 +40,8 @@ abstract class WidgetCoordinator {
   void captureInteraction(int interactionType, Offset position);
 
   /// Capture a screenshot from the given boundary
-  Future<void> captureSnapshot(RenderRepaintBoundary boundary);
+  Future<void> captureSnapshot(
+    RenderRepaintBoundary boundary, {
+    required Element boundaryElement,
+  });
 }
