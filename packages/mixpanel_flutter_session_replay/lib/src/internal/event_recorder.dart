@@ -26,7 +26,9 @@ class EventRecorder {
   /// Logger instance
   final MixpanelLogger _logger;
 
-  /// Dimensions of the last metadata event, as Offset(width, height).
+  /// Track last dimensions to detect size changes (and first screenshot)
+  /// null value indicates metadata has never been sent
+  /// Stores dimensions as Offset(width, height) for compact representation
   Offset? _lastMetadataDimensions;
 
   EventRecorder({
@@ -42,7 +44,8 @@ class EventRecorder {
   /// This is called when startRecording() is invoked to ensure we have the correct
   /// replay_start_time for old sessions.
   Future<void> recordSession(Session session) async {
-    // Cleared so the new session's first screenshot always emits metadata.
+    // Reset metadata dimensions so the first screenshot of this session
+    // always emits a metadata event with screen dimensions.
     _lastMetadataDimensions = null;
 
     try {
@@ -57,8 +60,7 @@ class EventRecorder {
   /// Record a screenshot event
   ///
   /// Saves the provided screenshot data as an event.
-  /// [sessionId] and [distinctId] are the identity pinned at capture time and
-  /// are stamped on the event instead of the current identity.
+  /// [sessionId] and [distinctId] are the identity pinned at capture time.
   Future<void> recordSnapshot({
     required Uint8List imageData,
     required int width,
@@ -106,12 +108,13 @@ class EventRecorder {
   /// or if dimensions change.
   /// Uses the capture [timestamp] so metadata and its accompanying screenshot
   /// share the same time reference, keeping ID order and timestamp order aligned.
+  /// The session auto-assigns to the current one, keeping it aligned with the
+  /// dimension cache; [distinctId] pins because a batch stops at a user change.
   Future<void> recordMetadata(
     int width,
     int height,
     DateTime timestamp, {
-    required String sessionId,
-    required String distinctId,
+    String? distinctId,
   }) async {
     try {
       _logger.debug('Recording metadata: ${width}x$height');
@@ -122,7 +125,6 @@ class EventRecorder {
         type: EventType.metadata,
         payload: payload,
         timestamp: timestamp,
-        sessionId: sessionId,
         distinctId: distinctId,
       );
     } catch (e) {
@@ -142,21 +144,17 @@ class EventRecorder {
   }) async {
     _logger.debug('Result dimensions: ${width}x$height');
 
-    // Metadata is emitted on the session's first screenshot and whenever the
-    // dimensions change.
+    // Record metadata event if:
+    // 1. This is the first screenshot (dimensions never set), OR
+    // 2. The dimensions have changed (e.g., window was resized)
     final currentDimensions = Offset(width.toDouble(), height.toDouble());
+    final dimensionsChanged = _lastMetadataDimensions != currentDimensions;
 
-    if (_lastMetadataDimensions != currentDimensions) {
-      // Assigned before the await so that a session rotating during
-      // persistence clears it last and still emits its own metadata.
+    if (dimensionsChanged) {
+      // Assigned before the await so a session rotating during persistence
+      // clears it last and still emits its own metadata.
       _lastMetadataDimensions = currentDimensions;
-      await recordMetadata(
-        width,
-        height,
-        timestamp,
-        sessionId: sessionId,
-        distinctId: distinctId,
-      );
+      await recordMetadata(width, height, timestamp, distinctId: distinctId);
     }
 
     final payload = ScreenshotPayload(imageData: imageData);
@@ -190,9 +188,6 @@ class EventRecorder {
   }
 
   /// Common method to save any event to the queue
-  ///
-  /// [sessionId] and [distinctId] override the current identity; events without
-  /// a pinned identity (interactions) fall back to whatever is current.
   Future<void> _saveEventToQueue({
     required EventType type,
     required EventPayload payload,

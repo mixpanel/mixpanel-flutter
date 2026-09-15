@@ -401,8 +401,6 @@ void main() {
           expectedWidth,
           expectedHeight,
           clock.now(),
-          sessionId: session.id,
-          distinctId: defaultDistinctId,
         );
 
         // THEN
