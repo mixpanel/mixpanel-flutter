@@ -125,62 +125,6 @@ void main() {
         expect(metadata.width, 375);
         expect(metadata.height, 812);
       });
-
-      test(
-        'should still emit metadata for the new session when a late frame from the previous session is recorded first',
-        () async {
-          // GIVEN - the previous session has established its dimensions
-          await recorder.recordSnapshot(
-            imageData: Uint8List(0),
-            width: 375,
-            height: 812,
-            timestamp: clock.now(),
-            sessionId: session.id,
-            distinctId: defaultDistinctId,
-          );
-          final newSession = sessionManager.startNewSession();
-          await recorder.recordSession(newSession);
-
-          // WHEN - a late frame from the previous session lands first
-          await recorder.recordSnapshot(
-            imageData: Uint8List(0),
-            width: 375,
-            height: 812,
-            timestamp: clock.now(),
-            sessionId: session.id,
-            distinctId: defaultDistinctId,
-          );
-
-          // Drain the previous session so the batch below holds only the new one
-          final previousEvents = await eventQueue.fetchBatch(
-            sessionId: session.id,
-            distinctId: defaultDistinctId,
-            maxBytes: 100000,
-            maxCount: 10,
-          );
-          await eventQueue.remove(previousEvents);
-
-          await recorder.recordSnapshot(
-            imageData: Uint8List(0),
-            width: 375,
-            height: 812,
-            timestamp: clock.now(),
-            sessionId: newSession.id,
-            distinctId: defaultDistinctId,
-          );
-
-          // THEN - the new session still gets the metadata event that sizes it
-          final events = await eventQueue.fetchBatch(
-            sessionId: newSession.id,
-            distinctId: defaultDistinctId,
-            maxBytes: 100000,
-            maxCount: 10,
-          );
-          expect(events.length, 2);
-          expect(events[0].type, EventType.metadata);
-          expect(events[1].type, EventType.screenshot);
-        },
-      );
     });
 
     group('recordSnapshot', () {

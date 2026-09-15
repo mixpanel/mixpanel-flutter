@@ -26,14 +26,8 @@ class EventRecorder {
   /// Logger instance
   final MixpanelLogger _logger;
 
-  /// Last metadata dimensions per session, as Offset(width, height). Keyed by
-  /// session so a late frame from a previous session cannot suppress the
-  /// metadata event that sizes the current one.
-  final Map<String, Offset> _lastMetadataDimensions = {};
-
-  /// Bound on retained per-session dimensions; only recently rotated sessions
-  /// can still have frames in flight.
-  static const int _maxTrackedMetadataSessions = 5;
+  /// Dimensions of the last metadata event, as Offset(width, height).
+  Offset? _lastMetadataDimensions;
 
   EventRecorder({
     required this.eventQueue,
@@ -48,9 +42,8 @@ class EventRecorder {
   /// This is called when startRecording() is invoked to ensure we have the correct
   /// replay_start_time for old sessions.
   Future<void> recordSession(Session session) async {
-    // Clear this session's dimensions so its first screenshot always emits a
-    // metadata event with screen dimensions.
-    _lastMetadataDimensions.remove(session.id);
+    // Cleared so the new session's first screenshot always emits metadata.
+    _lastMetadataDimensions = null;
 
     try {
       await eventQueue.createSessionMetadata(session);
@@ -152,10 +145,8 @@ class EventRecorder {
     // Metadata is emitted on the session's first screenshot and whenever the
     // dimensions change.
     final currentDimensions = Offset(width.toDouble(), height.toDouble());
-    final dimensionsChanged =
-        _lastMetadataDimensions[sessionId] != currentDimensions;
 
-    if (dimensionsChanged) {
+    if (_lastMetadataDimensions != currentDimensions) {
       await recordMetadata(
         width,
         height,
@@ -163,7 +154,7 @@ class EventRecorder {
         sessionId: sessionId,
         distinctId: distinctId,
       );
-      _rememberMetadataDimensions(sessionId, currentDimensions);
+      _lastMetadataDimensions = currentDimensions;
     }
 
     final payload = ScreenshotPayload(imageData: imageData);
@@ -175,13 +166,6 @@ class EventRecorder {
       sessionId: sessionId,
       distinctId: distinctId,
     );
-  }
-
-  void _rememberMetadataDimensions(String sessionId, Offset dimensions) {
-    _lastMetadataDimensions[sessionId] = dimensions;
-    while (_lastMetadataDimensions.length > _maxTrackedMetadataSessions) {
-      _lastMetadataDimensions.remove(_lastMetadataDimensions.keys.first);
-    }
   }
 
   /// Save interaction to event queue

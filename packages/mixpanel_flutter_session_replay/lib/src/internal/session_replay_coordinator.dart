@@ -193,7 +193,7 @@ class SessionReplayCoordinator implements WidgetCoordinator {
     );
 
     // A frame that resolves after shutdown or after recording stopped has
-    // nowhere to go; one whose identity moved is re-attributed, not dropped.
+    // nowhere to go.
     if (_isDisposed || _recordingState != RecordingState.recording) {
       _logger.debug(
         'Recording stopped during capture, dropping frame',
@@ -212,6 +212,19 @@ class SessionReplayCoordinator implements WidgetCoordinator {
         :final maskRegions,
         :final identity,
       ):
+        final captureIdentity = identity ?? fallbackIdentity;
+
+        // The session it was painted under has already been stopped and
+        // flushed, so there is no replay left for it to join.
+        if (captureIdentity.sessionId !=
+            _sessionManager.getCurrentSession().id) {
+          _logger.debug(
+            'Session rotated during capture, dropping frame',
+            tag: 'coordinator',
+          );
+          return;
+        }
+
         // Update mask regions for debug overlay (only if overlay is enabled)
         // Diff check prevents feedback loop: overlay rebuild → new frame → capture → repeat
         if (_debugOptions?.overlayColors != null &&
@@ -220,7 +233,6 @@ class SessionReplayCoordinator implements WidgetCoordinator {
         }
 
         // Pass JPG bytes to event recorder to save with the capture timestamp
-        final captureIdentity = identity ?? fallbackIdentity;
         await _eventRecorder.recordSnapshot(
           imageData: data,
           width: width,

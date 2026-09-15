@@ -1193,7 +1193,7 @@ void main() {
       }
 
       test(
-        'should record the frame under the captured session when the session rotates during capture',
+        'should drop the frame when the session rotates during capture',
         () async {
           // GIVEN - a capture is in flight
           final coordinator = await startRecordingWithPendingCapture();
@@ -1205,21 +1205,16 @@ void main() {
           coordinator.stopRecording();
           coordinator.startRecording(sessionsPercent: 100.0);
           await pumpEventQueue();
-          final rotatedSessionId = sessionManager.getCurrentSession().id;
-          expect(rotatedSessionId, isNot(equals(capturedSessionId)));
+          expect(
+            sessionManager.getCurrentSession().id,
+            isNot(equals(capturedSessionId)),
+          );
           pendingCapturer.completeWithPinnedIdentity();
           await capture;
           await pumpEventQueue();
 
-          // THEN - the frame lands under the session it was captured in
-          final events = await eventQueue.fetchBatch(
-            sessionId: capturedSessionId,
-            distinctId: currentDistinctId,
-            maxBytes: 100000,
-            maxCount: 10,
-          );
-          expect(events.where((e) => e.type == EventType.screenshot).length, 1);
-          expect(events.every((e) => e.sessionId == capturedSessionId), isTrue);
+          // THEN - the frame joins neither the old session nor the new one
+          expect(eventQueue.eventCount, 0);
         },
       );
 
