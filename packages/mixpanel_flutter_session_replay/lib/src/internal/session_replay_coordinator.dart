@@ -185,15 +185,15 @@ class SessionReplayCoordinator implements WidgetCoordinator {
     // Get JPG bytes from screenshot capturer
     final result = await _screenshotCapturer.capture(
       boundary,
-      sessionManager: _sessionManager,
+      getCurrentSession: _sessionManager.getCurrentSession,
       getDistinctId: _eventRecorder.getDistinctId,
     );
 
-    // A frame that resolves after shutdown or after recording stopped has
-    // nowhere to go.
-    if (_isDisposed || _recordingState != RecordingState.recording) {
+    // Dispose closes the event queue's database, so a frame resolving after it
+    // has nowhere to land.
+    if (_isDisposed) {
       _logger.debug(
-        'Recording stopped during capture, dropping frame',
+        'Coordinator disposed during capture, dropping frame',
         tag: 'coordinator',
       );
       return;
@@ -210,16 +210,6 @@ class SessionReplayCoordinator implements WidgetCoordinator {
         :final sessionId,
         :final distinctId,
       ):
-        // The session it was painted under has already been stopped and
-        // flushed, so there is no replay left for it to join.
-        if (sessionId != _sessionManager.getCurrentSession().id) {
-          _logger.debug(
-            'Session rotated during capture, dropping frame',
-            tag: 'coordinator',
-          );
-          return;
-        }
-
         // Update mask regions for debug overlay (only if overlay is enabled)
         // Diff check prevents feedback loop: overlay rebuild → new frame → capture → repeat
         if (_debugOptions?.overlayColors != null &&

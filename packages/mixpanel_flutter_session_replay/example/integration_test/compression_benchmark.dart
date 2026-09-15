@@ -48,7 +48,7 @@ Future<void> runBenchmark(
       final future = tester.runAsync(
         () => capturer.capture(
           boundary,
-          sessionManager: SessionManager(),
+          getCurrentSession: SessionManager().getCurrentSession,
           getDistinctId: () => 'benchmark-distinct-id',
         ),
       );

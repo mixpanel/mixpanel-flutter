@@ -18,6 +18,7 @@ import 'package:mixpanel_flutter_session_replay/src/internal/logger.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/configuration.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/masking_directive.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/results.dart';
+import 'package:mixpanel_flutter_session_replay/src/models/session.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/session_event.dart';
 
 import 'package:shared_preferences/shared_preferences.dart';
@@ -1177,8 +1178,18 @@ void main() {
 
     group('capture in flight across identity changes', () {
       late _PendingScreenshotCapturer pendingCapturer;
+      late _RecordingEventQueue recordingQueue;
 
-      setUp(() {
+      setUp(() async {
+        recordingQueue = _RecordingEventQueue();
+        await recordingQueue.initialize();
+        eventQueue = recordingQueue;
+        eventRecorder = EventRecorder(
+          eventQueue: recordingQueue,
+          sessionManager: sessionManager,
+          getDistinctId: () => currentDistinctId,
+          logger: logger,
+        );
         pendingCapturer = _PendingScreenshotCapturer(logger: logger);
         screenshotCapturer = pendingCapturer;
       });
@@ -1193,7 +1204,7 @@ void main() {
       }
 
       test(
-        'should drop the frame when the session rotates during capture',
+        'should record the frame under the captured session when the session rotates during capture',
         () async {
           // GIVEN - a capture is in flight
           final coordinator = await startRecordingWithPendingCapture();
@@ -1213,16 +1224,21 @@ void main() {
           await capture;
           await pumpEventQueue();
 
-          // THEN - the frame joins neither the old session nor the new one
-          expect(eventQueue.eventCount, 0);
+          // THEN - the frame lands under the session it was painted under
+          final screenshots = recordingQueue.addedEvents
+              .where((e) => e.type == EventType.screenshot)
+              .toList();
+          expect(screenshots.length, 1);
+          expect(screenshots.single.sessionId, capturedSessionId);
         },
       );
 
       test(
-        'should drop the frame when recording stops during capture',
+        'should record the frame when recording stops during capture',
         () async {
           // GIVEN - a capture is in flight
           final coordinator = await startRecordingWithPendingCapture();
+          final sessionId = sessionManager.getCurrentSession().id;
           final capture = coordinator.captureSnapshot(RenderRepaintBoundary());
           await pumpEventQueue();
 
@@ -1232,8 +1248,62 @@ void main() {
           await capture;
           await pumpEventQueue();
 
-          // THEN
-          expect(eventQueue.eventCount, 0);
+          // THEN - the frame painted before the stop still lands
+          final events = await eventQueue.fetchBatch(
+            sessionId: sessionId,
+            distinctId: currentDistinctId,
+            maxBytes: 100000,
+            maxCount: 10,
+          );
+          expect(events.where((e) => e.type == EventType.screenshot).length, 1);
+        },
+      );
+
+      test(
+        'should emit metadata for the new session when a cross-session frame lands after rotation',
+        () async {
+          // GIVEN - a capture is in flight
+          final coordinator = await startRecordingWithPendingCapture();
+          final capturedSessionId = sessionManager.getCurrentSession().id;
+          final capture = coordinator.captureSnapshot(RenderRepaintBoundary());
+          await pumpEventQueue();
+
+          // WHEN - the session rotates before the frame resolves
+          coordinator.stopRecording();
+          coordinator.startRecording(sessionsPercent: 100.0);
+          await pumpEventQueue();
+          final newSessionId = sessionManager.getCurrentSession().id;
+          expect(newSessionId, isNot(equals(capturedSessionId)));
+          pendingCapturer.completeWithPinnedIdentity();
+          await capture;
+          await pumpEventQueue();
+
+          // THEN - the new session has metadata, so its replay can be sized
+          final metadata = recordingQueue.addedEvents
+              .where((e) => e.type == EventType.metadata)
+              .toList();
+          expect(metadata.length, 1);
+          expect(metadata.single.sessionId, newSessionId);
+        },
+      );
+
+      test(
+        'should drop the frame when the coordinator is disposed during capture',
+        () async {
+          // GIVEN - a capture is in flight
+          final coordinator = await startRecordingWithPendingCapture();
+          final capture = coordinator.captureSnapshot(RenderRepaintBoundary());
+          await pumpEventQueue();
+
+          // WHEN - the coordinator is disposed before it resolves
+          await coordinator.dispose();
+          pendingCapturer.completeWithPinnedIdentity();
+          await capture;
+          await pumpEventQueue();
+
+          // THEN - the queue's database is closed, so the frame is never
+          // handed to the recorder
+          expect(recordingQueue.addedEvents, isEmpty);
         },
       );
 
@@ -1362,11 +1432,11 @@ class _PendingScreenshotCapturer extends ScreenshotCapturer {
   @override
   Future<CaptureResult> capture(
     RenderRepaintBoundary boundary, {
-    required SessionManager sessionManager,
+    required Session Function() getCurrentSession,
     required String Function() getDistinctId,
     Set<AutoMaskedView>? maskTypes,
   }) {
-    pinnedSessionId = sessionManager.getCurrentSession().id;
+    pinnedSessionId = getCurrentSession().id;
     pinnedDistinctId = getDistinctId();
     return pendingCapture.future;
   }
@@ -1383,6 +1453,18 @@ class _PendingScreenshotCapturer extends ScreenshotCapturer {
       distinctId: pinnedDistinctId,
     ),
   );
+}
+
+/// Event queue that records every add attempt, including ones that throw
+/// because the queue is disposed and would be swallowed by the recorder.
+class _RecordingEventQueue extends InMemoryEventQueue {
+  final List<SessionReplayEvent> addedEvents = [];
+
+  @override
+  Future<void> add(SessionReplayEvent event) async {
+    addedEvents.add(event);
+    await super.add(event);
+  }
 }
 
 /// Event queue that blocks metadata writes until [releaseMetadata], holding the

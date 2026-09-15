@@ -117,7 +117,7 @@ Future<void> captureGolden(
   final captureFuture = tester.runAsync(() async {
     final result = await capturer.capture(
       boundary,
-      sessionManager: SessionManager(),
+      getCurrentSession: SessionManager().getCurrentSession,
       getDistinctId: () => 'golden-test-distinct-id',
     );
 

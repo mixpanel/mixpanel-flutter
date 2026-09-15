@@ -13,8 +13,8 @@ import '../models/results.dart';
 import '../models/masking_directive.dart';
 import 'masking/mask_detector.dart';
 import 'masking/mask_painter.dart';
+import '../models/session.dart';
 import 'native_image_compressor.dart';
-import 'session/session_manager.dart';
 import 'logger.dart';
 
 /// Compression strategy for captured screenshots.
@@ -73,11 +73,11 @@ class ScreenshotCapturer {
   /// Parameters:
   /// - [boundary]: The render boundary to capture
   /// - [maskTypes]: Set of view types to auto-mask (overrides directive if provided)
-  /// - [sessionManager], [getDistinctId]: read at the frame to pin its identity
+  /// - [getCurrentSession], [getDistinctId]: read at the frame to pin its identity
   /// Returns CaptureResult with compressed image data or error
   Future<CaptureResult> capture(
     RenderRepaintBoundary boundary, {
-    required SessionManager sessionManager,
+    required Session Function() getCurrentSession,
     required String Function() getDistinctId,
     Set<AutoMaskedView>? maskTypes,
   }) async {
@@ -95,7 +95,7 @@ class ScreenshotCapturer {
       await SchedulerBinding.instance.endOfFrame;
 
       // Pinned here because every step below yields, letting identity move.
-      final sessionId = sessionManager.getCurrentSession().id;
+      final sessionId = getCurrentSession().id;
       final distinctId = getDistinctId();
 
       // Detect masks after paint is complete
