@@ -202,7 +202,9 @@ class SessionReplayCoordinator implements WidgetCoordinator {
       ):
         // Update mask regions for debug overlay (only if overlay is enabled)
         // Diff check prevents feedback loop: overlay rebuild → new frame → capture → repeat
-        if (_debugOptions?.overlayColors != null &&
+        // dispose() disposes this notifier, and writing to a disposed one asserts
+        if (!_isDisposed &&
+            _debugOptions?.overlayColors != null &&
             !listEquals(_maskRegions.value, maskRegions)) {
           _maskRegions.value = maskRegions;
         }

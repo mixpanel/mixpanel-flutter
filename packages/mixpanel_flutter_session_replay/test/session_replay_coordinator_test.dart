@@ -16,6 +16,7 @@ import 'package:mixpanel_flutter_session_replay/src/internal/upload/payload_seri
 import 'package:mixpanel_flutter_session_replay/src/internal/session/session_manager.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/logger.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/configuration.dart';
+import 'package:mixpanel_flutter_session_replay/src/models/debug_overlay_colors.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/masking_directive.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/results.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/session.dart';
@@ -43,6 +44,7 @@ void main() {
     SessionReplayCoordinator createCoordinator({
       double autoRecordSessionsPercent = 0,
       RemoteSettingsMode remoteSettingsMode = RemoteSettingsMode.disabled,
+      DebugOptions? debugOptions,
     }) {
       return SessionReplayCoordinator(
         screenshotCapturer: screenshotCapturer,
@@ -53,7 +55,7 @@ void main() {
         logger: logger,
         autoRecordSessionsPercent: autoRecordSessionsPercent,
         remoteSettingsMode: remoteSettingsMode,
-        debugOptions: null,
+        debugOptions: debugOptions,
       );
     }
 
@@ -1312,6 +1314,36 @@ void main() {
       );
 
       test(
+        'should not touch the mask overlay when a frame resolves after the coordinator is disposed',
+        () async {
+          // GIVEN - the debug overlay is on and a capture is in flight
+          final coordinator = createCoordinator(
+            debugOptions: const DebugOptions(),
+          );
+          coordinator.startRecording(sessionsPercent: 100.0);
+          await pumpEventQueue();
+          final capture = coordinator.captureSnapshot(RenderRepaintBoundary());
+          await pumpEventQueue();
+
+          // WHEN - the coordinator is disposed, then the frame resolves with
+          // regions that differ from the notifier's current value
+          await coordinator.dispose();
+          pendingCapturer.completeWithPinnedIdentity(
+            maskRegions: [
+              MaskRegionInfo(
+                const Rect.fromLTWH(0, 0, 10, 10),
+                MaskSource.auto,
+              ),
+            ],
+          );
+
+          // THEN - the disposed notifier is left alone rather than asserting
+          await expectLater(capture, completes);
+          await pumpEventQueue();
+        },
+      );
+
+      test(
         'should record the frame under the captured distinct ID when identify runs during capture',
         () async {
           // GIVEN - a capture is in flight
@@ -1446,15 +1478,18 @@ class _PendingScreenshotCapturer extends ScreenshotCapturer {
   }
 
   /// Resolve the in-flight capture with the identity pinned when it started.
-  void completeWithPinnedIdentity() => pendingCapture.complete(
+  void completeWithPinnedIdentity({
+    List<MaskRegionInfo> maskRegions = const [],
+  }) => pendingCapture.complete(
     CaptureSuccess(
       data: Uint8List.fromList([1, 2, 3]),
       width: 100,
       height: 200,
-      maskCount: 0,
+      maskCount: maskRegions.length,
       timestamp: DateTime.now(),
       sessionId: pinnedSessionId,
       distinctId: pinnedDistinctId,
+      maskRegions: maskRegions,
     ),
   );
 }
