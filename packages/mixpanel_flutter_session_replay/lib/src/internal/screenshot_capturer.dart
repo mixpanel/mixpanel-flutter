@@ -266,6 +266,7 @@ class ScreenshotCapturer {
               maskRegions: maskRegions,
               viewport: boundary.size,
               timestamp: captureTimestamp,
+              sessionId: sessionId,
             )
           : null;
 

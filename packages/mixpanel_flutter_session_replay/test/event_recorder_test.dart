@@ -80,56 +80,59 @@ void main() {
         await recorder.recordSession(newSession);
       });
 
-      test('emits metadata for the first screenshot of a new session', () async {
-        // GIVEN - first session has a screenshot (sets _lastMetadataDimensions)
-        await recorder.recordSnapshot(
-          imageData: Uint8List(0),
-          width: 375,
-          height: 812,
-          timestamp: clock.now(),
-          sessionId: session.id,
-          distinctId: defaultDistinctId,
-        );
+      test(
+        'should emit metadata when recording the first screenshot of a new session',
+        () async {
+          // GIVEN - first session has a screenshot (sets _lastMetadataDimensions)
+          await recorder.recordSnapshot(
+            imageData: Uint8List(0),
+            width: 375,
+            height: 812,
+            timestamp: clock.now(),
+            sessionId: session.id,
+            distinctId: defaultDistinctId,
+          );
 
-        // Drain old session events from queue
-        final oldEvents = await eventQueue.fetchBatch(
-          sessionId: session.id,
-          distinctId: defaultDistinctId,
-          maxBytes: 100000,
-          maxCount: 10,
-        );
-        await eventQueue.remove(oldEvents);
+          // Drain old session events from queue
+          final oldEvents = await eventQueue.fetchBatch(
+            sessionId: session.id,
+            distinctId: defaultDistinctId,
+            maxBytes: 100000,
+            maxCount: 10,
+          );
+          await eventQueue.remove(oldEvents);
 
-        // Start a new session (simulates background→foreground cycle)
-        final newSession = sessionManager.startNewSession();
-        await recorder.recordSession(newSession);
+          // Start a new session (simulates background→foreground cycle)
+          final newSession = sessionManager.startNewSession();
+          await recorder.recordSession(newSession);
 
-        // WHEN - first screenshot of the new session with same dimensions
-        await recorder.recordSnapshot(
-          imageData: Uint8List(0),
-          width: 375,
-          height: 812,
-          timestamp: clock.now(),
-          sessionId: newSession.id,
-          distinctId: defaultDistinctId,
-        );
+          // WHEN - first screenshot of the new session with same dimensions
+          await recorder.recordSnapshot(
+            imageData: Uint8List(0),
+            width: 375,
+            height: 812,
+            timestamp: clock.now(),
+            sessionId: newSession.id,
+            distinctId: defaultDistinctId,
+          );
 
-        // THEN - new session should have its own metadata event
-        final events = await eventQueue.fetchBatch(
-          sessionId: newSession.id,
-          distinctId: defaultDistinctId,
-          maxBytes: 100000,
-          maxCount: 10,
-        );
+          // THEN - new session should have its own metadata event
+          final events = await eventQueue.fetchBatch(
+            sessionId: newSession.id,
+            distinctId: defaultDistinctId,
+            maxBytes: 100000,
+            maxCount: 10,
+          );
 
-        expect(events.length, 2); // metadata + screenshot
-        expect(events[0].type, EventType.metadata);
-        expect(events[1].type, EventType.screenshot);
+          expect(events.length, 2); // metadata + screenshot
+          expect(events[0].type, EventType.metadata);
+          expect(events[1].type, EventType.screenshot);
 
-        final metadata = events[0].payload as MetadataPayload;
-        expect(metadata.width, 375);
-        expect(metadata.height, 812);
-      });
+          final metadata = events[0].payload as MetadataPayload;
+          expect(metadata.width, 375);
+          expect(metadata.height, 812);
+        },
+      );
 
       test(
         'should still emit metadata for the new session when the session rotates during metadata persistence',
@@ -232,7 +235,7 @@ void main() {
       });
 
       test(
-        'pins metadata to the captured session when the session rotated during capture',
+        'should pin metadata to the captured session when the session rotates during capture',
         () async {
           // GIVEN - the session rotates after the frame was captured
           final capturedSessionId = session.id;
