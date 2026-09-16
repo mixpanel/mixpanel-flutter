@@ -9,6 +9,7 @@ import 'package:mixpanel_flutter/src/version.dart';
 import 'package:mixpanel_flutter/src/autocapture/click_event.dart';
 import 'package:mixpanel_flutter/src/autocapture/autocapture_options.dart';
 import 'package:mixpanel_flutter/src/autocapture/autocapture_controller.dart';
+import 'package:mixpanel_flutter/src/autocapture/autocapture_binding.dart';
 
 import 'package:mixpanel_flutter_common/mixpanel_flutter_common.dart';
 
@@ -456,11 +457,6 @@ class Mixpanel {
   static AutocaptureController? _activeAutocapture;
   static int _autocaptureInitGeneration = 0;
 
-  /// Internal adapter for the root widget, not an application API.
-  /// @nodoc
-  AutocaptureController? get autocaptureController => _autocaptureController;
-  AutocaptureController? _autocaptureController;
-
   Mixpanel(String token)
       : _token = token,
         _people = People(token),
@@ -526,7 +522,7 @@ class Mixpanel {
           autocaptureOptions,
           (name, event) =>
               instance.autocapture._trackClickEvent(name, event, null));
-      instance._autocaptureController = controller;
+      AutocaptureBinding.attach(instance, controller);
       _activeAutocapture = controller;
       await controller.refreshConsent(instance.hasOptedOutTracking);
     }
@@ -649,11 +645,17 @@ class Mixpanel {
     if (_MixpanelHelper.isValidString(distinctId)) {
       final controller = _activeAutocapture;
       final consentEpoch = controller?.suspend();
-      await _channel.invokeMethod<void>(
-          'identify', <String, dynamic>{'distinctId': distinctId});
-      if (controller != null) {
-        await controller.refreshConsent(hasOptedOutTracking,
-            consentEpoch: consentEpoch);
+      try {
+        await _channel.invokeMethod<void>(
+            'identify', <String, dynamic>{'distinctId': distinctId});
+      } finally {
+        // Even a failed native call may have changed native state. Recover only
+        // from a fresh consent read; preserve the original exception for callers.
+        // The epoch guard prevents recovery over a newer opt-out/reset/close.
+        if (controller != null) {
+          await controller.refreshConsent(hasOptedOutTracking,
+              consentEpoch: consentEpoch);
+        }
       }
     } else {
       developer.log('`identify` failed: distinctId cannot be blank',
@@ -947,10 +949,15 @@ class Mixpanel {
   Future<void> reset() async {
     final controller = _activeAutocapture;
     final consentEpoch = controller?.suspend();
-    await _channel.invokeMethod<void>('reset');
-    if (controller != null) {
-      await controller.refreshConsent(hasOptedOutTracking,
-          consentEpoch: consentEpoch);
+    try {
+      await _channel.invokeMethod<void>('reset');
+    } finally {
+      // Recover after failure only if consent is confirmed and still current.
+      // refreshConsent contains read failures, leaving the original error intact.
+      if (controller != null) {
+        await controller.refreshConsent(hasOptedOutTracking,
+            consentEpoch: consentEpoch);
+      }
     }
   }
 

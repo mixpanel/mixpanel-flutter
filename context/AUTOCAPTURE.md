@@ -143,7 +143,7 @@ recorded validation requirements or change package versioning by itself.
 
 Consent refresh epochs are separate from detection generations: navigation must
 not strand a suspended controller; newer consent actions/close still win. The
-instance controller is read-only outside Mixpanel. Lifecycle methods intentionally
+instance controller is accessed only through the non-exported internal adapter. Lifecycle methods intentionally
 use the shared active controller because native method channels share one SDK.
 Generic consent-failure diagnostics contain no payload/error details.
 
@@ -210,3 +210,22 @@ offscreen painters, visible/offscreen textures, portal surfaces/responses under
 sized offscreen hosts, and visible/offscreen StatefulElement platform surfaces.
 The platform-view fixture supplies geometry without native channels; real-device
 platform rendering/performance remains a separate release validation task.
+
+
+## Greptile review follow-up
+
+identify/reset always attempt epoch-guarded consent refresh after the native
+operation, including when that operation throws. The original native exception
+still reaches the caller; a failed/unknown/denied consent read keeps capture
+suspended. Pending pre-operation detections remain discarded. Newer opt-out,
+reset or reinitialization cannot be overridden by stale failure recovery.
+
+The public autocaptureController getter has been removed. AutocaptureBinding,
+an unexported src adapter with weak instance keys, connects initialization to
+root/navigation widgets without exposing the controller on Mixpanel's API.
+The existing public mixpanel.autocapture API is unchanged.
+
+Validation: 236 tests pass on Flutter 3.19.0 and 3.44.6, including 16 new
+lifecycle-failure tests. Coverage includes original-error preservation, all
+consent outcomes, pending detection cancellation, opt-out during native/recovery
+work, newer reset and reinitialization. Focused analysis and format checks pass.

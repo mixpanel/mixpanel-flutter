@@ -3,6 +3,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
 import '../../mixpanel_flutter.dart';
 import 'autocapture_controller.dart';
+import 'autocapture_binding.dart';
 import 'dead_click_detector.dart';
 import 'rage_click_tracker.dart';
 import 'response_snapshot.dart';
@@ -86,7 +87,7 @@ class _CaptureState extends State<MixpanelAutocaptureWidget>
   }
 
   void _attach() {
-    final controller = widget.instance?.autocaptureController;
+    final controller = AutocaptureBinding.getController(widget.instance);
     if (identical(controller, _controller)) return;
     _controller = controller;
     if (controller == null || _viewId == null) return;
@@ -317,7 +318,7 @@ class _CaptureState extends State<MixpanelAutocaptureWidget>
 class MixpanelAutocaptureNavigatorObserver extends NavigatorObserver {
   MixpanelAutocaptureNavigatorObserver({required this.instance});
   final Mixpanel instance;
-  void _change() => instance.autocaptureController?.invalidate();
+  void _change() => AutocaptureBinding.getController(instance)?.invalidate();
   @override
   void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) =>
       _change();
