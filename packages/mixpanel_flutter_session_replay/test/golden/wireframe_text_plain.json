@@ -1,0 +1,19 @@
+{
+  "viewport": [
+    800,
+    600
+  ],
+  "elements": [
+    {
+      "role": "text",
+      "text": "Public Information",
+      "bounds": [
+        340,
+        290,
+        119,
+        20
+      ],
+      "maskDecision": "NONE"
+    }
+  ]
+}

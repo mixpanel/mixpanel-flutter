@@ -1,5 +1,6 @@
 import 'dart:io' show Platform;
 
+import 'package:flutter/foundation.dart' show debugPrint, kDebugMode;
 import 'package:http/http.dart' as http;
 import 'package:meta/meta.dart';
 
@@ -19,6 +20,7 @@ import 'internal/upload/payload_serializer.dart';
 import 'internal/settings/settings_service.dart';
 import 'internal/settings/settings_storage_provider.dart';
 import 'internal/session_replay_coordinator.dart';
+import 'internal/wireframe/wireframe_emitter.dart';
 import 'internal/logger.dart';
 
 /// Mixpanel Session Replay for Flutter
@@ -68,6 +70,32 @@ class MixpanelSessionReplay {
     );
   }
 
+  /// Tells an app that just turned wireframes on that the feature is in beta.
+  ///
+  /// The ask is verification. An integrator who has just turned wireframes on is
+  /// pointed at the debug emitter and asked to confirm, against their own
+  /// expectations of what may leave the device, that nothing sensitive is
+  /// captured — while it is still cheap to find out.
+  ///
+  /// Deliberately bypasses [MixpanelLogger] and its
+  /// [SessionReplayOptions.logLevel] gate — the developer who needs to read this
+  /// is the one wiring wireframes up for the first time, and has no particular
+  /// reason to have turned logging up. [kDebugMode] keeps it out of a release
+  /// build instead.
+  ///
+  /// Fires on local opt-in, before the remote kill switch is consulted. If the
+  /// server then turns capture off, the coordinator says so in its own log line.
+  static void _logWireframesBetaNotice(SessionReplayOptions options) {
+    if (!kDebugMode || options.wireframesOptions == null) return;
+
+    debugPrint(
+      '[INFO] mixpanel.session_replay: Wireframes enabled (beta). Before '
+      'shipping to production, inspect the wireframes your app produces with '
+      'the wireframe debug emitter and confirm that no sensitive information '
+      'is captured.',
+    );
+  }
+
   /// Internal initialization with dependency injection for testing
   ///
   /// **INTERNAL USE ONLY** - This method is NOT part of the public API and should
@@ -98,6 +126,8 @@ class MixpanelSessionReplay {
     logger.debug('DistinctId: $distinctId');
     logger.debug('WiFi Only: ${options.platformOptions.mobile.wifiOnly}');
     logger.debug('Flush Interval: ${options.flushInterval.inSeconds}s');
+
+    _logWireframesBetaNotice(options);
 
     try {
       logger.debug('Validating configuration...');
@@ -202,12 +232,25 @@ class MixpanelSessionReplay {
         autoMaskTypes: options.autoMaskedViews,
       );
 
+      // Build wireframe emitter if opted in. One instance per SDK lifetime.
+      final wireframesOptions = options.wireframesOptions;
+      final wireframeEmitter = wireframesOptions != null
+          ? WireframeEmitter(
+              sensitiveRules: wireframesOptions.sensitiveRules,
+              debugEmitter: options.debugOptions?.wireframeEmitter,
+              logger: logger,
+            )
+          : null;
+
       // Create screenshot capturer with native JPEG compression
       final screenshotCapturer = ScreenshotCapturer(
         directive: directive,
         logger: logger,
         debugOverlayEnabled: options.debugOptions?.overlayColors != null,
         nativeCompressor: NativeImageCompressor(),
+        wireframeEmitter: wireframeEmitter,
+        useAccessibilityLabelFallback:
+            wireframesOptions?.useAccessibilityLabelFallback ?? false,
       );
 
       // Create instance first (before components) so we can reference it in closures
@@ -239,6 +282,8 @@ class MixpanelSessionReplay {
         httpClient: sharedHttpClient,
         storageProvider: storageProvider,
         serverUrl: resolvedServerUrl,
+        // Only ask for the wireframe kill switch when this app opted in.
+        wireframesRequested: options.wireframesOptions != null,
       );
 
       // Create upload service with payload serializer

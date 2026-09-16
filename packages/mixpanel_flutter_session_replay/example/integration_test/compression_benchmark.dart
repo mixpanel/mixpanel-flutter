@@ -24,6 +24,9 @@ Future<void> runBenchmark(
   final boundary = tester.allRenderObjects
       .whereType<RenderRepaintBoundary>()
       .first;
+  final boundaryElement = tester.allElements.firstWhere(
+    (element) => identical(element.renderObject, boundary),
+  );
 
   final logger = MixpanelLogger(LogLevel.info);
   final nativeCompressor = NativeImageCompressor();
@@ -44,7 +47,9 @@ Future<void> runBenchmark(
 
     // Helper: start capture, pump frame for endOfFrame, then await result
     Future<CaptureResult?> runCapture() async {
-      final future = tester.runAsync(() => capturer.capture(boundary));
+      final future = tester.runAsync(
+        () => capturer.capture(boundary, boundaryElement: boundaryElement),
+      );
       await tester.pump();
       return await future;
     }

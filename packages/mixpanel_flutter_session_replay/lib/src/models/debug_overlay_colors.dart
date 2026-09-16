@@ -1,11 +1,16 @@
 import 'package:flutter/material.dart';
 
+import 'wireframes_options.dart';
+
 /// Debug configuration options for Session Replay
 ///
 /// Houses debug-related settings like overlay visualization.
 /// When null in [SessionReplayOptions], all debug features are disabled.
 class DebugOptions {
-  const DebugOptions({this.overlayColors = const DebugOverlayColors()});
+  const DebugOptions({
+    this.overlayColors = const DebugOverlayColors(),
+    this.wireframeEmitter,
+  });
 
   /// Color configuration for the mask overlay visualization.
   ///
@@ -14,6 +19,19 @@ class DebugOptions {
   ///
   /// When null, overlay is disabled.
   final DebugOverlayColors? overlayColors;
+
+  /// Hands back each wireframe frame as it is captured, so you can confirm
+  /// locally what is being sent and why each element's text was kept or
+  /// removed. Never sent to Mixpanel.
+  ///
+  /// Observes wireframe capture; it does not enable it — nothing is delivered
+  /// unless [SessionReplayOptions.wireframesOptions] is set. The
+  /// [WireframeSnapshot] JSON shape and [MaskDecision] names are for
+  /// interactive debugging and are **not a stable contract**.
+  ///
+  /// Exceptions thrown from the callback are caught and logged; they never
+  /// crash the SDK.
+  final void Function(WireframeSnapshot)? wireframeEmitter;
 }
 
 /// Color configuration for debug mask overlay

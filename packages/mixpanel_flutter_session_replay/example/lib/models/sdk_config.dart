@@ -1,5 +1,5 @@
 import 'dart:io' show Platform;
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:mixpanel_flutter_session_replay/mixpanel_flutter_session_replay.dart';
 
 /// Configuration data for SDK initialization
@@ -16,6 +16,9 @@ class SdkConfig {
     required this.showDebugMaskOverlay,
     required this.autoMaskText,
     required this.autoMaskImage,
+    required this.enableWireframes,
+    required this.enableWireframeDebugEmitter,
+    required this.useAccessibilityLabelFallback,
   });
 
   final String token;
@@ -29,6 +32,9 @@ class SdkConfig {
   final bool showDebugMaskOverlay;
   final bool autoMaskText;
   final bool autoMaskImage;
+  final bool enableWireframes;
+  final bool enableWireframeDebugEmitter;
+  final bool useAccessibilityLabelFallback;
 
   /// Default configuration
   factory SdkConfig.defaultConfig() {
@@ -44,6 +50,9 @@ class SdkConfig {
       showDebugMaskOverlay: false,
       autoMaskText: true,
       autoMaskImage: true,
+      enableWireframes: false,
+      enableWireframeDebugEmitter: true,
+      useAccessibilityLabelFallback: false,
     );
   }
 
@@ -53,12 +62,21 @@ class SdkConfig {
     return Platform.isAndroid || Platform.isIOS;
   }
 
-  /// Convert to SessionReplayOptions
-  SessionReplayOptions toOptions() {
+  /// Convert to SessionReplayOptions.
+  ///
+  /// [onWireframeSnapshot] receives every captured frame when both
+  /// `enableWireframes` and `enableWireframeDebugEmitter` are on. The emitter
+  /// only *observes* capture — installing it never turns capture on, which is
+  /// why it lives on `debugOptions` rather than `wireframesOptions`.
+  SessionReplayOptions toOptions({
+    void Function(WireframeSnapshot)? onWireframeSnapshot,
+  }) {
     // Build auto-masked views set based on toggles
     final autoMaskedViews = <AutoMaskedView>{};
     if (autoMaskText) autoMaskedViews.add(AutoMaskedView.text);
     if (autoMaskImage) autoMaskedViews.add(AutoMaskedView.image);
+
+    final wantsEmitter = enableWireframes && enableWireframeDebugEmitter;
 
     return SessionReplayOptions(
       autoMaskedViews: autoMaskedViews,
@@ -70,7 +88,24 @@ class SdkConfig {
       platformOptions: PlatformOptions(
         mobile: MobileOptions(wifiOnly: wifiOnly),
       ),
-      debugOptions: showDebugMaskOverlay ? const DebugOptions() : null,
+      debugOptions: (showDebugMaskOverlay || wantsEmitter)
+          ? DebugOptions(
+              overlayColors: showDebugMaskOverlay
+                  ? const DebugOverlayColors()
+                  : null,
+              wireframeEmitter: wantsEmitter
+                  ? (snapshot) {
+                      onWireframeSnapshot?.call(snapshot);
+                      debugPrint('[wireframe] ${snapshot.toJson()}');
+                    }
+                  : null,
+            )
+          : null,
+      wireframesOptions: enableWireframes
+          ? WireframesOptions(
+              useAccessibilityLabelFallback: useAccessibilityLabelFallback,
+            )
+          : null,
     );
   }
 }

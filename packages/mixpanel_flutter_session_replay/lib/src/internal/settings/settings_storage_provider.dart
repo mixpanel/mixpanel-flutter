@@ -21,6 +21,7 @@ class SettingsStorageProvider {
 
   String get _recordingEnabledKey => '$_prefsPrefix${_token}_enabled';
   String get _sdkConfigKey => '$_prefsPrefix${_token}_sdk_config';
+  String get _wireframeEnabledKey => '$_prefsPrefix${_token}_wireframe_enabled';
 
   SettingsStorageProvider({
     required String token,
@@ -59,6 +60,42 @@ class SettingsStorageProvider {
       return true;
     } catch (e) {
       _logger.error('Failed to check cached recording state: $e');
+      return true; // Default to enabled on error
+    }
+  }
+
+  // --- Wireframe Kill Switch ---
+
+  void saveWireframeDisabled() {
+    try {
+      SharedPreferencesAsync().setBool(_wireframeEnabledKey, false);
+    } catch (e) {
+      _logger.error('Failed to cache wireframe state: $e');
+    }
+  }
+
+  void clearWireframeState() {
+    try {
+      SharedPreferencesAsync().remove(_wireframeEnabledKey);
+    } catch (e) {
+      _logger.error('Failed to clear wireframe cache: $e');
+    }
+  }
+
+  Future<bool> getWireframeEnabled() async {
+    try {
+      final isEnabled = await SharedPreferencesAsync().getBool(
+        _wireframeEnabledKey,
+      );
+      if (isEnabled != null) {
+        if (!isEnabled) {
+          _logger.info('Using cached wireframe state: disabled');
+        }
+        return isEnabled;
+      }
+      return true;
+    } catch (e) {
+      _logger.error('Failed to check cached wireframe state: $e');
       return true; // Default to enabled on error
     }
   }
@@ -108,6 +145,7 @@ class SettingsStorageProvider {
       isRecordingEnabled: await getRecordingEnabled(),
       sdkConfig: await getSdkConfig(),
       isFromCache: true,
+      isWireframeEnabled: await getWireframeEnabled(),
     );
   }
 }
