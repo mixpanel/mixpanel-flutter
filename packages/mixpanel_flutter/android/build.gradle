@@ -23,7 +23,17 @@ rootProject.allprojects {
 }
 
 apply plugin: 'com.android.library'
-apply plugin: 'kotlin-android'
+
+// AGP 9 compiles Kotlin itself and rejects org.jetbrains.kotlin.android outright. The
+// android.builtInKotlin=false escape hatch -- which Flutter's own 3.47 app template writes
+// into gradle.properties by default -- opts back out, so the property has to be honoured
+// as well as the AGP major version.
+def agpMajor = com.android.Version.ANDROID_GRADLE_PLUGIN_VERSION.tokenize('.')[0].toInteger()
+def builtInKotlin = agpMajor >= 9 && project.findProperty('android.builtInKotlin') != 'false'
+
+if (!builtInKotlin) {
+    apply plugin: 'kotlin-android'
+}
 
 android {
     // Safely handle 'namespace' property for new Android Gradle plugin versions
@@ -43,18 +53,6 @@ android {
         targetCompatibility JavaVersion.VERSION_17
     }
 
-    kotlinOptions {
-        jvmTarget = '17'
-        // mixpanel-android-common:1.0.1 is published with Kotlin 2.0
-        // metadata. Flutter's gradle integration picks a KGP version we
-        // can't reliably control from this module's buildscript, so a
-        // Kotlin 1.9.x compiler often ends up compiling this plugin and
-        // chokes on the newer metadata. The bytecode itself is
-        // forward-compatible (the consumed APIs are just a Flow and a
-        // data class), so suppressing the metadata version check is the
-        // canonical workaround.
-        freeCompilerArgs += ['-Xskip-metadata-version-check']
-    }
 
     sourceSets {
         main.kotlin.srcDirs += 'src/main/kotlin'
@@ -65,13 +63,33 @@ android {
     }
 }
 
+// kotlin.compilerOptions needs KGP >= 2.0. Flutter <= 3.41 puts KGP 1.8.0 on the buildscript
+// classpath from its own bundled Gradle plugin, and an app's ext.kotlin_version does not
+// override it, so probe for the newer DSL instead of assuming it.
+def kotlinExt = project.extensions.findByName('kotlin')
+if (kotlinExt?.hasProperty('compilerOptions')) {
+    kotlin {
+        compilerOptions {
+            jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
+            // mixpanel-android-common is published with Kotlin 2.x metadata. A Kotlin 1.8/1.9
+            // compiler -- which is what Flutter <= 3.41 supplies -- cannot read it without this.
+            freeCompilerArgs.add('-Xskip-metadata-version-check')
+        }
+    }
+} else {
+    android.kotlinOptions {
+        jvmTarget = '17'
+        freeCompilerArgs += ['-Xskip-metadata-version-check']
+    }
+}
+
 dependencies {
-    implementation "com.mixpanel.android:mixpanel-android:8.9.0"
-    // mixpanel-android:8.9.0 only declares mixpanel-android-common as a
+    implementation "com.mixpanel.android:mixpanel-android:8.11.1"
+    // mixpanel-android:8.11.1 only declares mixpanel-android-common as a
     // runtime dependency, so MixpanelEventBridge is not on the compile
     // classpath unless we add it explicitly here. EventBridgeSubscriber.kt
     // imports it directly.
-    implementation "com.mixpanel.android:mixpanel-android-common:1.0.1"
+    implementation "com.mixpanel.android:mixpanel-android-common:1.1.0"
     implementation "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
     implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.1"
 }

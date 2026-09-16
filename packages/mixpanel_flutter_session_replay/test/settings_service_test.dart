@@ -1,8 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
+import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart' as http_testing;
 import 'package:mixpanel_flutter_session_replay/src/internal/settings/settings_service.dart';
@@ -15,6 +18,8 @@ import 'package:mixpanel_flutter_session_replay/src/models/event_trigger.dart';
 import 'helpers/fake_http_client.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   group('SettingsService', () {
     final testToken = 'test-token-123';
     final testLogger = MixpanelLogger(LogLevel.none);
@@ -356,6 +361,225 @@ void main() {
       });
     });
 
+    group('wireframe kill switch', () {
+      test('does not ask for the switch when wireframes are off', () async {
+        // GIVEN
+        final recorder = createRecordingHttpClient(
+          statusCode: 200,
+          body: jsonEncode({
+            'recording': {'is_enabled': true},
+          }),
+        );
+        final service = SettingsService(
+          storageProvider: storageProvider,
+          token: testToken,
+          logger: MixpanelLogger(LogLevel.none),
+          httpClient: recorder.client,
+        );
+
+        // WHEN
+        await service.fetchRemoteSettings();
+
+        // THEN
+        expect(
+          recorder.requests.single.url.queryParameters.containsKey('wireframe'),
+          false,
+        );
+      });
+
+      test('asks for the switch when wireframes are on', () async {
+        // GIVEN
+        final recorder = createRecordingHttpClient(
+          statusCode: 200,
+          body: jsonEncode({
+            'recording': {'is_enabled': true},
+          }),
+        );
+        final service = SettingsService(
+          storageProvider: storageProvider,
+          token: testToken,
+          logger: MixpanelLogger(LogLevel.none),
+          httpClient: recorder.client,
+          wireframesRequested: true,
+        );
+
+        // WHEN
+        await service.fetchRemoteSettings();
+
+        // THEN
+        expect(recorder.requests.single.url.queryParameters['wireframe'], '1');
+      });
+
+      test('reports wireframes disabled when the server says so', () async {
+        // GIVEN
+        final httpClient = http_testing.MockClient((request) async {
+          return http.Response(
+            jsonEncode({
+              'recording': {'is_enabled': true},
+              'wireframe': {
+                'is_enabled': false,
+                'error': 'organization is blocked from wireframe capture.',
+              },
+            }),
+            200,
+          );
+        });
+        final service = SettingsService(
+          storageProvider: storageProvider,
+          token: testToken,
+          logger: MixpanelLogger(LogLevel.none),
+          httpClient: httpClient,
+          wireframesRequested: true,
+        );
+
+        // WHEN
+        final result = await service.fetchRemoteSettings();
+
+        // THEN - replay keeps recording; only wireframes are killed
+        expect(result.isWireframeEnabled, false);
+        expect(result.isRecordingEnabled, true);
+      });
+
+      test('leaves wireframes on when the field is absent', () async {
+        // GIVEN
+        final httpClient = createFakeSettingsClient(isEnabled: true);
+        final service = SettingsService(
+          storageProvider: storageProvider,
+          token: testToken,
+          logger: MixpanelLogger(LogLevel.none),
+          httpClient: httpClient,
+          wireframesRequested: true,
+        );
+
+        // WHEN
+        final result = await service.fetchRemoteSettings();
+
+        // THEN
+        expect(result.isWireframeEnabled, true);
+      });
+
+      test(
+        'preserves cached wireframe disable when the field is absent',
+        () async {
+          // GIVEN - an earlier launch received an explicit kill-switch response
+          SharedPreferencesAsyncPlatform.instance =
+              InMemorySharedPreferencesAsync.withData({
+                'mp_sr_flutter_${testToken}_wireframe_enabled': false,
+              });
+          final provider = SettingsStorageProvider(
+            token: testToken,
+            logger: testLogger,
+          );
+          final service = SettingsService(
+            storageProvider: provider,
+            token: testToken,
+            logger: MixpanelLogger(LogLevel.none),
+            httpClient: createFakeSettingsClient(isEnabled: true),
+            wireframesRequested: true,
+          );
+
+          // WHEN - the successful response has no wireframe field
+          final result = await service.fetchRemoteSettings();
+
+          // THEN - only an explicit true may clear the cached kill switch
+          expect(result.isFromCache, false);
+          expect(result.isWireframeEnabled, false);
+          expect(await provider.getWireframeEnabled(), false);
+        },
+      );
+
+      test('kills wireframes while recording is also disabled', () async {
+        // GIVEN
+        final httpClient = http_testing.MockClient((request) async {
+          return http.Response(
+            jsonEncode({
+              'recording': {'is_enabled': false},
+              'wireframe': {'is_enabled': false},
+            }),
+            200,
+          );
+        });
+        final service = SettingsService(
+          storageProvider: storageProvider,
+          token: testToken,
+          logger: MixpanelLogger(LogLevel.none),
+          httpClient: httpClient,
+          wireframesRequested: true,
+        );
+
+        // WHEN
+        final result = await service.fetchRemoteSettings();
+
+        // THEN
+        expect(result.isRecordingEnabled, false);
+        expect(result.isWireframeEnabled, false);
+      });
+
+      test('falls back to the cached verdict on network failure', () async {
+        // GIVEN - an earlier launch cached the kill switch
+        SharedPreferencesAsyncPlatform.instance =
+            InMemorySharedPreferencesAsync.withData({
+              'mp_sr_flutter_${testToken}_wireframe_enabled': false,
+            });
+        final disabledCacheProvider = SettingsStorageProvider(
+          token: testToken,
+          logger: testLogger,
+        );
+
+        final service = SettingsService(
+          storageProvider: disabledCacheProvider,
+          token: testToken,
+          logger: MixpanelLogger(LogLevel.none),
+          httpClient: createFailingHttpClient(),
+          wireframesRequested: true,
+        );
+
+        // WHEN
+        final result = await service.fetchRemoteSettings();
+
+        // THEN
+        expect(result.isFromCache, true);
+        expect(result.isWireframeEnabled, false);
+      });
+
+      test('clears the cached verdict once the server re-enables', () async {
+        // GIVEN - the kill switch fired earlier
+        SharedPreferencesAsyncPlatform.instance =
+            InMemorySharedPreferencesAsync.withData({
+              'mp_sr_flutter_${testToken}_wireframe_enabled': false,
+            });
+        final provider = SettingsStorageProvider(
+          token: testToken,
+          logger: testLogger,
+        );
+        expect(await provider.getWireframeEnabled(), false);
+
+        final httpClient = http_testing.MockClient((request) async {
+          return http.Response(
+            jsonEncode({
+              'recording': {'is_enabled': true},
+              'wireframe': {'is_enabled': true},
+            }),
+            200,
+          );
+        });
+        final service = SettingsService(
+          storageProvider: provider,
+          token: testToken,
+          logger: MixpanelLogger(LogLevel.none),
+          httpClient: httpClient,
+          wireframesRequested: true,
+        );
+
+        // WHEN
+        final result = await service.fetchRemoteSettings();
+
+        // THEN
+        expect(result.isWireframeEnabled, true);
+        expect(await provider.getWireframeEnabled(), true);
+      });
+    });
+
     group('remoteState', () {
       test('is pending before any check', () {
         // GIVEN
@@ -646,5 +870,135 @@ void main() {
         expect(uri.path, '/mp/settings');
       },
     );
+
+    group('app info query params', () {
+      const channel = MethodChannel('com.mixpanel.flutter_session_replay');
+
+      tearDown(() {
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(channel, null);
+      });
+
+      /// Stubs the native getAppInfo call with [response].
+      void stubAppInfo(Map<String, dynamic>? response) {
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(channel, (call) async {
+              if (call.method == 'getAppInfo') return response;
+              return null;
+            });
+      }
+
+      test('sends injected bundleId and buildNumber', () async {
+        // GIVEN
+        final recorder = createRecordingHttpClient(
+          statusCode: 200,
+          body: jsonEncode({
+            'recording': {'is_enabled': true},
+          }),
+        );
+        final service = SettingsService(
+          storageProvider: storageProvider,
+          token: testToken,
+          logger: testLogger,
+          httpClient: recorder.client,
+          bundleId: 'com.test.app',
+          buildNumber: '1234',
+        );
+
+        // WHEN
+        await service.checkRecordingEnabled();
+
+        // THEN
+        final uri = recorder.requests.single.url;
+        expect(uri.queryParameters['bundle_id'], 'com.test.app');
+        expect(uri.queryParameters['build_number'], '1234');
+
+        // Pre-existing params must be unaffected
+        expect(uri.queryParameters['recording'], '1');
+        expect(uri.queryParameters['sdk_config'], '1');
+        expect(uri.queryParameters['mp_lib'], 'flutter-sr');
+        expect(uri.queryParameters['\$lib_version'], sdkVersion);
+      });
+
+      test('resolves bundleId and buildNumber from the platform', () async {
+        // GIVEN
+        stubAppInfo({'bundleId': 'com.native.app', 'buildNumber': '99'});
+        final recorder = createRecordingHttpClient(
+          statusCode: 200,
+          body: jsonEncode({
+            'recording': {'is_enabled': true},
+          }),
+        );
+        final service = SettingsService(
+          storageProvider: storageProvider,
+          token: testToken,
+          logger: testLogger,
+          httpClient: recorder.client,
+        );
+
+        // WHEN
+        await service.checkRecordingEnabled();
+
+        // THEN
+        final uri = recorder.requests.single.url;
+        expect(uri.queryParameters['bundle_id'], 'com.native.app');
+        expect(uri.queryParameters['build_number'], '99');
+      });
+
+      test('omits both params when the platform supplies neither', () async {
+        // GIVEN — no mock handler, so the channel throws MissingPluginException
+        final recorder = createRecordingHttpClient(
+          statusCode: 200,
+          body: jsonEncode({
+            'recording': {'is_enabled': true},
+          }),
+        );
+        final service = SettingsService(
+          storageProvider: storageProvider,
+          token: testToken,
+          logger: testLogger,
+          httpClient: recorder.client,
+        );
+
+        // WHEN
+        await service.checkRecordingEnabled();
+
+        // THEN
+        final uri = recorder.requests.single.url;
+        expect(uri.queryParameters.containsKey('bundle_id'), isFalse);
+        expect(uri.queryParameters.containsKey('build_number'), isFalse);
+
+        // Pre-existing params must still be sent
+        expect(uri.queryParameters['recording'], '1');
+        expect(uri.queryParameters['sdk_config'], '1');
+        expect(uri.queryParameters['mp_lib'], 'flutter-sr');
+        expect(uri.queryParameters['\$lib_version'], sdkVersion);
+      });
+
+      test('omits only the param the platform cannot supply', () async {
+        // GIVEN — platform returns bundleId but no buildNumber
+        stubAppInfo({'bundleId': 'com.partial.app'});
+        final recorder = createRecordingHttpClient(
+          statusCode: 200,
+          body: jsonEncode({
+            'recording': {'is_enabled': true},
+          }),
+        );
+        final service = SettingsService(
+          storageProvider: storageProvider,
+          token: testToken,
+          logger: testLogger,
+          httpClient: recorder.client,
+        );
+
+        // WHEN
+        await service.checkRecordingEnabled();
+
+        // THEN
+        final uri = recorder.requests.single.url;
+        expect(uri.queryParameters['bundle_id'], 'com.partial.app');
+        expect(uri.queryParameters.containsKey('build_number'), isFalse);
+      });
+    });
   });
 }

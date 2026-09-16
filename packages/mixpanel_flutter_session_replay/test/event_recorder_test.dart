@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:typed_data';
+import 'dart:ui';
 
 import 'package:clock/clock.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -8,6 +10,9 @@ import 'package:mixpanel_flutter_session_replay/src/internal/logger.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/configuration.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/session.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/session_event.dart';
+import 'package:mixpanel_flutter_session_replay/src/models/wireframe.dart';
+import 'package:mixpanel_flutter_session_replay/src/models/wireframes_options.dart'
+    show MaskDecision;
 
 import 'helpers/in_memory_event_queue.dart';
 
@@ -75,52 +80,117 @@ void main() {
         await recorder.recordSession(newSession);
       });
 
-      test('resets metadata dimensions so new session emits metadata', () async {
-        // GIVEN - first session has a screenshot (sets _lastMetadataDimensions)
-        await recorder.recordSnapshot(
-          imageData: Uint8List(0),
-          width: 375,
-          height: 812,
-          timestamp: clock.now(),
-        );
+      test(
+        'should emit metadata when recording the first screenshot of a new session',
+        () async {
+          // GIVEN - first session has a screenshot (sets _lastMetadataDimensions)
+          await recorder.recordSnapshot(
+            imageData: Uint8List(0),
+            width: 375,
+            height: 812,
+            timestamp: clock.now(),
+            sessionId: session.id,
+            distinctId: defaultDistinctId,
+          );
 
-        // Drain old session events from queue
-        final oldEvents = await eventQueue.fetchBatch(
-          sessionId: session.id,
-          distinctId: defaultDistinctId,
-          maxBytes: 100000,
-          maxCount: 10,
-        );
-        await eventQueue.remove(oldEvents);
+          // Drain old session events from queue
+          final oldEvents = await eventQueue.fetchBatch(
+            sessionId: session.id,
+            distinctId: defaultDistinctId,
+            maxBytes: 100000,
+            maxCount: 10,
+          );
+          await eventQueue.remove(oldEvents);
 
-        // Start a new session (simulates background→foreground cycle)
-        final newSession = sessionManager.startNewSession();
-        await recorder.recordSession(newSession);
+          // Start a new session (simulates background→foreground cycle)
+          final newSession = sessionManager.startNewSession();
+          await recorder.recordSession(newSession);
 
-        // WHEN - first screenshot of the new session with same dimensions
-        await recorder.recordSnapshot(
-          imageData: Uint8List(0),
-          width: 375,
-          height: 812,
-          timestamp: clock.now(),
-        );
+          // WHEN - first screenshot of the new session with same dimensions
+          await recorder.recordSnapshot(
+            imageData: Uint8List(0),
+            width: 375,
+            height: 812,
+            timestamp: clock.now(),
+            sessionId: newSession.id,
+            distinctId: defaultDistinctId,
+          );
 
-        // THEN - new session should have its own metadata event
-        final events = await eventQueue.fetchBatch(
-          sessionId: newSession.id,
-          distinctId: defaultDistinctId,
-          maxBytes: 100000,
-          maxCount: 10,
-        );
+          // THEN - new session should have its own metadata event
+          final events = await eventQueue.fetchBatch(
+            sessionId: newSession.id,
+            distinctId: defaultDistinctId,
+            maxBytes: 100000,
+            maxCount: 10,
+          );
 
-        expect(events.length, 2); // metadata + screenshot
-        expect(events[0].type, EventType.metadata);
-        expect(events[1].type, EventType.screenshot);
+          expect(events.length, 2); // metadata + screenshot
+          expect(events[0].type, EventType.metadata);
+          expect(events[1].type, EventType.screenshot);
 
-        final metadata = events[0].payload as MetadataPayload;
-        expect(metadata.width, 375);
-        expect(metadata.height, 812);
-      });
+          final metadata = events[0].payload as MetadataPayload;
+          expect(metadata.width, 375);
+          expect(metadata.height, 812);
+        },
+      );
+
+      test(
+        'should still emit metadata for the new session when the session rotates during metadata persistence',
+        () async {
+          // GIVEN - a recorder whose metadata write blocks mid-flight
+          final pausingQueue = _PausingMetadataEventQueue();
+          await pausingQueue.initialize();
+          final pausingRecorder = EventRecorder(
+            eventQueue: pausingQueue,
+            sessionManager: sessionManager,
+            getDistinctId: () => defaultDistinctId,
+            logger: MixpanelLogger(LogLevel.none),
+          );
+
+          // WHEN - the session rotates while that write is still pending
+          final inFlight = pausingRecorder.recordSnapshot(
+            imageData: Uint8List(0),
+            width: 375,
+            height: 812,
+            timestamp: clock.now(),
+            sessionId: session.id,
+            distinctId: defaultDistinctId,
+          );
+          await pumpEventQueue();
+          final newSession = sessionManager.startNewSession();
+          await pausingRecorder.recordSession(newSession);
+          pausingQueue.releaseMetadata();
+          await inFlight;
+
+          // Drain the previous session so the batch below holds only the new one
+          final previousEvents = await pausingQueue.fetchBatch(
+            sessionId: session.id,
+            distinctId: defaultDistinctId,
+            maxBytes: 100000,
+            maxCount: 10,
+          );
+          await pausingQueue.remove(previousEvents);
+
+          // THEN - the new session's first screenshot still emits its own
+          // metadata, even though its dimensions match the previous session's
+          await pausingRecorder.recordSnapshot(
+            imageData: Uint8List(0),
+            width: 375,
+            height: 812,
+            timestamp: clock.now(),
+            sessionId: newSession.id,
+            distinctId: defaultDistinctId,
+          );
+
+          final events = await pausingQueue.fetchBatch(
+            sessionId: newSession.id,
+            distinctId: defaultDistinctId,
+            maxBytes: 100000,
+            maxCount: 10,
+          );
+          expect(events.first.type, EventType.metadata);
+        },
+      );
     });
 
     group('recordSnapshot', () {
@@ -138,6 +208,8 @@ void main() {
           width: 100,
           height: 200,
           timestamp: expectedTimestamp,
+          sessionId: session.id,
+          distinctId: defaultDistinctId,
         );
 
         // THEN
@@ -162,6 +234,39 @@ void main() {
         expect(payload.imageData, expectedImageData);
       });
 
+      test(
+        'should pin metadata to the captured session when the session rotates during capture',
+        () async {
+          // GIVEN - the session rotates after the frame was captured
+          final capturedSessionId = session.id;
+          final newSession = sessionManager.startNewSession();
+          expect(newSession.id, isNot(equals(capturedSessionId)));
+
+          // WHEN - the in-flight frame is recorded under the captured session
+          await recorder.recordSnapshot(
+            imageData: Uint8List(0),
+            width: 375,
+            height: 812,
+            timestamp: clock.now(),
+            sessionId: capturedSessionId,
+            distinctId: defaultDistinctId,
+          );
+
+          // THEN - its metadata lands in the captured session, not the current
+          final events = await eventQueue.fetchBatch(
+            sessionId: capturedSessionId,
+            distinctId: defaultDistinctId,
+            maxBytes: 100000,
+            maxCount: 10,
+          );
+          expect(events.length, 2);
+          expect(events[0].type, EventType.metadata);
+          expect(events[0].sessionId, capturedSessionId);
+          expect(events[1].type, EventType.screenshot);
+          expect(events[1].sessionId, capturedSessionId);
+        },
+      );
+
       test('records metadata event on first screenshot', () async {
         // GIVEN
         final expectedWidth = 375;
@@ -173,6 +278,8 @@ void main() {
           width: expectedWidth,
           height: expectedHeight,
           timestamp: clock.now(),
+          sessionId: session.id,
+          distinctId: defaultDistinctId,
         );
 
         // THEN
@@ -199,6 +306,8 @@ void main() {
           width: 375,
           height: 812,
           timestamp: clock.now(),
+          sessionId: session.id,
+          distinctId: defaultDistinctId,
         );
 
         final expectedNewWidth = 812;
@@ -210,6 +319,8 @@ void main() {
           width: expectedNewWidth,
           height: expectedNewHeight,
           timestamp: clock.now(),
+          sessionId: session.id,
+          distinctId: defaultDistinctId,
         );
 
         // THEN - should have 2 metadata events + 2 screenshots = 4 events
@@ -246,12 +357,16 @@ void main() {
             width: width,
             height: height,
             timestamp: clock.now(),
+            sessionId: session.id,
+            distinctId: defaultDistinctId,
           );
           await recorder.recordSnapshot(
             imageData: Uint8List(0),
             width: width,
             height: height,
             timestamp: clock.now(),
+            sessionId: session.id,
+            distinctId: defaultDistinctId,
           );
 
           // THEN
@@ -277,11 +392,16 @@ void main() {
         final expectedInteractionType = 1;
         final expectedX = 150.5;
         final expectedY = 300.75;
+        final expectedTimestamp = DateTime.fromMillisecondsSinceEpoch(
+          4200,
+          isUtc: true,
+        );
 
         // WHEN
         await recorder.recordInteraction(
           expectedInteractionType,
           Offset(expectedX, expectedY),
+          expectedTimestamp,
         );
 
         // THEN
@@ -299,6 +419,7 @@ void main() {
         expect(event.type, EventType.interaction);
         expect(event.sessionId, session.id);
         expect(event.distinctId, defaultDistinctId);
+        expect(event.timestamp, expectedTimestamp);
 
         final payload = event.payload as InteractionPayload;
         expect(payload.interactionType, expectedInteractionType);
@@ -311,7 +432,137 @@ void main() {
         await eventQueue.dispose();
 
         // WHEN / THEN - should not throw
-        await recorder.recordInteraction(1, Offset(10, 20));
+        await recorder.recordInteraction(1, Offset(10, 20), DateTime.now());
+      });
+    });
+
+    group('recordTouchMove', () {
+      test(
+        'saves touch move event with supplied positions and timestamp',
+        () async {
+          // GIVEN
+          final expectedPositions = const [
+            TouchPosition(x: 10.0, y: 20.0, timeOffset: -100),
+            TouchPosition(x: 30.0, y: 40.0, timeOffset: 0),
+          ];
+          final expectedTimestamp = DateTime.fromMillisecondsSinceEpoch(
+            7100,
+            isUtc: true,
+          );
+
+          // WHEN
+          await recorder.recordTouchMove(
+            positions: expectedPositions,
+            timestamp: expectedTimestamp,
+          );
+
+          // THEN
+          final oldest = await eventQueue.fetchOldest();
+          final events = await eventQueue.fetchBatch(
+            sessionId: oldest!.sessionId,
+            distinctId: oldest.distinctId,
+            maxBytes: 100000,
+            maxCount: 10,
+          );
+
+          expect(events.length, 1);
+          expect(events[0].type, EventType.touchMove);
+          expect(events[0].timestamp, expectedTimestamp);
+
+          final payload = events[0].payload as TouchMovePayload;
+          expect(payload.positions, expectedPositions);
+        },
+      );
+
+      test('skips empty position batches', () async {
+        // WHEN
+        await recorder.recordTouchMove(
+          positions: const [],
+          timestamp: DateTime.now(),
+        );
+
+        // THEN - nothing queued
+        expect(await eventQueue.fetchOldest(), isNull);
+      });
+
+      test('does not throw on storage error', () async {
+        // GIVEN
+        await eventQueue.dispose();
+
+        // WHEN / THEN - should not throw
+        await recorder.recordTouchMove(
+          positions: const [TouchPosition(x: 1, y: 2, timeOffset: 0)],
+          timestamp: DateTime.now(),
+        );
+      });
+    });
+
+    group('recordWireframe', () {
+      test('saves wireframe event to queue with supplied timestamp', () async {
+        // GIVEN
+        final expectedTimestamp = DateTime.fromMillisecondsSinceEpoch(
+          9000,
+          isUtc: true,
+        );
+        final payload = WireframePayload(
+          viewportWidth: 400,
+          viewportHeight: 800,
+          elements: [
+            WireframeElement(
+              role: WireframeRole.text,
+              text: 'Hello',
+              bounds: const Rect.fromLTWH(0, 0, 40, 20),
+              maskDecision: MaskDecision.none,
+            ),
+          ],
+        );
+
+        // WHEN
+        await recorder.recordWireframe(
+          payload: payload,
+          timestamp: expectedTimestamp,
+          sessionId: 'captured-session',
+          distinctId: 'captured-user',
+        );
+
+        // THEN
+        final oldest = await eventQueue.fetchOldest();
+        final events = await eventQueue.fetchBatch(
+          sessionId: oldest!.sessionId,
+          distinctId: oldest.distinctId,
+          maxBytes: 100000,
+          maxCount: 10,
+        );
+
+        expect(events, hasLength(1));
+        final saved = events.single;
+        expect(saved.type, EventType.wireframe);
+        expect(saved.timestamp, expectedTimestamp);
+        expect(saved.sessionId, 'captured-session');
+        expect(saved.distinctId, 'captured-user');
+
+        final wireframe = saved.payload as WireframePayload;
+        expect(wireframe.viewportWidth, 400);
+        expect(wireframe.viewportHeight, 800);
+        expect(wireframe.elements.single.text, 'Hello');
+      });
+
+      test('does not throw on storage error', () async {
+        // GIVEN
+        await eventQueue.dispose();
+        final payload = WireframePayload(
+          viewportWidth: 100,
+          viewportHeight: 100,
+          elements: const [],
+        );
+
+        // WHEN / THEN — should not throw
+        await recorder.recordWireframe(
+          payload: payload,
+          timestamp: clock.now(),
+          sessionId: session.id,
+          distinctId: defaultDistinctId,
+        );
       });
     });
 
@@ -360,13 +611,21 @@ void main() {
         );
 
         // WHEN - record with first distinctId
-        await dynamicRecorder.recordInteraction(1, Offset(10, 20));
+        await dynamicRecorder.recordInteraction(
+          1,
+          Offset(10, 20),
+          DateTime.now(),
+        );
 
         // Change distinctId
         currentDistinctId = 'user-B';
 
         // Record with second distinctId
-        await dynamicRecorder.recordInteraction(2, Offset(30, 40));
+        await dynamicRecorder.recordInteraction(
+          2,
+          Offset(30, 40),
+          DateTime.now(),
+        );
 
         // THEN - first event uses original distinctId
         final oldest = await eventQueue.fetchOldest();
@@ -399,4 +658,22 @@ void main() {
       });
     });
   });
+}
+
+/// Event queue that blocks metadata writes until [releaseMetadata], holding the
+/// recorder inside its metadata await while the session rotates.
+class _PausingMetadataEventQueue extends InMemoryEventQueue {
+  final Completer<void> _metadataGate = Completer<void>();
+
+  @override
+  Future<void> add(SessionReplayEvent event) async {
+    if (event.type == EventType.metadata) {
+      await _metadataGate.future;
+    }
+    return super.add(event);
+  }
+
+  void releaseMetadata() {
+    if (!_metadataGate.isCompleted) _metadataGate.complete();
+  }
 }

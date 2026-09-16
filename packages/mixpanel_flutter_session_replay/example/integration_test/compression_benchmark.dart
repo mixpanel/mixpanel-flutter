@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/screenshot_capturer.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/native_image_compressor.dart';
+import 'package:mixpanel_flutter_session_replay/src/internal/session/session_manager.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/logger.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/configuration.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/masking_directive.dart';
@@ -24,6 +25,9 @@ Future<void> runBenchmark(
   final boundary = tester.allRenderObjects
       .whereType<RenderRepaintBoundary>()
       .first;
+  final boundaryElement = tester.allElements.firstWhere(
+    (element) => identical(element.renderObject, boundary),
+  );
 
   final logger = MixpanelLogger(LogLevel.info);
   final nativeCompressor = NativeImageCompressor();
@@ -44,7 +48,14 @@ Future<void> runBenchmark(
 
     // Helper: start capture, pump frame for endOfFrame, then await result
     Future<CaptureResult?> runCapture() async {
-      final future = tester.runAsync(() => capturer.capture(boundary));
+      final future = tester.runAsync(
+        () => capturer.capture(
+          boundary,
+          getCurrentSession: SessionManager().getCurrentSession,
+          getDistinctId: () => 'benchmark-distinct-id',
+          boundaryElement: boundaryElement,
+        ),
+      );
       await tester.pump();
       return await future;
     }
