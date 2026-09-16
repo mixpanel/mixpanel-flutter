@@ -90,5 +90,6 @@ dependencies {
     // classpath unless we add it explicitly here. EventBridgeSubscriber.kt
     // imports it directly.
     implementation "com.mixpanel.android:mixpanel-android-common:1.1.0"
+    implementation "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
     implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.1"
 }
