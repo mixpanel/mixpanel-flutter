@@ -13,3 +13,6 @@ local.properties
 .build/
 .swiftpm/
 Package.resolved
+
+# Local wireframe performance samples; benchmark code is retained, device output is not.
+packages/mixpanel_flutter_session_replay/benchmark/results/

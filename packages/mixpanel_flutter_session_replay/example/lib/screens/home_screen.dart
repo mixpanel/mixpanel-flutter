@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../main.dart';
 import '../services/mixpanel_analytics.dart';
 import '../widgets/logs_bottom_sheet.dart';
+import '../widgets/wireframes_bottom_sheet.dart';
 import 'dashboard_tab.dart';
 import 'settings_tab.dart';
 
@@ -55,6 +56,19 @@ class _HomeScreenState extends State<HomeScreen> {
                 isScrollControlled: true,
                 backgroundColor: Colors.transparent,
                 builder: (modalContext) => const LogsBottomSheet(),
+              );
+            },
+          ),
+          // Wireframes button
+          IconButton(
+            icon: const Icon(Icons.grid_on),
+            tooltip: 'View Wireframes',
+            onPressed: () {
+              showModalBottomSheet(
+                context: context,
+                isScrollControlled: true,
+                backgroundColor: Colors.transparent,
+                builder: (modalContext) => const WireframesBottomSheet(),
               );
             },
           ),

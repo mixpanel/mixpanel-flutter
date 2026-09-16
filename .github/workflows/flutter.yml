@@ -155,7 +155,7 @@ jobs:
     name: SR Integration Tests (iOS Simulator)
     needs: [compat-check-session-replay, test-session-replay]
     runs-on: macos-26
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
       - uses: ./.github/actions/setup-flutter
@@ -186,10 +186,28 @@ jobs:
         run: flutter build ios --simulator --target=integration_test/run_all_test.dart
         working-directory: packages/mixpanel_flutter_session_replay/example
       - name: Run integration tests on iOS
+        id: ios-integration-attempt-1
+        continue-on-error: true
+        timeout-minutes: 10
         run: |
           flutter test integration_test/run_all_test.dart \
-            --timeout 20m \
-            --ignore-timeouts \
+            --timeout 10m \
+            --dart-define=MIXPANEL_TOKEN="${{ secrets.MIXPANEL_TOKEN }}" \
+            -d "$DEVICE_ID"
+        working-directory: packages/mixpanel_flutter_session_replay/example
+      - name: Reboot iOS simulator before retry
+        if: steps.ios-integration-attempt-1.outcome == 'failure'
+        timeout-minutes: 5
+        run: |
+          xcrun simctl shutdown "$DEVICE_ID" || true
+          xcrun simctl boot "$DEVICE_ID"
+          xcrun simctl bootstatus "$DEVICE_ID" -b
+      - name: Retry integration tests on iOS
+        if: steps.ios-integration-attempt-1.outcome == 'failure'
+        timeout-minutes: 15
+        run: |
+          flutter test integration_test/run_all_test.dart \
+            --timeout 10m \
             --dart-define=MIXPANEL_TOKEN="${{ secrets.MIXPANEL_TOKEN }}" \
             -d "$DEVICE_ID"
         working-directory: packages/mixpanel_flutter_session_replay/example

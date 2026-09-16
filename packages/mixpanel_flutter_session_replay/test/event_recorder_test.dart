@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import 'dart:ui';
 
 import 'package:clock/clock.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -8,6 +9,9 @@ import 'package:mixpanel_flutter_session_replay/src/internal/logger.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/configuration.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/session.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/session_event.dart';
+import 'package:mixpanel_flutter_session_replay/src/models/wireframe.dart';
+import 'package:mixpanel_flutter_session_replay/src/models/wireframes_options.dart'
+    show MaskDecision;
 
 import 'helpers/in_memory_event_queue.dart';
 
@@ -277,11 +281,16 @@ void main() {
         final expectedInteractionType = 1;
         final expectedX = 150.5;
         final expectedY = 300.75;
+        final expectedTimestamp = DateTime.fromMillisecondsSinceEpoch(
+          4200,
+          isUtc: true,
+        );
 
         // WHEN
         await recorder.recordInteraction(
           expectedInteractionType,
           Offset(expectedX, expectedY),
+          expectedTimestamp,
         );
 
         // THEN
@@ -299,6 +308,7 @@ void main() {
         expect(event.type, EventType.interaction);
         expect(event.sessionId, session.id);
         expect(event.distinctId, defaultDistinctId);
+        expect(event.timestamp, expectedTimestamp);
 
         final payload = event.payload as InteractionPayload;
         expect(payload.interactionType, expectedInteractionType);
@@ -311,7 +321,133 @@ void main() {
         await eventQueue.dispose();
 
         // WHEN / THEN - should not throw
-        await recorder.recordInteraction(1, Offset(10, 20));
+        await recorder.recordInteraction(1, Offset(10, 20), DateTime.now());
+      });
+    });
+
+    group('recordTouchMove', () {
+      test(
+        'saves touch move event with supplied positions and timestamp',
+        () async {
+          // GIVEN
+          final expectedPositions = const [
+            TouchPosition(x: 10.0, y: 20.0, timeOffset: -100),
+            TouchPosition(x: 30.0, y: 40.0, timeOffset: 0),
+          ];
+          final expectedTimestamp = DateTime.fromMillisecondsSinceEpoch(
+            7100,
+            isUtc: true,
+          );
+
+          // WHEN
+          await recorder.recordTouchMove(
+            positions: expectedPositions,
+            timestamp: expectedTimestamp,
+          );
+
+          // THEN
+          final oldest = await eventQueue.fetchOldest();
+          final events = await eventQueue.fetchBatch(
+            sessionId: oldest!.sessionId,
+            distinctId: oldest.distinctId,
+            maxBytes: 100000,
+            maxCount: 10,
+          );
+
+          expect(events.length, 1);
+          expect(events[0].type, EventType.touchMove);
+          expect(events[0].timestamp, expectedTimestamp);
+
+          final payload = events[0].payload as TouchMovePayload;
+          expect(payload.positions, expectedPositions);
+        },
+      );
+
+      test('skips empty position batches', () async {
+        // WHEN
+        await recorder.recordTouchMove(
+          positions: const [],
+          timestamp: DateTime.now(),
+        );
+
+        // THEN - nothing queued
+        expect(await eventQueue.fetchOldest(), isNull);
+      });
+
+      test('does not throw on storage error', () async {
+        // GIVEN
+        await eventQueue.dispose();
+
+        // WHEN / THEN - should not throw
+        await recorder.recordTouchMove(
+          positions: const [TouchPosition(x: 1, y: 2, timeOffset: 0)],
+          timestamp: DateTime.now(),
+        );
+      });
+    });
+
+    group('recordWireframe', () {
+      test('saves wireframe event to queue with supplied timestamp', () async {
+        // GIVEN
+        final expectedTimestamp = DateTime.fromMillisecondsSinceEpoch(
+          9000,
+          isUtc: true,
+        );
+        final payload = WireframePayload(
+          viewportWidth: 400,
+          viewportHeight: 800,
+          elements: [
+            WireframeElement(
+              role: WireframeRole.text,
+              text: 'Hello',
+              bounds: const Rect.fromLTWH(0, 0, 40, 20),
+              maskDecision: MaskDecision.none,
+            ),
+          ],
+        );
+
+        // WHEN
+        await recorder.recordWireframe(
+          payload: payload,
+          timestamp: expectedTimestamp,
+        );
+
+        // THEN
+        final oldest = await eventQueue.fetchOldest();
+        final events = await eventQueue.fetchBatch(
+          sessionId: oldest!.sessionId,
+          distinctId: oldest.distinctId,
+          maxBytes: 100000,
+          maxCount: 10,
+        );
+
+        expect(events, hasLength(1));
+        final saved = events.single;
+        expect(saved.type, EventType.wireframe);
+        expect(saved.timestamp, expectedTimestamp);
+        expect(saved.sessionId, session.id);
+        expect(saved.distinctId, defaultDistinctId);
+
+        final wireframe = saved.payload as WireframePayload;
+        expect(wireframe.viewportWidth, 400);
+        expect(wireframe.viewportHeight, 800);
+        expect(wireframe.elements.single.text, 'Hello');
+      });
+
+      test('does not throw on storage error', () async {
+        // GIVEN
+        await eventQueue.dispose();
+        final payload = WireframePayload(
+          viewportWidth: 100,
+          viewportHeight: 100,
+          elements: const [],
+        );
+
+        // WHEN / THEN — should not throw
+        await recorder.recordWireframe(
+          payload: payload,
+          timestamp: clock.now(),
+        );
       });
     });
 
@@ -360,13 +496,21 @@ void main() {
         );
 
         // WHEN - record with first distinctId
-        await dynamicRecorder.recordInteraction(1, Offset(10, 20));
+        await dynamicRecorder.recordInteraction(
+          1,
+          Offset(10, 20),
+          DateTime.now(),
+        );
 
         // Change distinctId
         currentDistinctId = 'user-B';
 
         // Record with second distinctId
-        await dynamicRecorder.recordInteraction(2, Offset(30, 40));
+        await dynamicRecorder.recordInteraction(
+          2,
+          Offset(30, 40),
+          DateTime.now(),
+        );
 
         // THEN - first event uses original distinctId
         final oldest = await eventQueue.fetchOldest();
