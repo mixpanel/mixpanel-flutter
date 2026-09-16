@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'masking_directive.dart';
+import 'session_event.dart' show WireframePayload;
 
 /// Recording state machine for session replay
 ///
@@ -124,6 +125,10 @@ final class CaptureSuccess extends CaptureResult {
   /// Mask regions that were detected (for debug overlay)
   final List<MaskRegionInfo> maskRegions;
 
+  /// Wireframe payload for this frame, or `null` when wireframes are not
+  /// enabled or the emitter deduped against the previous frame.
+  final WireframePayload? wireframes;
+
   const CaptureSuccess({
     required this.data,
     required this.width,
@@ -131,6 +136,7 @@ final class CaptureSuccess extends CaptureResult {
     required this.maskCount,
     required this.timestamp,
     this.maskRegions = const [],
+    this.wireframes,
   });
 
   @override

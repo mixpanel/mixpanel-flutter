@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../../version.dart';
+import '../app_info.dart';
 import '../endpoints.dart';
 import '../logger.dart';
 import 'remote_settings_result.dart';
@@ -27,6 +28,19 @@ class SettingsService {
   final MixpanelLogger _logger;
   final http.Client _httpClient;
   final SettingsStorageProvider _storageProvider;
+
+  /// Whether this app opted in to wireframes. When true the request asks for the
+  /// wireframe kill switch (`wireframe=1`) so the server can turn capture off
+  /// remotely; otherwise the field is neither sent nor returned.
+  final bool _wireframesRequested;
+
+  /// Explicit overrides for host app identity; when null the values are read
+  /// from the platform. Injected by tests.
+  final String? _bundleIdOverride;
+  final String? _buildNumberOverride;
+
+  /// Platform-resolved app info, fetched at most once per instance.
+  AppInfo? _appInfo;
 
   /// Full `/settings` endpoint, derived from the configured base URL.
   final String _endpoint;
@@ -57,11 +71,34 @@ class SettingsService {
     required SettingsStorageProvider storageProvider,
     required http.Client httpClient,
     String serverUrl = EndPoints.defaultBaseUrl,
+    bool wireframesRequested = false,
+    String? bundleId,
+    String? buildNumber,
   }) : _token = token,
        _logger = logger,
        _httpClient = httpClient,
        _storageProvider = storageProvider,
+       _wireframesRequested = wireframesRequested,
+       _bundleIdOverride = bundleId,
+       _buildNumberOverride = buildNumber,
        _endpoint = EndPoints.settings(serverUrl);
+
+  /// Resolve host app identity, preferring injected overrides.
+  ///
+  /// Skips the platform channel entirely when both values are injected.
+  Future<AppInfo> _resolveAppInfo() async {
+    if (_bundleIdOverride != null && _buildNumberOverride != null) {
+      return AppInfo(
+        bundleId: _bundleIdOverride,
+        buildNumber: _buildNumberOverride,
+      );
+    }
+    final platform = _appInfo ??= await AppInfo.fromPlatform();
+    return AppInfo(
+      bundleId: _bundleIdOverride ?? platform.bundleId,
+      buildNumber: _buildNumberOverride ?? platform.buildNumber,
+    );
+  }
 
   /// Fetch remote settings including recording status and SDK config.
   ///
@@ -95,7 +132,8 @@ class SettingsService {
         'Remote settings check complete: '
         'isEnabled=${result.isRecordingEnabled}, '
         'sdkConfig=${result.sdkConfig != null ? "present" : "null"}, '
-        'isFromCache=${result.isFromCache}',
+        'isFromCache=${result.isFromCache}, '
+        'isWireframeEnabled=${result.isWireframeEnabled}',
       );
       _pendingCheck!.complete(result);
       return result;
@@ -120,15 +158,30 @@ class SettingsService {
 
   /// Make network request to settings endpoint.
   Future<RemoteSettingsResult> _performRemoteSettingsFetch() async {
-    final uri = Uri.parse(_endpoint).replace(
-      queryParameters: {
-        'recording': '1',
-        'sdk_config': '1',
-        'mp_lib': 'flutter-sr',
-        '\$lib_version': sdkVersion,
-        '\$os': operatingSystem,
-      },
-    );
+    final appInfo = await _resolveAppInfo();
+
+    final queryParameters = <String, String>{
+      'recording': '1',
+      'sdk_config': '1',
+      // Only ask for the wireframe kill switch when this app opted in to wireframes.
+      if (_wireframesRequested) 'wireframe': '1',
+      'mp_lib': 'flutter-sr',
+      '\$lib_version': sdkVersion,
+      '\$os': operatingSystem,
+    };
+
+    // Include app bundle ID and build number to enable server-side SDK blocking
+    // per app ID and app build version
+    final bundleId = appInfo.bundleId;
+    if (bundleId != null) {
+      queryParameters['bundle_id'] = bundleId;
+    }
+    final buildNumber = appInfo.buildNumber;
+    if (buildNumber != null) {
+      queryParameters['build_number'] = buildNumber;
+    }
+
+    final uri = Uri.parse(_endpoint).replace(queryParameters: queryParameters);
 
     final credentials = base64Encode(utf8.encode('$_token:'));
     final authHeader = 'Basic $credentials';
@@ -151,7 +204,9 @@ class SettingsService {
   }
 
   /// Parse successful settings response.
-  RemoteSettingsResult _handleSuccessResponse(String responseBody) {
+  Future<RemoteSettingsResult> _handleSuccessResponse(
+    String responseBody,
+  ) async {
     _logger.debug('Parsing settings response');
     final json = jsonDecode(responseBody) as Map<String, dynamic>;
 
@@ -169,6 +224,28 @@ class SettingsService {
         _logger.warning('Recording settings error: $error');
       }
       _storageProvider.saveRecordingDisabled();
+    }
+
+    // Parse the wireframe kill switch. An absent field means the switch was never
+    // asked for (wireframes off locally) or the server had nothing to say. Preserve
+    // a previously cached disable; with no cached verdict, capture defaults to on.
+    final wireframe = json['wireframe'] as Map<String, dynamic>?;
+    var isWireframeEnabled = await _storageProvider.getWireframeEnabled();
+
+    final explicitWireframeEnabled = wireframe?['is_enabled'] as bool?;
+    if (explicitWireframeEnabled != null) {
+      isWireframeEnabled = explicitWireframeEnabled;
+      if (isWireframeEnabled) {
+        _logger.info('Wireframe settings check: enabled');
+        _storageProvider.clearWireframeState();
+      } else {
+        final wireframeError = wireframe?['error'] as String?;
+        _logger.warning('Wireframe capture is disabled via remote settings');
+        if (wireframeError != null) {
+          _logger.warning('Wireframe settings error: $wireframeError');
+        }
+        _storageProvider.saveWireframeDisabled();
+      }
     }
 
     // Parse SDK config
@@ -199,6 +276,7 @@ class SettingsService {
       isRecordingEnabled: isEnabled,
       sdkConfig: sdkConfig,
       isFromCache: false,
+      isWireframeEnabled: isWireframeEnabled,
     );
   }
 

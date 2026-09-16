@@ -6,6 +6,8 @@ import 'package:mixpanel_flutter_session_replay/src/internal/settings/settings_s
 import 'package:mixpanel_flutter_session_replay/src/models/configuration.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/masking_directive.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/results.dart';
+import 'package:mixpanel_flutter_session_replay/src/models/session_event.dart'
+    show TouchPosition;
 
 /// Fake implementation of [WidgetCoordinator] for widget tests.
 ///
@@ -37,8 +39,11 @@ class FakeWidgetCoordinator implements WidgetCoordinator {
   final List<({RenderRepaintBoundary boundary, Element boundaryElement})>
   capturedSnapshots = [];
 
-  final List<({int interactionType, Offset position})> capturedInteractions =
-      [];
+  final List<({int interactionType, Offset position, DateTime timestamp})>
+  capturedInteractions = [];
+
+  final List<({List<TouchPosition> positions, DateTime timestamp})>
+  capturedTouchMoves = [];
 
   FakeWidgetCoordinator({
     this.recordingState = RecordingState.notRecording,
@@ -61,11 +66,21 @@ class FakeWidgetCoordinator implements WidgetCoordinator {
   }
 
   @override
-  void captureInteraction(int interactionType, Offset position) {
+  void captureInteraction(
+    int interactionType,
+    Offset position,
+    DateTime timestamp,
+  ) {
     capturedInteractions.add((
       interactionType: interactionType,
       position: position,
+      timestamp: timestamp,
     ));
+  }
+
+  @override
+  void captureTouchMove(List<TouchPosition> positions, DateTime timestamp) {
+    capturedTouchMoves.add((positions: positions, timestamp: timestamp));
   }
 
   @override

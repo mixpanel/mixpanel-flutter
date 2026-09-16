@@ -6,6 +6,7 @@ import 'package:mixpanel_flutter_session_replay/src/models/configuration.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/debug_overlay_colors.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/masking_directive.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/results.dart';
+import 'package:mixpanel_flutter_session_replay/src/models/rrweb_types.dart';
 import 'package:mixpanel_flutter_session_replay/src/session_replay.dart';
 import 'package:mixpanel_flutter_session_replay/src/session_replay_options.dart';
 import 'package:mixpanel_flutter_session_replay/src/widgets/frame_monitor.dart';
@@ -174,8 +175,11 @@ void main() {
       await tester.pump();
       await gesture.up();
 
-      // THEN - interaction captured
-      expect(fake.capturedInteractions.length, 1);
+      // THEN - gesture boundaries captured
+      expect(fake.capturedInteractions.map((i) => i.interactionType), [
+        RRWebMouseInteraction.touchStart,
+        RRWebMouseInteraction.touchEnd,
+      ]);
     });
 
     testWidgets('dispatches mouse pointer to coordinator when recording', (
@@ -207,7 +211,10 @@ void main() {
       await gesture.up();
 
       // THEN
-      expect(fake.capturedInteractions.length, 1);
+      expect(fake.capturedInteractions.map((i) => i.interactionType), [
+        RRWebMouseInteraction.touchStart,
+        RRWebMouseInteraction.touchEnd,
+      ]);
     });
 
     testWidgets('does not dispatch stylus pointer events', (tester) async {
@@ -269,6 +276,246 @@ void main() {
 
       // THEN - no interaction captured (disabled check comes first)
       expect(fake.capturedInteractions, isEmpty);
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────────────
+  // InteractionDetector touch stream (using FakeWidgetCoordinator)
+  // ─────────────────────────────────────────────────────────────────────
+  group('InteractionDetector — touch stream', () {
+    /// Pumps a detector over a 200x200 target and returns its center.
+    Future<Offset> pumpDetector(
+      WidgetTester tester,
+      FakeWidgetCoordinator fake,
+    ) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: InteractionDetector(
+            coordinator: fake,
+            child: Container(
+              width: 200,
+              height: 200,
+              color: const Color(0xFFFFFFFF),
+            ),
+          ),
+        ),
+      );
+      return tester.getCenter(find.byType(Container));
+    }
+
+    testWidgets('emits touchCancel when the gesture is cancelled', (
+      tester,
+    ) async {
+      // GIVEN
+      final fake = FakeWidgetCoordinator(
+        recordingState: RecordingState.recording,
+      );
+      final center = await pumpDetector(tester, fake);
+      final gesture = await tester.createGesture(kind: PointerDeviceKind.touch);
+
+      // WHEN
+      await gesture.down(center);
+      await gesture.cancel();
+
+      // THEN
+      expect(fake.capturedInteractions.map((i) => i.interactionType), [
+        RRWebMouseInteraction.touchStart,
+        RRWebMouseInteraction.touchCancel,
+      ]);
+    });
+
+    testWidgets('drops moves closer together than the sample interval', (
+      tester,
+    ) async {
+      // GIVEN
+      final fake = FakeWidgetCoordinator(
+        recordingState: RecordingState.recording,
+      );
+      final center = await pumpDetector(tester, fake);
+      final gesture = await tester.createGesture(kind: PointerDeviceKind.touch);
+
+      // WHEN - three moves inside one sample interval
+      await gesture.down(center);
+      await gesture.moveTo(
+        center + const Offset(1, 0),
+        timeStamp: const Duration(milliseconds: 10),
+      );
+      await gesture.moveTo(
+        center + const Offset(2, 0),
+        timeStamp: const Duration(milliseconds: 20),
+      );
+      await gesture.moveTo(
+        center + const Offset(3, 0),
+        timeStamp: const Duration(milliseconds: 30),
+      );
+      await gesture.up(timeStamp: const Duration(milliseconds: 40));
+
+      // THEN - nothing sampled, so no batch is ever emitted
+      expect(fake.capturedTouchMoves, isEmpty);
+    });
+
+    testWidgets('flushes sampled moves when the gesture ends', (tester) async {
+      // GIVEN
+      final fake = FakeWidgetCoordinator(
+        recordingState: RecordingState.recording,
+      );
+      final center = await pumpDetector(tester, fake);
+      final gesture = await tester.createGesture(kind: PointerDeviceKind.touch);
+
+      // WHEN - two moves spaced beyond the sample interval, well inside the
+      // batch interval
+      await gesture.down(center);
+      await gesture.moveTo(
+        center + const Offset(10, 0),
+        timeStamp: const Duration(milliseconds: 60),
+      );
+      await gesture.moveTo(
+        center + const Offset(20, 0),
+        timeStamp: const Duration(milliseconds: 120),
+      );
+      expect(fake.capturedTouchMoves, isEmpty);
+      await gesture.up(timeStamp: const Duration(milliseconds: 150));
+
+      // THEN - one batch, drained by the lift
+      expect(fake.capturedTouchMoves.length, 1);
+      final positions = fake.capturedTouchMoves.single.positions;
+      expect(positions.map((p) => p.x), [center.dx + 10, center.dx + 20]);
+    });
+
+    testWidgets('flushes a batch once the batch interval is spanned', (
+      tester,
+    ) async {
+      // GIVEN
+      final fake = FakeWidgetCoordinator(
+        recordingState: RecordingState.recording,
+      );
+      final center = await pumpDetector(tester, fake);
+      final gesture = await tester.createGesture(kind: PointerDeviceKind.touch);
+
+      // WHEN - the second sample lands 540ms after the first
+      await gesture.down(center);
+      await gesture.moveTo(
+        center + const Offset(10, 0),
+        timeStamp: const Duration(milliseconds: 60),
+      );
+      await gesture.moveTo(
+        center + const Offset(20, 0),
+        timeStamp: const Duration(milliseconds: 600),
+      );
+
+      // THEN - drained mid-gesture, before any lift
+      expect(fake.capturedTouchMoves.length, 1);
+      expect(fake.capturedTouchMoves.single.positions.length, 2);
+    });
+
+    testWidgets('stamps a batch with its last position and offsets backwards', (
+      tester,
+    ) async {
+      // GIVEN
+      final fake = FakeWidgetCoordinator(
+        recordingState: RecordingState.recording,
+      );
+      final center = await pumpDetector(tester, fake);
+      final gesture = await tester.createGesture(kind: PointerDeviceKind.touch);
+
+      // WHEN
+      await gesture.down(center);
+      await gesture.moveTo(
+        center + const Offset(10, 0),
+        timeStamp: const Duration(milliseconds: 60),
+      );
+      await gesture.moveTo(
+        center + const Offset(20, 0),
+        timeStamp: const Duration(milliseconds: 600),
+      );
+
+      // THEN - rrweb replays each position at batch timestamp + timeOffset
+      final batch = fake.capturedTouchMoves.single;
+      expect(batch.positions.map((p) => p.timeOffset), [-540, 0]);
+      expect(
+        batch.timestamp.difference(fake.capturedInteractions.first.timestamp),
+        const Duration(milliseconds: 600),
+      );
+    });
+
+    testWidgets('drains pending positions before the boundary event', (
+      tester,
+    ) async {
+      // GIVEN
+      final fake = FakeWidgetCoordinator(
+        recordingState: RecordingState.recording,
+      );
+      final center = await pumpDetector(tester, fake);
+      final gesture = await tester.createGesture(kind: PointerDeviceKind.touch);
+
+      // WHEN
+      await gesture.down(center);
+      await gesture.moveTo(
+        center + const Offset(10, 0),
+        timeStamp: const Duration(milliseconds: 60),
+      );
+      await gesture.up(timeStamp: const Duration(milliseconds: 90));
+
+      // THEN - the batch is stamped before the lift that drained it
+      final batch = fake.capturedTouchMoves.single;
+      final touchEnd = fake.capturedInteractions.last;
+      expect(touchEnd.interactionType, RRWebMouseInteraction.touchEnd);
+      expect(batch.timestamp.isAfter(touchEnd.timestamp), isFalse);
+    });
+
+    testWidgets('ignores a second pointer while a gesture is in flight', (
+      tester,
+    ) async {
+      // GIVEN
+      final fake = FakeWidgetCoordinator(
+        recordingState: RecordingState.recording,
+      );
+      final center = await pumpDetector(tester, fake);
+      final primary = await tester.createGesture(kind: PointerDeviceKind.touch);
+      final secondary = await tester.createGesture(
+        kind: PointerDeviceKind.touch,
+      );
+
+      // WHEN
+      await primary.down(center);
+      await secondary.down(center + const Offset(0, 40));
+      await secondary.moveTo(
+        center + const Offset(0, 80),
+        timeStamp: const Duration(milliseconds: 60),
+      );
+      await secondary.up(timeStamp: const Duration(milliseconds: 70));
+      await primary.up(timeStamp: const Duration(milliseconds: 80));
+
+      // THEN - only the primary pointer's boundaries, and none of its moves
+      expect(fake.capturedInteractions.map((i) => i.interactionType), [
+        RRWebMouseInteraction.touchStart,
+        RRWebMouseInteraction.touchEnd,
+      ]);
+      expect(fake.capturedTouchMoves, isEmpty);
+    });
+
+    testWidgets('ignores moves from a gesture that started before recording', (
+      tester,
+    ) async {
+      // GIVEN - the pointer goes down while recording is off
+      final fake = FakeWidgetCoordinator(
+        recordingState: RecordingState.notRecording,
+      );
+      final center = await pumpDetector(tester, fake);
+      final gesture = await tester.createGesture(kind: PointerDeviceKind.touch);
+      await gesture.down(center);
+
+      // WHEN - recording starts mid-gesture
+      fake.recordingState = RecordingState.recording;
+      await gesture.moveTo(
+        center + const Offset(10, 0),
+        timeStamp: const Duration(milliseconds: 60),
+      );
+      await gesture.up(timeStamp: const Duration(milliseconds: 90));
+
+      // THEN - no path without a start
+      expect(fake.capturedInteractions, isEmpty);
+      expect(fake.capturedTouchMoves, isEmpty);
     });
   });
 

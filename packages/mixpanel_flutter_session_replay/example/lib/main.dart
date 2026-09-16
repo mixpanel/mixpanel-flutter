@@ -4,6 +4,7 @@ import 'package:mixpanel_flutter_session_replay/mixpanel_flutter_session_replay.
 import 'package:provider/provider.dart';
 
 import 'models/log_model.dart';
+import 'models/wireframe_model.dart';
 import 'screens/config_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/test_screens/animations_screen.dart';
@@ -54,6 +55,7 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => MixpanelModel()),
         ChangeNotifierProvider(create: (_) => LogModel()),
         ChangeNotifierProvider(create: (_) => ConfigModel()),
+        ChangeNotifierProvider(create: (_) => WireframeModel()),
       ],
       child: Consumer<MixpanelModel>(
         builder: (context, mixpanelModel, child) {

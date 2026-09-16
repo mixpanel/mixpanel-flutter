@@ -1,0 +1,19 @@
+{
+  "viewport": [
+    800,
+    600
+  ],
+  "elements": [
+    {
+      "role": "input",
+      "text": "Search",
+      "bounds": [
+        250,
+        285,
+        300,
+        31
+      ],
+      "maskDecision": "DECLARED"
+    }
+  ]
+}
