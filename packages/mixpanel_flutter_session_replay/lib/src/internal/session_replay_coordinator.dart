@@ -189,6 +189,8 @@ class SessionReplayCoordinator implements WidgetCoordinator {
     // Get JPG bytes from screenshot capturer
     final result = await _screenshotCapturer.capture(
       boundary,
+      getCurrentSession: _sessionManager.getCurrentSession,
+      getDistinctId: _eventRecorder.getDistinctId,
       boundaryElement: boundaryElement,
     );
 
@@ -200,11 +202,15 @@ class SessionReplayCoordinator implements WidgetCoordinator {
         :final height,
         :final timestamp,
         :final maskRegions,
+        :final sessionId,
+        :final distinctId,
         :final wireframes,
       ):
         // Update mask regions for debug overlay (only if overlay is enabled)
         // Diff check prevents feedback loop: overlay rebuild → new frame → capture → repeat
-        if (_debugOptions?.overlayColors != null &&
+        // dispose() disposes this notifier, and writing to a disposed one asserts
+        if (!_isDisposed &&
+            _debugOptions?.overlayColors != null &&
             !listEquals(_maskRegions.value, maskRegions)) {
           _maskRegions.value = maskRegions;
         }
@@ -215,6 +221,8 @@ class SessionReplayCoordinator implements WidgetCoordinator {
           width: width,
           height: height,
           timestamp: timestamp,
+          sessionId: sessionId,
+          distinctId: distinctId,
         );
 
         // Emit wireframe alongside the screenshot with the same timestamp
@@ -224,6 +232,8 @@ class SessionReplayCoordinator implements WidgetCoordinator {
           await _eventRecorder.recordWireframe(
             payload: wireframes,
             timestamp: timestamp,
+            sessionId: sessionId,
+            distinctId: distinctId,
           );
         }
       case CaptureFailure(:final error, :final errorMessage):

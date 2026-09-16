@@ -3,6 +3,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/logger.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/screenshot_capturer.dart';
+import 'package:mixpanel_flutter_session_replay/src/internal/session/session_manager.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/wireframe/wireframe_emitter.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/configuration.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/masking_directive.dart';
@@ -71,8 +72,12 @@ void main() {
       ({RenderRepaintBoundary boundary, Element element}) target,
     ) async {
       final pending = tester.runAsync(
-        () =>
-            capturer.capture(target.boundary, boundaryElement: target.element),
+        () => capturer.capture(
+          target.boundary,
+          boundaryElement: target.element,
+          getCurrentSession: SessionManager().getCurrentSession,
+          getDistinctId: () => 'screenshot-capturer-test-distinct-id',
+        ),
       );
       await tester.pump();
       final result = await pending;

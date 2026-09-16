@@ -878,6 +878,8 @@ void main() {
         height: 812,
         maskCount: 2,
         timestamp: DateTime.fromMillisecondsSinceEpoch(1000, isUtc: true),
+        sessionId: 'session-1',
+        distinctId: 'user-1',
       );
 
       // WHEN

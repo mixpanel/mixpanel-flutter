@@ -18,8 +18,8 @@ import '../logger.dart';
 /// Likewise a frame that collected no elements at all still emits: an empty
 /// list means "empty screen", which is itself signal.
 ///
-/// One instance per SDK lifetime; dedup state is per-emitter (not per
-/// session).
+/// One instance per SDK lifetime; dedup state is scoped to the captured
+/// session.
 class WireframeEmitter {
   WireframeEmitter({
     required this.sensitiveRules,
@@ -42,6 +42,10 @@ class WireframeEmitter {
   /// dedup. Matches Android's and iOS's `lastPayloadHash`.
   int? _lastPayloadHash;
 
+  /// Session associated with [_lastPayloadHash]. A late frame from an earlier
+  /// session must not suppress the current session's opening wireframe.
+  String? _lastSessionId;
+
   /// Clears [_lastPayloadHash] so the next [emit] publishes even if the render is
   /// identical.
   ///
@@ -56,6 +60,7 @@ class WireframeEmitter {
   /// Android's and iOS's `resetDedup()`.
   void resetDedup() {
     _lastPayloadHash = null;
+    _lastSessionId = null;
   }
 
   /// Process raw elements through the pipeline. Returns null *only* when the
@@ -66,6 +71,7 @@ class WireframeEmitter {
     required List<MaskRegionInfo> maskRegions,
     required Size viewport,
     required DateTime timestamp,
+    String? sessionId,
   }) {
     // Geometric masking → user rules → text cleaning → truncation, per
     // element. No drop stage: textless elements are kept as role + bounds
@@ -91,7 +97,10 @@ class WireframeEmitter {
     // covers the viewport too: a rotation that leaves the element list
     // untouched (an empty screen, say) still changes the render and must emit.
     final payloadHash = payload.wireHash;
-    if (_lastPayloadHash == payloadHash) return null;
+    if (_lastSessionId == sessionId && _lastPayloadHash == payloadHash) {
+      return null;
+    }
+    _lastSessionId = sessionId;
     _lastPayloadHash = payloadHash;
 
     _fireDebugCallback(payload, timestamp);
