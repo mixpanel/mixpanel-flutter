@@ -1,5 +1,12 @@
 # Changelog
 
+## [v2.14.0](https://github.com/mixpanel/mixpanel-flutter/tree/v2.14.0) (2026-09-16)
+
+### Features
+- update native SDKs for semver and date flag operators ([#281](https://github.com/mixpanel/mixpanel-flutter/pull/281))
+
+[Full Changelog](https://github.com/mixpanel/mixpanel-flutter/compare/v2.13.0...v2.14.0)
+
 ## [v2.13.0](https://github.com/mixpanel/mixpanel-flutter/tree/v2.13.0) (2026-07-27)
 
 ### Features
