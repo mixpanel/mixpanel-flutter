@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart' as http_testing;
@@ -15,6 +16,9 @@ import 'package:mixpanel_flutter_session_replay/src/internal/settings/settings_s
 import 'package:mixpanel_flutter_session_replay/src/internal/upload/payload_serializer.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/session/session_manager.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/logger.dart';
+import 'package:mixpanel_flutter_session_replay/src/internal/wireframe/wireframe_emitter.dart';
+import 'package:mixpanel_flutter_session_replay/src/models/wireframe.dart';
+import 'package:mixpanel_flutter_session_replay/src/models/wireframes_options.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/configuration.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/debug_overlay_colors.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/masking_directive.dart';
@@ -175,6 +179,69 @@ void main() {
         expect(coordinator.recordingState, expectedState);
       });
 
+      test('resets wireframe dedup state so a new session re-emits', () async {
+        // GIVEN a capturer wired to a real emitter, primed the way a previous
+        // session's last frame would leave it. Dedup is per session, but the
+        // emitter is built once in initialize() and survives a stop/start cycle,
+        // so without a reset a background/foreground onto an unchanged screen
+        // dedups the new session's opening mp_wireframe away — leaving a
+        // screenshot with nothing to describe it.
+        //
+        // Asserted through the coordinator on purpose: a test that calls
+        // resetDedup() directly still passes if this call site is deleted.
+        final emitter = WireframeEmitter(
+          sensitiveRules: const [],
+          debugEmitter: null,
+          logger: logger,
+        );
+        screenshotCapturer = ScreenshotCapturer(
+          directive: MaskingDirective(autoMaskTypes: {}),
+          logger: logger,
+          debugOverlayEnabled: false,
+          wireframeEmitter: emitter,
+        );
+
+        final frame = [
+          const WireframeElement(
+            role: WireframeRole.text,
+            text: 'unchanged',
+            bounds: Rect.fromLTWH(0, 0, 100, 20),
+            maskDecision: MaskDecision.none,
+          ),
+        ];
+        WireframePayload? emitFrame() => emitter.emit(
+          rawElements: frame,
+          maskRegions: const [],
+          viewport: const Size(400, 800),
+          timestamp: DateTime.fromMillisecondsSinceEpoch(1000),
+        );
+
+        expect(
+          emitFrame(),
+          isNotNull,
+          reason: 'precondition: first emit ships',
+        );
+        expect(
+          emitFrame(),
+          isNull,
+          reason: 'precondition: an identical frame dedups',
+        );
+
+        // WHEN
+        final coordinator = createCoordinator();
+        coordinator.startRecording(sessionsPercent: 100.0);
+        await pumpEventQueue();
+
+        // THEN the same screen emits again for the new session.
+        expect(
+          emitFrame(),
+          isNotNull,
+          reason:
+              'the first frame of a new session must emit even when the screen '
+              'has not changed',
+        );
+      });
+
       test('does not start when already recording', () async {
         // GIVEN
         final coordinator = createCoordinator();
@@ -295,6 +362,7 @@ void main() {
         coordinator.captureInteraction(
           expectedInteractionType,
           Offset(expectedX, expectedY),
+          DateTime.now(),
         );
         // Wait for async event recording
         await pumpEventQueue();
@@ -326,7 +394,7 @@ void main() {
         // Don't start recording
 
         // WHEN
-        coordinator.captureInteraction(7, Offset(100, 200));
+        coordinator.captureInteraction(7, Offset(100, 200), DateTime.now());
         await pumpEventQueue();
 
         // THEN
@@ -342,11 +410,60 @@ void main() {
         await coordinator.dispose();
 
         // WHEN
-        coordinator.captureInteraction(7, Offset(100, 200));
+        coordinator.captureInteraction(7, Offset(100, 200), DateTime.now());
         await pumpEventQueue();
 
         // THEN - queue is disposed, operations should throw
         expect(() => eventQueue.fetchOldest(), throwsA(anything));
+      });
+    });
+
+    group('captureTouchMove', () {
+      test('records a position batch when recording is active', () async {
+        // GIVEN
+        final expectedPositions = const [
+          TouchPosition(x: 10.0, y: 20.0, timeOffset: -100),
+          TouchPosition(x: 30.0, y: 40.0, timeOffset: 0),
+        ];
+        final coordinator = createCoordinator();
+        coordinator.startRecording(sessionsPercent: 100.0);
+        await pumpEventQueue();
+
+        // WHEN
+        coordinator.captureTouchMove(expectedPositions, DateTime.now());
+        await pumpEventQueue();
+
+        // THEN
+        final oldest = await eventQueue.fetchOldest();
+        final events = await eventQueue.fetchBatch(
+          sessionId: oldest!.sessionId,
+          distinctId: oldest.distinctId,
+          maxBytes: 100000,
+          maxCount: 10,
+        );
+        final touchMoves = events
+            .where((e) => e.type == EventType.touchMove)
+            .toList();
+        expect(touchMoves.length, 1);
+        expect(
+          (touchMoves[0].payload as TouchMovePayload).positions,
+          expectedPositions,
+        );
+      });
+
+      test('skips touch move when not recording', () async {
+        // GIVEN
+        final coordinator = createCoordinator();
+        // Don't start recording
+
+        // WHEN
+        coordinator.captureTouchMove(const [
+          TouchPosition(x: 1, y: 2, timeOffset: 0),
+        ], DateTime.now());
+        await pumpEventQueue();
+
+        // THEN
+        expect(await eventQueue.fetchOldest(), isNull);
       });
     });
 
@@ -510,7 +627,7 @@ void main() {
         await coordinator.dispose();
 
         // THEN - captureInteraction is a no-op
-        coordinator.captureInteraction(7, Offset(100, 200));
+        coordinator.captureInteraction(7, Offset(100, 200), DateTime.now());
         // Event queue is disposed so we can't check it,
         // but the call should not throw
       });
@@ -724,6 +841,159 @@ void main() {
           expect(coordinator.isAppInForeground, true);
         },
       );
+    });
+
+    group('wireframe kill switch', () {
+      // The other platforms clear `wireframesOptions` before building the
+      // instance; here the emitter is wired at init and settings land on first
+      // foreground, so the coordinator has to stop a live capturer.
+      ScreenshotCapturer createWireframeCapturer() => ScreenshotCapturer(
+        directive: MaskingDirective(autoMaskTypes: {}),
+        logger: logger,
+        debugOverlayEnabled: false,
+        wireframeEmitter: WireframeEmitter(
+          sensitiveRules: const [],
+          debugEmitter: null,
+          logger: logger,
+        ),
+      );
+
+      SessionReplayCoordinator createWireframeCoordinator({
+        required ScreenshotCapturer capturer,
+        required SettingsService settings,
+        RemoteSettingsMode remoteSettingsMode = RemoteSettingsMode.fallback,
+      }) => SessionReplayCoordinator(
+        screenshotCapturer: capturer,
+        eventRecorder: eventRecorder,
+        uploadService: uploadService,
+        settingsService: settings,
+        sessionManager: sessionManager,
+        logger: logger,
+        autoRecordSessionsPercent: 100.0,
+        remoteSettingsMode: remoteSettingsMode,
+        debugOptions: null,
+      );
+
+      test('stops wireframe capture when the server disables it', () async {
+        // GIVEN - recording allowed, wireframes killed
+        final capturer = createWireframeCapturer();
+        final coordinator = createWireframeCoordinator(
+          capturer: capturer,
+          settings: SettingsService(
+            storageProvider: storageProvider,
+            token: 'test-token',
+            logger: logger,
+            httpClient: createFakeSettingsClient(
+              isEnabled: true,
+              wireframeEnabled: false,
+              wireframeError: 'organization is blocked from wireframe capture.',
+            ),
+            wireframesRequested: true,
+          ),
+        );
+
+        // WHEN
+        coordinator.onAppForegrounded();
+        await pumpEventQueue();
+
+        // THEN - replay keeps recording, only wireframes are off
+        expect(capturer.wireframesEnabled, false);
+        expect(coordinator.recordingState, RecordingState.recording);
+      });
+
+      test('suppresses wireframes until the verdict arrives', () async {
+        // GIVEN - wireframes opted in locally, settings not fetched yet
+        final capturer = createWireframeCapturer();
+        createWireframeCoordinator(
+          capturer: capturer,
+          settings: SettingsService(
+            storageProvider: storageProvider,
+            token: 'test-token',
+            logger: logger,
+            httpClient: createFakeSettingsClient(
+              isEnabled: true,
+              wireframeEnabled: true,
+            ),
+            wireframesRequested: true,
+          ),
+        );
+
+        // THEN - a manually started recording cannot ship a wireframe yet
+        expect(capturer.wireframesEnabled, false);
+      });
+
+      test('leaves wireframe capture on when the field is absent', () async {
+        // GIVEN - a server that was never asked for the switch
+        final capturer = createWireframeCapturer();
+        final coordinator = createWireframeCoordinator(
+          capturer: capturer,
+          settings: SettingsService(
+            storageProvider: storageProvider,
+            token: 'test-token',
+            logger: logger,
+            httpClient: createFakeSettingsClient(isEnabled: true),
+          ),
+        );
+
+        // WHEN
+        coordinator.onAppForegrounded();
+        await pumpEventQueue();
+
+        // THEN
+        expect(capturer.wireframesEnabled, true);
+      });
+
+      test('honors the kill switch in disabled remote settings mode', () async {
+        // GIVEN - remote config is ignored, but enablement switches are not
+        final capturer = createWireframeCapturer();
+        final coordinator = createWireframeCoordinator(
+          capturer: capturer,
+          remoteSettingsMode: RemoteSettingsMode.disabled,
+          settings: SettingsService(
+            storageProvider: storageProvider,
+            token: 'test-token',
+            logger: logger,
+            httpClient: createFakeSettingsClient(
+              isEnabled: true,
+              wireframeEnabled: false,
+            ),
+            wireframesRequested: true,
+          ),
+        );
+
+        // WHEN
+        coordinator.onAppForegrounded();
+        await pumpEventQueue();
+
+        // THEN
+        expect(capturer.wireframesEnabled, false);
+      });
+
+      test('honors the kill switch when recording is also disabled', () async {
+        // GIVEN - both switches off
+        final capturer = createWireframeCapturer();
+        final coordinator = createWireframeCoordinator(
+          capturer: capturer,
+          settings: SettingsService(
+            storageProvider: storageProvider,
+            token: 'test-token',
+            logger: logger,
+            httpClient: createFakeSettingsClient(
+              isEnabled: false,
+              wireframeEnabled: false,
+            ),
+            wireframesRequested: true,
+          ),
+        );
+
+        // WHEN
+        coordinator.onAppForegrounded();
+        await pumpEventQueue();
+
+        // THEN
+        expect(capturer.wireframesEnabled, false);
+        expect(coordinator.recordingState, RecordingState.notRecording);
+      });
     });
 
     group('remote config modes', () {
@@ -1181,6 +1451,7 @@ void main() {
     group('capture in flight across identity changes', () {
       late _PendingScreenshotCapturer pendingCapturer;
       late _RecordingEventQueue recordingQueue;
+      late Element boundaryElement;
 
       setUp(() async {
         recordingQueue = _RecordingEventQueue();
@@ -1194,6 +1465,7 @@ void main() {
         );
         pendingCapturer = _PendingScreenshotCapturer(logger: logger);
         screenshotCapturer = pendingCapturer;
+        boundaryElement = const SizedBox().createElement();
       });
 
       Future<SessionReplayCoordinator>
@@ -1211,7 +1483,10 @@ void main() {
           // GIVEN - a capture is in flight
           final coordinator = await startRecordingWithPendingCapture();
           final capturedSessionId = sessionManager.getCurrentSession().id;
-          final capture = coordinator.captureSnapshot(RenderRepaintBoundary());
+          final capture = coordinator.captureSnapshot(
+            RenderRepaintBoundary(),
+            boundaryElement: boundaryElement,
+          );
           await pumpEventQueue();
 
           // WHEN - a stop/start cycle rotates the session before it resolves
@@ -1241,7 +1516,10 @@ void main() {
           // GIVEN - a capture is in flight
           final coordinator = await startRecordingWithPendingCapture();
           final sessionId = sessionManager.getCurrentSession().id;
-          final capture = coordinator.captureSnapshot(RenderRepaintBoundary());
+          final capture = coordinator.captureSnapshot(
+            RenderRepaintBoundary(),
+            boundaryElement: boundaryElement,
+          );
           await pumpEventQueue();
 
           // WHEN - recording stops before it resolves
@@ -1267,7 +1545,10 @@ void main() {
           // GIVEN - a capture is in flight
           final coordinator = await startRecordingWithPendingCapture();
           final capturedSessionId = sessionManager.getCurrentSession().id;
-          final capture = coordinator.captureSnapshot(RenderRepaintBoundary());
+          final capture = coordinator.captureSnapshot(
+            RenderRepaintBoundary(),
+            boundaryElement: boundaryElement,
+          );
           await pumpEventQueue();
 
           // WHEN - the session rotates before the frame resolves
@@ -1296,7 +1577,10 @@ void main() {
         () async {
           // GIVEN - a capture is in flight
           final coordinator = await startRecordingWithPendingCapture();
-          final capture = coordinator.captureSnapshot(RenderRepaintBoundary());
+          final capture = coordinator.captureSnapshot(
+            RenderRepaintBoundary(),
+            boundaryElement: boundaryElement,
+          );
           await pumpEventQueue();
 
           // WHEN - the coordinator is disposed before it resolves
@@ -1322,7 +1606,10 @@ void main() {
           );
           coordinator.startRecording(sessionsPercent: 100.0);
           await pumpEventQueue();
-          final capture = coordinator.captureSnapshot(RenderRepaintBoundary());
+          final capture = coordinator.captureSnapshot(
+            RenderRepaintBoundary(),
+            boundaryElement: boundaryElement,
+          );
           await pumpEventQueue();
 
           // WHEN - the coordinator is disposed, then the frame resolves with
@@ -1349,7 +1636,10 @@ void main() {
           // GIVEN - a capture is in flight
           final coordinator = await startRecordingWithPendingCapture();
           final sessionId = sessionManager.getCurrentSession().id;
-          final capture = coordinator.captureSnapshot(RenderRepaintBoundary());
+          final capture = coordinator.captureSnapshot(
+            RenderRepaintBoundary(),
+            boundaryElement: boundaryElement,
+          );
           await pumpEventQueue();
 
           // WHEN - identify() swaps the distinct ID with recording still active
@@ -1370,11 +1660,52 @@ void main() {
         },
       );
 
+      test(
+        'should record the wireframe under the captured identity when identify runs during capture',
+        () async {
+          // GIVEN - a capture with a wireframe is in flight
+          final coordinator = await startRecordingWithPendingCapture();
+          final sessionId = sessionManager.getCurrentSession().id;
+          final capture = coordinator.captureSnapshot(
+            RenderRepaintBoundary(),
+            boundaryElement: boundaryElement,
+          );
+          await pumpEventQueue();
+
+          // WHEN - identify() swaps the distinct ID before capture completes
+          currentDistinctId = 'user-2';
+          pendingCapturer.completeWithPinnedIdentity(
+            wireframes: WireframePayload(
+              viewportWidth: 100,
+              viewportHeight: 200,
+              elements: const [],
+            ),
+          );
+          await capture;
+          await pumpEventQueue();
+
+          // THEN - both visual events keep the identity pinned at capture time
+          final visualEvents = recordingQueue.addedEvents
+              .where(
+                (event) =>
+                    event.type == EventType.screenshot ||
+                    event.type == EventType.wireframe,
+              )
+              .toList();
+          expect(visualEvents, hasLength(2));
+          expect(visualEvents.every((e) => e.sessionId == sessionId), isTrue);
+          expect(visualEvents.every((e) => e.distinctId == 'user-1'), isTrue);
+        },
+      );
+
       test('should record the frame when identity is unchanged', () async {
         // GIVEN - a capture is in flight
         final coordinator = await startRecordingWithPendingCapture();
         final sessionId = sessionManager.getCurrentSession().id;
-        final capture = coordinator.captureSnapshot(RenderRepaintBoundary());
+        final capture = coordinator.captureSnapshot(
+          RenderRepaintBoundary(),
+          boundaryElement: boundaryElement,
+        );
         await pumpEventQueue();
 
         // WHEN - it resolves with session and distinct ID untouched
@@ -1399,6 +1730,7 @@ void main() {
     group('capture identity across the metadata await', () {
       late _PendingScreenshotCapturer pendingCapturer;
       late _PausingMetadataEventQueue pausingQueue;
+      late Element boundaryElement;
 
       setUp(() async {
         pausingQueue = _PausingMetadataEventQueue();
@@ -1412,6 +1744,7 @@ void main() {
         );
         pendingCapturer = _PendingScreenshotCapturer(logger: logger);
         screenshotCapturer = pendingCapturer;
+        boundaryElement = const SizedBox().createElement();
       });
 
       test(
@@ -1423,7 +1756,10 @@ void main() {
           await pumpEventQueue();
           final sessionId = sessionManager.getCurrentSession().id;
 
-          final capture = coordinator.captureSnapshot(RenderRepaintBoundary());
+          final capture = coordinator.captureSnapshot(
+            RenderRepaintBoundary(),
+            boundaryElement: boundaryElement,
+          );
           await pumpEventQueue();
           pendingCapturer.completeWithPinnedIdentity();
           await pumpEventQueue();
@@ -1470,6 +1806,7 @@ class _PendingScreenshotCapturer extends ScreenshotCapturer {
     RenderRepaintBoundary boundary, {
     required Session Function() getCurrentSession,
     required String Function() getDistinctId,
+    required Element boundaryElement,
     Set<AutoMaskedView>? maskTypes,
   }) {
     pinnedSessionId = getCurrentSession().id;
@@ -1480,6 +1817,7 @@ class _PendingScreenshotCapturer extends ScreenshotCapturer {
   /// Resolve the in-flight capture with the identity pinned when it started.
   void completeWithPinnedIdentity({
     List<MaskRegionInfo> maskRegions = const [],
+    WireframePayload? wireframes,
   }) => pendingCapture.complete(
     CaptureSuccess(
       data: Uint8List.fromList([1, 2, 3]),
@@ -1490,6 +1828,7 @@ class _PendingScreenshotCapturer extends ScreenshotCapturer {
       sessionId: pinnedSessionId,
       distinctId: pinnedDistinctId,
       maskRegions: maskRegions,
+      wireframes: wireframes,
     ),
   );
 }

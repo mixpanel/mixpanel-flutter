@@ -215,6 +215,37 @@ void main() {
         expect(metadata['y'], 20.0);
       });
 
+      test('serializes touch move event with its positions', () {
+        // GIVEN
+        final event = SessionReplayEvent(
+          sessionId: 'session-1',
+          distinctId: 'user-1',
+          timestamp: DateTime.fromMillisecondsSinceEpoch(5000, isUtc: true),
+          type: EventType.touchMove,
+          payload: TouchMovePayload(
+            positions: const [
+              TouchPosition(x: 10.0, y: 20.0, timeOffset: -100),
+              TouchPosition(x: 30.0, y: 40.0, timeOffset: 0),
+            ],
+          ),
+        );
+
+        // WHEN
+        final row = event.toDbRow();
+
+        // THEN
+        expect(row['type'], EventType.touchMove.index);
+        expect(row['payload_binary'], isNull);
+
+        final metadata =
+            jsonDecode(row['payload_metadata'] as String)
+                as Map<String, dynamic>;
+        expect(metadata['positions'], [
+          {'x': 10.0, 'y': 20.0, 'timeOffset': -100},
+          {'x': 30.0, 'y': 40.0, 'timeOffset': 0},
+        ]);
+      });
+
       test('serializes screenshot event with binary data', () {
         // GIVEN
         final imageData = Uint8List.fromList([0xFF, 0xD8, 0x01]);
@@ -310,6 +341,37 @@ void main() {
         expect(payload.interactionType, expectedInteractionType);
         expect(payload.x, expectedX);
         expect(payload.y, expectedY);
+      });
+
+      test('deserializes touch move event from database row', () {
+        // GIVEN
+        final row = {
+          'id': 43,
+          'data_size': 100,
+          'session_id': 'session-1',
+          'distinct_id': 'user-1',
+          'timestamp': 5000,
+          'type': EventType.touchMove.index,
+          'payload_metadata': jsonEncode({
+            'positions': [
+              {'x': 10.0, 'y': 20.0, 'timeOffset': -100},
+              {'x': 30.0, 'y': 40.0, 'timeOffset': 0},
+            ],
+            'version': 1,
+          }),
+          'payload_binary': null,
+        };
+
+        // WHEN
+        final event = PersistedSessionReplayEvent.fromDbRow(row);
+
+        // THEN
+        expect(event.type, EventType.touchMove);
+        final payload = event.payload as TouchMovePayload;
+        expect(payload.positions, const [
+          TouchPosition(x: 10.0, y: 20.0, timeOffset: -100),
+          TouchPosition(x: 30.0, y: 40.0, timeOffset: 0),
+        ]);
       });
 
       test('deserializes screenshot event from database row', () {

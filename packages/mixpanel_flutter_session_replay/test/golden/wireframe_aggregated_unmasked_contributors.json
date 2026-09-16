@@ -1,0 +1,19 @@
+{
+  "viewport": [
+    800,
+    600
+  ],
+  "elements": [
+    {
+      "role": "button",
+      "text": "Marshmallow $2.99",
+      "bounds": [
+        333,
+        276,
+        134,
+        48
+      ],
+      "maskDecision": "NONE"
+    }
+  ]
+}

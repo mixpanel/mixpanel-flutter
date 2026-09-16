@@ -109,21 +109,26 @@ class _FrameMonitorState extends State<FrameMonitor> {
     // Double-check we can capture (prevents race condition between timer and frame callbacks)
     if (!_scheduler.canCapture()) return;
 
-    final boundary = _repaintBoundaryKey.currentContext?.findRenderObject();
+    final boundaryElement = _repaintBoundaryKey.currentContext;
+    if (boundaryElement is! Element) return;
+
+    final boundary = boundaryElement.findRenderObject();
     if (boundary is! RenderRepaintBoundary) return;
 
     // Tell scheduler we're starting
     _scheduler.markCaptureStarted();
 
     // Simple call to coordinator (like interactions)
-    widget.coordinator.captureSnapshot(boundary).whenComplete(() {
-      if (mounted) {
-        // Tell scheduler we completed (500ms starts now)
-        // This runs whether capture succeeded or failed, ensuring we always
-        // wait 500ms before the next attempt (prevents excessive retries on failure)
-        _scheduler.markCaptureCompleted();
-      }
-    });
+    widget.coordinator
+        .captureSnapshot(boundary, boundaryElement: boundaryElement)
+        .whenComplete(() {
+          if (mounted) {
+            // Tell scheduler we completed (500ms starts now)
+            // This runs whether capture succeeded or failed, ensuring we always
+            // wait 500ms before the next attempt (prevents excessive retries on failure)
+            _scheduler.markCaptureCompleted();
+          }
+        });
   }
 
   @override

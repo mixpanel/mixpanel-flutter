@@ -25,6 +25,9 @@ Future<void> runBenchmark(
   final boundary = tester.allRenderObjects
       .whereType<RenderRepaintBoundary>()
       .first;
+  final boundaryElement = tester.allElements.firstWhere(
+    (element) => identical(element.renderObject, boundary),
+  );
 
   final logger = MixpanelLogger(LogLevel.info);
   final nativeCompressor = NativeImageCompressor();
@@ -50,6 +53,7 @@ Future<void> runBenchmark(
           boundary,
           getCurrentSession: SessionManager().getCurrentSession,
           getDistinctId: () => 'benchmark-distinct-id',
+          boundaryElement: boundaryElement,
         ),
       );
       await tester.pump();
