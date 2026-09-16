@@ -2,7 +2,7 @@ group 'com.mixpanel.mixpanel_flutter'
 version '1.0'
 
 buildscript {
-    ext.kotlin_version = '2.1.20'
+    ext.kotlin_version = '1.9.0'
     repositories {
         google()
         mavenCentral()
@@ -45,6 +45,15 @@ android {
 
     kotlinOptions {
         jvmTarget = '17'
+        // mixpanel-android-common:1.1.0 is published with Kotlin 2.0
+        // metadata. Flutter's gradle integration picks a KGP version we
+        // can't reliably control from this module's buildscript, so a
+        // Kotlin 1.9.x compiler often ends up compiling this plugin and
+        // chokes on the newer metadata. The bytecode itself is
+        // forward-compatible (the consumed APIs are just a Flow and a
+        // data class), so suppressing the metadata version check is the
+        // canonical workaround.
+        freeCompilerArgs += ['-Xskip-metadata-version-check']
     }
 
     sourceSets {
@@ -57,12 +66,11 @@ android {
 }
 
 dependencies {
-    implementation "com.mixpanel.android:mixpanel-android:8.11.0"
-    // mixpanel-android:8.11.0 only declares mixpanel-android-common as a
+    implementation "com.mixpanel.android:mixpanel-android:8.11.1"
+    // mixpanel-android:8.11.1 only declares mixpanel-android-common as a
     // runtime dependency, so MixpanelEventBridge is not on the compile
     // classpath unless we add it explicitly here. EventBridgeSubscriber.kt
     // imports it directly.
     implementation "com.mixpanel.android:mixpanel-android-common:1.1.0"
-    implementation "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
     implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.1"
 }
