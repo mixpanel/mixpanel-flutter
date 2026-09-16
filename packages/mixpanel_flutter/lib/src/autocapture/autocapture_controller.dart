@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:developer' as developer;
 import 'package:flutter/foundation.dart';
 import 'autocapture_options.dart';
 import 'click_event.dart';
@@ -12,6 +13,8 @@ class AutocaptureController extends ChangeNotifier {
   bool _allowed = false;
   bool _closed = false;
   int _generation = 0;
+  // Navigation invalidates detections, never an in-flight consent decision.
+  int _consentEpoch = 0;
   final Map<int, Object> _owners = {};
 
   bool get allowed => !_closed && _allowed && options.isEnabled;
@@ -32,8 +35,9 @@ class AutocaptureController extends ChangeNotifier {
 
   int suspend() {
     _allowed = false;
+    _consentEpoch++;
     invalidate();
-    return _generation;
+    return _consentEpoch;
   }
 
   /// Navigation/identity/lifecycle invalidation drops in-flight detections.
@@ -44,16 +48,21 @@ class AutocaptureController extends ChangeNotifier {
   }
 
   Future<void> refreshConsent(Future<bool?> Function() read,
-      {int? generation}) async {
-    if (_closed || (generation != null && generation != _generation)) return;
+      {int? consentEpoch}) async {
+    if (_closed || (consentEpoch != null && consentEpoch != _consentEpoch)) {
+      return;
+    }
     final expected = suspend();
     bool? optedOut;
     try {
       optedOut = await read();
     } catch (_) {
       // Unknown consent never permits collection.
+      developer.log(
+          'Autocapture consent read failed; capture remains suspended.',
+          name: 'Mixpanel');
     }
-    if (_closed || expected != _generation) return;
+    if (_closed || expected != _consentEpoch) return;
     _allowed = optedOut == false;
     notifyListeners();
   }

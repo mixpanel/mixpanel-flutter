@@ -39,7 +39,7 @@ void main() {
     expect(tracker.record(0, 0, const Duration(seconds: 1)), false);
   });
   test('invalid coordinates are ignored and options are bounded', () {
-    final options = AutocaptureOptions(
+    const options = AutocaptureOptions(
         rageClickThreshold: -1,
         rageClickWindowMs: 0,
         rageClickRadius: double.nan,

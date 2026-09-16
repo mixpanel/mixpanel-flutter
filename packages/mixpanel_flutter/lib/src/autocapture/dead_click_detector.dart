@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/scheduler.dart';
+import 'package:flutter/foundation.dart';
 import 'click_event.dart';
 import 'response_snapshot.dart';
 
@@ -40,7 +41,13 @@ class DeadClickDetector {
   void sample() {
     final baseline = _baseline;
     if (baseline == null) return;
-    final current = capture();
+    sampleSnapshot(capture());
+  }
+
+  /// Reuse the frame snapshot when the old candidate and a new press overlap.
+  void sampleSnapshot(ResponseSnapshot? current) {
+    final baseline = _baseline;
+    if (baseline == null) return;
     if (current == null || baseline.differsFrom(current)) cancel();
   }
 
@@ -64,17 +71,33 @@ class DeadClickDetector {
 /// One dispatcher for the binding lifetime, with removable widget listeners.
 /// It never retains disposed widget callbacks and never schedules new frames.
 class CaptureFrameObserver {
-  static final Set<void Function()> _listeners = {};
-  static bool _installed = false;
-  static void add(void Function() callback) {
-    _listeners.add(callback);
-    if (_installed) return;
-    _installed = true;
-    SchedulerBinding.instance.addPersistentFrameCallback((_) {
-      if (_listeners.isEmpty) return;
-      SchedulerBinding.instance.addPostFrameCallback((_) {
-        for (final listener in List<void Function()>.of(_listeners)) {
-          if (_listeners.contains(listener)) listener();
+  static final Map<void Function(), bool Function()> _listeners = {};
+  static SchedulerBinding? _binding;
+  // Weak keys avoid retaining replaced test bindings. A -> B -> A must not
+  // install a second persistent callback on A.
+  static final Expando<bool> _installed =
+      Expando<bool>('capture frame observer');
+  static void add(void Function() callback, bool Function() isObserving) {
+    _listeners[callback] = isObserving;
+    installForBinding(SchedulerBinding.instance);
+  }
+
+  @visibleForTesting
+  static void installForBinding(SchedulerBinding binding) {
+    _binding = binding;
+    if (_installed[binding] == true) return;
+    _installed[binding] = true;
+    binding.addPersistentFrameCallback((_) {
+      if (!identical(_binding, binding) ||
+          !_listeners.values.any((isObserving) => isObserving())) {
+        return;
+      }
+      binding.addPostFrameCallback((_) {
+        if (!identical(_binding, binding)) return;
+        // A copy permits listeners to detach during delivery. No copy or
+        // post-frame callback is allocated when every listener is idle.
+        for (final listener in List<void Function()>.of(_listeners.keys)) {
+          if (_listeners[listener]?.call() ?? false) listener();
         }
       });
     });

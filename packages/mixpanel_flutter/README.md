@@ -269,3 +269,14 @@ Opt-out immediately stops collection and cancels pending detections. Identity
 changes, reset, navigation, backgrounding, and disposal invalidate pending work.
 Unknown consent disables capture. Automatic capture currently does nothing on
 web, desktop, keyboard activation, and assistive-technology activation.
+
+
+Automatic pointer capture accepts primary touch/mouse taps lasting at most
+500 ms, matching Android (including exactly 500 ms). Stylus and inverted-stylus
+input are not captured in this Beta. iPad trackpad clicks delivered by Flutter
+as mouse/touch events follow the same rules.
+
+Target lookup follows hit-test render ancestry. Response checks retain a bounded
+view traversal; exceeding the node/depth budget suppresses affected signals and
+emits one generic diagnostic per process. This protects app responsiveness but
+means exceptionally complex visible views can lack automatic dead-click events.

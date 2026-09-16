@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
@@ -190,8 +191,8 @@ void main() {
     await tester.pumpWidget(host(button()));
     final p = tester.getCenter(find.text('Buy'));
     var gesture = await tester.startGesture(p);
-    await tester.pump(const Duration(milliseconds: 500));
-    await gesture.up(timeStamp: const Duration(milliseconds: 500));
+    await tester.pump(const Duration(milliseconds: 501));
+    await gesture.up(timeStamp: const Duration(milliseconds: 501));
     gesture = await tester.startGesture(p);
     await gesture.moveTo(p + const Offset(100, 0));
     await gesture.moveTo(p);
@@ -348,6 +349,374 @@ void main() {
         'GestureDetector');
   });
 
+  testWidgets('exactly 500 ms is a tap matching Android', (tester) async {
+    await init();
+    await tester.pumpWidget(host(button()));
+    final gesture =
+        await tester.startGesture(tester.getCenter(find.text('Buy')));
+    await tester.pump(const Duration(milliseconds: 500));
+    await gesture.up(timeStamp: const Duration(milliseconds: 500));
+    await tester.pump(const Duration(milliseconds: 501));
+    expect(named(r'$mp_click'), hasLength(1));
+  });
+
+  testWidgets(
+      'unrelated large render subtree does not suppress target resolution',
+      (tester) async {
+    await init(const AutocaptureOptions(deadClick: false));
+    await tester.pumpWidget(host(Stack(children: [
+      // A mounted tree well above the old 2,000-node budget, not on hit path.
+      IgnorePointer(
+          child: Column(
+              children: List.generate(
+                  2500, (_) => const SizedBox(width: 1, height: 0)))),
+      Center(child: button()),
+    ])));
+    await tester.tap(find.text('Buy'));
+    await tester.pump();
+    expect(named(r'$mp_click'), hasLength(1));
+    expect(named(r'$mp_click').single['properties'][r'$el_id'], 'checkout');
+  });
+
+  testWidgets('transformed button retains target and no-response detection',
+      (tester) async {
+    await init();
+    await tester.pumpWidget(host(Transform.translate(
+        offset: const Offset(40, 25),
+        child: Transform.scale(scale: 1.2, child: button()))));
+    await tester.tap(find.text('Buy'));
+    await tester.pump(const Duration(milliseconds: 501));
+    expect(named(r'$mp_click'), hasLength(1));
+    expect(named(r'$mp_dead_click'), hasLength(1));
+  });
+
+  for (final operation in ['identify', 'reset', 'optInTracking']) {
+    for (final duringRead in [false, true]) {
+      testWidgets(
+          '$operation resumes after navigation during ${duringRead ? 'consent read' : 'native operation'}',
+          (tester) async {
+        await init();
+        final observer =
+            MixpanelAutocaptureNavigatorObserver(instance: instance);
+        await tester.pumpWidget(host(button(), observers: [observer]));
+        final gate = Completer<void>();
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(channel, (call) async {
+          if (call.method == (duringRead ? 'hasOptedOutTracking' : operation)) {
+            await gate.future;
+          }
+          if (call.method == 'hasOptedOutTracking') return false;
+          if (call.method == 'track') events.add(call.arguments as Map);
+          return null;
+        });
+        Future<void>? pending;
+        if (operation == 'identify') pending = instance.identify('login-user');
+        if (operation == 'reset') pending = instance.reset();
+        if (operation == 'optInTracking') instance.optInTracking();
+        await tester.pump();
+        observer.didPush(
+            MaterialPageRoute<void>(builder: (_) => const SizedBox()), null);
+        gate.complete();
+        await tester.pump();
+        if (pending != null) await pending;
+        await tester.tap(find.text('Buy'));
+        await tester.pump(const Duration(milliseconds: 501));
+        expect(named(r'$mp_click'), hasLength(1));
+      });
+    }
+  }
+
+  testWidgets(
+      'secondary Dart handle opt-out stops the shared active controller',
+      (tester) async {
+    await init();
+    await tester.pumpWidget(host(button()));
+    Mixpanel('other-handle').optOutTracking();
+    await tester.tap(find.text('Buy'));
+    await tester.pump(const Duration(milliseconds: 501));
+    expect(events, isEmpty);
+  });
+
+  testWidgets('overlapping presses still detect transient responses',
+      (tester) async {
+    await init();
+    var label = 'AAAA';
+    late StateSetter update;
+    await tester.pumpWidget(host(StatefulBuilder(builder: (_, setState) {
+      update = setState;
+      return Column(children: [button(), Text(label)]);
+    })));
+    await tester.tap(find.text('Buy'));
+    await tester.pump(const Duration(milliseconds: 100));
+    final next = await tester.createGesture();
+    await next.down(tester.getCenter(find.text('Buy')),
+        timeStamp: const Duration(milliseconds: 100));
+    update(() => label = 'BBBB');
+    await tester.pump(const Duration(milliseconds: 16));
+    update(() => label = 'AAAA');
+    await tester.pump(const Duration(milliseconds: 16));
+    await next.up(timeStamp: const Duration(milliseconds: 140));
+    await tester.pump(const Duration(milliseconds: 501));
+    expect(named(r'$mp_click'), hasLength(2));
+    expect(named(r'$mp_dead_click'), isEmpty);
+  });
+
+  testWidgets('snapshot overflow suppresses dead but hit-path click survives',
+      (tester) async {
+    await init();
+    await tester.pumpWidget(host(Stack(children: [
+      for (var i = 0; i < 2100; i++) const SizedBox(width: 5, height: 5),
+      Center(child: button()),
+    ])));
+    await tester.tap(find.text('Buy'));
+    await tester.pump(const Duration(milliseconds: 501));
+    expect(named(r'$mp_click'), hasLength(1));
+    expect(named(r'$mp_dead_click'), isEmpty);
+  });
+
+  testWidgets('radio effective checked state counts as a response',
+      (tester) async {
+    await init();
+    var selected = false;
+    await tester.pumpWidget(host(StatefulBuilder(
+        builder: (_, setState) => Column(children: [
+              button(onPressed: () => setState(() => selected = true)),
+              Radio<bool>(
+                  value: true,
+                  // Keep this regression runnable on Flutter 3.19, before RadioGroup.
+                  // ignore: deprecated_member_use
+                  groupValue: selected,
+                  // ignore: deprecated_member_use
+                  onChanged: (_) {}),
+            ]))));
+    await tester.tap(find.text('Buy'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 501));
+    expect(named(r'$mp_click'), hasLength(1));
+    expect(named(r'$mp_dead_click'), isEmpty);
+  });
+
+  testWidgets('zero-sized portal host resolves distinct overlay owners',
+      (tester) async {
+    await init();
+    final portal = OverlayPortalController();
+    await tester.pumpWidget(host(OverlayPortal(
+      controller: portal,
+      overlayChildBuilder: (_) => Positioned(
+          left: 40,
+          top: 140,
+          child: Material(
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+            button(id: 'portal_one', child: const Text('Portal One')),
+            button(id: 'portal_two', child: const Text('Portal Two')),
+          ]))),
+      child: const SizedBox.shrink(),
+    )));
+    portal.show();
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Portal One'));
+    await tester.pump(const Duration(milliseconds: 501));
+    expect(named(r'$mp_dead_click'), hasLength(1));
+    await tester.tap(find.text('Portal Two'));
+    await tester.pump(const Duration(milliseconds: 501));
+    final clicks = named(r'$mp_click');
+    expect(clicks.map((e) => e['properties'][r'$el_id']),
+        ['portal_one', 'portal_two']);
+    expect(
+        clicks
+            .every((e) => e['properties'][r'$el_tag_name'] == 'ElevatedButton'),
+        isTrue);
+    expect(clicks.every((e) => e['properties'][r'$attr-role'] == 'Button'),
+        isTrue);
+    expect(named(r'$mp_dead_click'), hasLength(2));
+  });
+
+  testWidgets('response in overlay of zero-sized host cancels dead detection',
+      (tester) async {
+    await init();
+    final portal = OverlayPortalController();
+    var label = 'AAAA';
+    await tester.pumpWidget(host(StatefulBuilder(
+        builder: (_, setState) => Column(children: [
+              button(onPressed: () => setState(() => label = 'BBBB')),
+              OverlayPortal(
+                  controller: portal,
+                  overlayChildBuilder: (_) => Positioned(
+                      left: 30, top: 400, child: Material(child: Text(label))),
+                  child: const SizedBox.shrink()),
+            ]))));
+    portal.show();
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Buy'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 501));
+    expect(named(r'$mp_click'), hasLength(1));
+    expect(named(r'$mp_dead_click'), isEmpty);
+  });
+
+  testWidgets('MenuAnchor items keep distinct actionable attribution',
+      (tester) async {
+    await init();
+    final menu = MenuController();
+    await tester.pumpWidget(host(MenuAnchor(
+        controller: menu,
+        menuChildren: [
+          MenuItemButton(onPressed: () {}, child: const Text('Item One')),
+          MenuItemButton(onPressed: () {}, child: const Text('Item Two')),
+        ],
+        builder: (_, controller, child) => ElevatedButton(
+            onPressed: controller.open, child: const Text('Open menu')))));
+    final ids = <String>[];
+    for (final label in ['Item One', 'Item Two']) {
+      menu.open();
+      await tester.pumpAndSettle();
+      events.clear();
+      await tester.tap(find.text(label));
+      await tester.pumpAndSettle();
+      final props = named(r'$mp_click').single['properties'];
+      expect(props[r'$el_tag_name'], 'TextButton');
+      expect(props[r'$attr-role'], 'Button');
+      ids.add(props[r'$el_id'] as String);
+    }
+    expect(ids.toSet(), hasLength(2));
+  });
+
+  testWidgets(
+      'over-budget portal fallback skips instead of naming root listener',
+      (tester) async {
+    await init(const AutocaptureOptions(deadClick: false));
+    final portal = OverlayPortalController();
+    await tester.pumpWidget(host(Stack(children: [
+      IgnorePointer(
+          child: Column(
+              children: List.generate(
+                  2500, (_) => const SizedBox(width: 1, height: 0)))),
+      OverlayPortal(
+          controller: portal,
+          overlayChildBuilder: (_) => Positioned(
+              left: 40,
+              top: 140,
+              child: Material(child: button(id: 'portal_over_budget'))),
+          child: const SizedBox.shrink()),
+    ])));
+    portal.show();
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Buy'));
+    await tester.pump();
+    expect(events, isEmpty);
+  });
+
+  testWidgets('proven offscreen custom painter does not veto dead clicks',
+      (tester) async {
+    await init();
+    await tester.pumpWidget(host(Stack(children: [
+      Transform.translate(
+          offset: const Offset(5000, 0),
+          child: CustomPaint(painter: _Painter(), size: const Size(20, 20))),
+      Center(child: button()),
+    ])));
+    await tester.tap(find.text('Buy'));
+    await tester.pump(const Duration(milliseconds: 501));
+    expect(named(r'$mp_click'), hasLength(1));
+    expect(named(r'$mp_dead_click'), hasLength(1));
+  });
+
+  for (final offscreen in [false, true]) {
+    testWidgets(
+        'texture visibility controls dead suppression: offscreen=$offscreen',
+        (tester) async {
+      await init();
+      await tester.pumpWidget(host(Stack(children: [
+        Transform.translate(
+            offset: Offset(offscreen ? 5000 : 0, 0),
+            child: const SizedBox(
+                width: 20, height: 20, child: Texture(textureId: 999))),
+        Center(child: button()),
+      ])));
+      await tester.tap(find.text('Buy'));
+      await tester.pump(const Duration(milliseconds: 501));
+      expect(named(r'$mp_click'), hasLength(1));
+      expect(named(r'$mp_dead_click'), hasLength(offscreen ? 1 : 0));
+    });
+  }
+
+  testWidgets('visible portal painter vetoes despite sized offscreen host',
+      (tester) async {
+    await init();
+    final portal = OverlayPortalController();
+    await tester.pumpWidget(host(Stack(children: [
+      Transform.translate(
+          offset: const Offset(5000, 0),
+          child: SizedBox(
+              width: 80,
+              height: 80,
+              child: OverlayPortal(
+                  controller: portal,
+                  overlayChildBuilder: (_) => Positioned(
+                      left: 20,
+                      top: 150,
+                      child: CustomPaint(
+                          painter: _Painter(), size: const Size(20, 20))),
+                  child: const SizedBox.expand()))),
+      Center(child: button()),
+    ])));
+    portal.show();
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Buy'));
+    await tester.pump(const Duration(milliseconds: 501));
+    expect(named(r'$mp_click'), hasLength(1));
+    expect(named(r'$mp_dead_click'), isEmpty);
+  });
+
+  testWidgets('visible portal response under sized offscreen host cancels dead',
+      (tester) async {
+    await init();
+    final portal = OverlayPortalController();
+    var label = 'AAAA';
+    await tester.pumpWidget(host(StatefulBuilder(
+        builder: (_, setState) => Stack(children: [
+              Transform.translate(
+                  offset: const Offset(5000, 0),
+                  child: SizedBox(
+                      width: 80,
+                      height: 80,
+                      child: OverlayPortal(
+                          controller: portal,
+                          overlayChildBuilder: (_) => Positioned(
+                              left: 20,
+                              top: 150,
+                              child: Material(child: Text(label))),
+                          child: const SizedBox.expand()))),
+              Center(
+                  child:
+                      button(onPressed: () => setState(() => label = 'BBBB'))),
+            ]))));
+    portal.show();
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Buy'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 501));
+    expect(named(r'$mp_click'), hasLength(1));
+    expect(named(r'$mp_dead_click'), isEmpty);
+  });
+
+  for (final offscreen in [false, true]) {
+    testWidgets('stateful platform surface bounds: offscreen=$offscreen',
+        (tester) async {
+      await init();
+      await tester.pumpWidget(host(Stack(children: [
+        Transform.translate(
+            offset: Offset(offscreen ? 5000 : 0, 0),
+            child: const _GeometryOnlyAndroidView()),
+        Center(child: button()),
+      ])));
+      await tester.tap(find.text('Buy'));
+      await tester.pump(const Duration(milliseconds: 501));
+      expect(named(r'$mp_click'), hasLength(1));
+      expect(named(r'$mp_dead_click'), hasLength(offscreen ? 1 : 0));
+    });
+  }
+
   test('structural hash uses specified FNV-1a bytes', () {
     expect(TargetResolver.stableHash('hello'), '4f9f2cab');
   });
@@ -358,4 +727,17 @@ class _Painter extends CustomPainter {
   void paint(Canvas canvas, Size size) {}
   @override
   bool shouldRepaint(_Painter oldDelegate) => false;
+}
+
+// Exercise AndroidView's StatefulElement geometry path without native channels.
+// This fixture validates visibility resolution, not native platform rendering.
+class _GeometryOnlyAndroidView extends AndroidView {
+  const _GeometryOnlyAndroidView() : super(viewType: 'geometry-test');
+  @override
+  State<AndroidView> createState() => _GeometryOnlyAndroidViewState();
+}
+
+class _GeometryOnlyAndroidViewState extends State<AndroidView> {
+  @override
+  Widget build(BuildContext context) => const SizedBox(width: 20, height: 20);
 }

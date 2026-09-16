@@ -137,3 +137,76 @@ building reports on autocaptured events should pin their SDK version. Keep this
 notice on options, event metadata, root/navigation widgets, the autocapture
 accessor/class and manual signal methods. This designation does not remove the
 recorded validation requirements or change package versioning by itself.
+
+
+## Review hardening — 2026-09-16
+
+Consent refresh epochs are separate from detection generations: navigation must
+not strand a suspended controller; newer consent actions/close still win. The
+instance controller is read-only outside Mixpanel. Lifecycle methods intentionally
+use the shared active controller because native method channels share one SDK.
+Generic consent-failure diagnostics contain no payload/error details.
+
+Target resolution hit-tests first and prunes using actual render ancestry (not
+approximate widget rectangles). Only hit targets enter the ownership map.
+Response snapshots cache parent paint transforms, excluding the root's physical
+pixel transform to preserve logical coordinates. The same frame snapshot serves
+an old pending dead candidate and an overlapping new press. No idle observer
+post-frame work, and binding identity is checked. Do not throttle away single-frame
+responses or shorten structural IDs without addressing collisions.
+
+Traversal limits remain fail-closed with one generic process-wide diagnostic;
+raising the budget is not a performance fix. Device/profile-mode measurements
+remain a release prerequisite. Radio state comes from effective checked semantics
+without reading labels/text, compatible with both legacy controls and RadioGroup.
+Tap duration is inclusive at 500 ms to match Android. Stylus remains unsupported.
+
+Validation after review hardening: all 208 analytics tests pass on both Flutter
+3.19.0 and installed Flutter 3.44.6 (19 additional regressions). Focused static
+analysis and formatting checks are clean. Regressions cover consent/native-call
+navigation races for identify/reset/opt-in, newer opt-out/close precedence, shared
+handle opt-out, exact 500 ms taps, large unrelated trees, transform coordinates,
+snapshot overflow, overlapping transient responses, radio feedback and idle
+frame observers. These widget tests do not establish physical-device tap latency.
+
+## Overlay review follow-up — 2026-09-16
+
+Element ancestry and render ancestry diverge for OverlayPortal. Target lookup
+keeps its pruned fast path but requires ownership of the deepest render hit. If
+missing, a separately bounded unpruned pass retries; unresolved/over-budget hits
+are skipped, never attributed to a root listener or other higher wrapper.
+
+Snapshot traversal must not discard Element descendants just because their
+host RenderBox is empty/offscreen: a portal can render those descendants in an
+overlay elsewhere. Individual meaningful widgets are still checked against the
+viewport using actual render transforms. This can visit more mounted elements;
+the existing traversal budget and conservative suppression remain in force.
+Unsupported surfaces with unknown visibility conservatively suppress dead
+detection; proven offscreen surfaces do not. Profile device workloads before Beta.
+
+Radio checked-state lookup stops at the first answer; missing state suppresses
+the entire view's dead-click check. Frame callback installation uses weak binding
+keys to avoid duplicate installation on A -> B -> A without retaining old
+bindings. Transform caching and full structural ID ancestry are preserved.
+
+Validation: 213 tests pass on Flutter 3.19.0 and 3.44.6; focused analysis and
+format checks pass. Five additional tests cover portal attribution/unique IDs,
+portal response observation, menu attribution, bounded fallback failure, and
+binding flip-flop dispatch.
+
+
+## Surface visibility follow-up — 2026-09-16
+
+Unsupported-surface suppression now checks the surface's actual viewport bounds,
+including findRenderObject for stateful/stateless platform-view widgets. Finite,
+nonempty bounds entirely outside the viewport do not veto dead clicks. Missing,
+empty or invalid geometry remains unknown and suppresses detection. Descendant
+traversal continues so a sized offscreen portal host cannot hide visible overlay
+content. Matrix caching and the bounded traversal policy are unchanged.
+
+Validation: all 220 tests pass on Flutter 3.19.0 and 3.44.6; focused static
+analysis, formatting and diff whitespace checks pass. Seven new regressions cover
+offscreen painters, visible/offscreen textures, portal surfaces/responses under
+sized offscreen hosts, and visible/offscreen StatefulElement platform surfaces.
+The platform-view fixture supplies geometry without native channels; real-device
+platform rendering/performance remains a separate release validation task.

@@ -1,4 +1,6 @@
 import 'dart:convert';
+import 'dart:developer' as developer;
+import 'package:flutter/rendering.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -16,28 +18,68 @@ class TargetResolver {
   static const maxNodes = 2000;
   static const maxDepth = 512;
 
+  static bool _reportedLimit = false;
+
+  /// One generic diagnostic per process; never include tree/content details.
+  static void reportTraversalLimit() {
+    if (_reportedLimit) return;
+    _reportedLimit = true;
+    developer.log(
+        'Autocapture traversal budget exceeded; affected signals are skipped.',
+        name: 'Mixpanel');
+  }
+
   CaptureTarget? resolve(Element root, PointerEvent pointer) {
     try {
       if (!root.mounted) return null;
-      final owners = <HitTestTarget, Element>{};
-      var count = 0;
-      void visit(Element element, int depth) {
-        if (++count > maxNodes || depth > maxDepth) throw StateError('limit');
-        if (!element.mounted || hidden(element.widget)) return;
-        if (element is RenderObjectElement)
-          owners[element.renderObject] = element;
-        element.visitChildren((child) => visit(child, depth + 1));
-      }
-
-      visit(root, 0);
       final hits = HitTestResult();
       WidgetsBinding.instance
           .hitTestInView(hits, pointer.position, pointer.viewId);
-      Element? leaf;
-      for (final hit in hits.path) {
-        leaf = owners[hit.target];
-        if (leaf != null) break;
+      final hitTargets = hits.path.map((hit) => hit.target).toSet();
+      // Render ancestry provides a fast path, but OverlayPortal can attach
+      // element descendants to a different render parent. Verify ownership
+      // of the deepest render hit before trusting this pruned walk.
+      final ancestry = <RenderObject>{};
+      for (final target in hitTargets) {
+        if (target is! RenderObject) continue;
+        RenderObject? current = target;
+        while (current != null && ancestry.add(current)) {
+          current = current.parent;
+        }
       }
+      final owners = <HitTestTarget, Element>{};
+      var count = 0;
+      void visit(Element element, int depth, {required bool prune}) {
+        if (!element.mounted || hidden(element.widget)) return;
+        if (prune &&
+            element is RenderObjectElement &&
+            !ancestry.contains(element.renderObject)) {
+          return;
+        }
+        if (++count > maxNodes || depth > maxDepth) {
+          reportTraversalLimit();
+          throw StateError('limit');
+        }
+        if (element is RenderObjectElement &&
+            hitTargets.contains(element.renderObject)) {
+          owners[element.renderObject] = element;
+        }
+        element.visitChildren((child) => visit(child, depth + 1, prune: prune));
+      }
+
+      final renderHits = hits.path.where((hit) => hit.target is RenderObject);
+      if (renderHits.isEmpty) return null;
+      final deepest = renderHits.first.target;
+      visit(root, 0, prune: true);
+      if (!owners.containsKey(deepest)) {
+        // A bounded slow path resolves portals without making ordinary taps
+        // scan unrelated trees. Each pass has its own bounded visit budget.
+        owners.clear();
+        count = 0;
+        visit(root, 0, prune: false);
+      }
+      final leaf = owners[deepest];
+      // Never fabricate attribution from a higher wrapper/our root Listener.
       if (leaf == null || identical(leaf, root)) return null;
       final path = <Element>[leaf];
       leaf.visitAncestorElements((parent) {
@@ -88,7 +130,7 @@ class TargetResolver {
               element.widget is RichText ||
               element.widget is Image ||
               element.widget is Icon,
-          orElse: () => leaf!);
+          orElse: () => leaf);
       final selectedIndex = path.indexOf(selected);
       final ancestors = path.skip(selectedIndex).toList();
       String? identifier;
@@ -184,16 +226,20 @@ class TargetResolver {
   }
 
   static String? role(Widget w) {
-    if (isButton(w) || w is InkResponse || w is GestureDetector)
+    if (isButton(w) || w is InkResponse || w is GestureDetector) {
       return 'Button';
-    if (w is EditableText || w is TextField || w is CupertinoTextField)
+    }
+    if (w is EditableText || w is TextField || w is CupertinoTextField) {
       return 'TextField';
-    if (w is Switch || w is CupertinoSwitch || w is SwitchListTile)
+    }
+    if (w is Switch || w is CupertinoSwitch || w is SwitchListTile) {
       return 'Switch';
+    }
     if (w is Checkbox || w is CheckboxListTile) return 'Checkbox';
     if (w is Radio || w is RadioListTile) return 'Radio';
-    if (w is Slider || w is CupertinoSlider || w is RangeSlider)
+    if (w is Slider || w is CupertinoSlider || w is RangeSlider) {
       return 'Slider';
+    }
     if (w is Text || w is RichText) return 'Text';
     if (w is Image || w is Icon) return 'Image';
     return null;

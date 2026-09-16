@@ -13,12 +13,33 @@ class ResponseSnapshot {
   static ResponseSnapshot? capture(Element root, Rect viewport) {
     var count = 0;
     var hash = 17;
+    // Keep the rolling digest bounded; it is transient comparison state only.
+    // Cache actual parent paint transforms, preserving scroll/transform behavior.
+    final transforms = <RenderObject, Matrix4>{};
+    Matrix4 globalTransform(RenderObject object) {
+      final cached = transforms[object];
+      if (cached != null) return cached;
+      final parent = object.parent;
+      // getTransformTo(null) excludes the root's physical-pixel transform.
+      // Keep snapshots in the same logical coordinate space as the viewport.
+      final matrix = parent == null || identical(parent, object.owner?.rootNode)
+          ? Matrix4.identity()
+          : (globalTransform(parent).clone()
+            ..multiply(object.getTransformTo(parent)));
+      transforms[object] = matrix;
+      return matrix;
+    }
+
+    Rect? bounds(RenderObject? object) {
+      if (object is! RenderBox || !object.attached || !object.hasSize) {
+        return null;
+      }
+      return MatrixUtils.transformRect(
+          globalTransform(object), Offset.zero & object.size);
+    }
+
     void add(Object? value) => hash = (31 * hash + value.hashCode) & 0x3fffffff;
     void visit(Element element, int depth, [Widget? materialChild]) {
-      if (++count > TargetResolver.maxNodes ||
-          depth > TargetResolver.maxDepth) {
-        throw StateError('limit');
-      }
       if (!element.mounted) throw StateError('detached');
       final w = element.widget;
       if (identical(w, materialChild)) materialChild = null;
@@ -28,11 +49,17 @@ class ResponseSnapshot {
       if (TargetResolver.hidden(w)) return;
       final render =
           element is RenderObjectElement ? element.renderObject : null;
-      if (render is RenderBox && render.attached && render.hasSize) {
-        final rect = MatrixUtils.transformRect(
-            render.getTransformTo(null), Offset.zero & render.size);
-        if (!rect.isFinite) throw StateError('geometry');
-        if (!rect.overlaps(viewport)) return;
+      final renderBounds = bounds(render);
+      if (renderBounds != null) {
+        if (!renderBounds.isFinite) throw StateError('geometry');
+        // Do not prune Element descendants based on this render box: a
+        // zero-sized/offscreen OverlayPortal host can have visible children
+        // attached elsewhere in the render tree.
+      }
+      if (++count > TargetResolver.maxNodes ||
+          depth > TargetResolver.maxDepth) {
+        TargetResolver.reportTraversalLimit();
+        throw StateError('limit');
       }
       // A Flutter tree cannot prove the absence of a response in these surfaces.
       // Suppress dead detection for the view, including responses elsewhere in
@@ -47,14 +74,50 @@ class ResponseSnapshot {
               ((w.painter != null && w.painter is! BannerPainter) ||
                   (w.foregroundPainter != null &&
                       w.foregroundPainter is! BannerPainter)))) {
-        throw StateError('unsupported response surface');
+        // Platform-view widgets can be Stateful/StatelessElements, so their
+        // render object is not necessarily the current Element's own object.
+        final surface = render ?? element.findRenderObject();
+        final surfaceBounds =
+            identical(surface, render) ? renderBounds : bounds(surface);
+        // Only proven offscreen surfaces are harmless. Missing or invalid
+        // geometry cannot establish visibility and keeps the view fail-closed.
+        if (surfaceBounds == null ||
+            !surfaceBounds.isFinite ||
+            surfaceBounds.isEmpty ||
+            surfaceBounds.overlaps(viewport)) {
+          throw StateError('unsupported response surface');
+        }
+        // Keep visiting: Element descendants may render elsewhere via a portal.
       }
       if (TargetResolver.isFeedbackControl(w)) {
         add(TargetResolver.typeName(w));
         if (w is Switch) add(w.value);
         if (w is CupertinoSwitch) add(w.value);
         if (w is Checkbox) add(w.value);
-        if (w is Radio) add(w.value == w.groupValue);
+        // Flutter 3.19 has no RadioGroup API. RenderSemanticsAnnotations
+        // exposes the effective selected state on both legacy and modern Radio.
+        if (w is Radio) {
+          bool? checked;
+          void readChecked(Element child) {
+            if (checked != null) return;
+            if (++count > TargetResolver.maxNodes) {
+              TargetResolver.reportTraversalLimit();
+              throw StateError('limit');
+            }
+            final widget = child.widget;
+            if (widget is Semantics && widget.properties.checked != null) {
+              checked = widget.properties.checked;
+              return;
+            }
+            child.visitChildren(readChecked);
+          }
+
+          element.visitChildren(readChecked);
+          // Unknown radio coverage suppresses dead detection for the whole
+          // view, since a response anywhere in that view cancels a dead click.
+          if (checked == null) throw StateError('unknown radio state');
+          add(checked);
+        }
         if (w is Slider) add(w.value);
         if (w is RangeSlider) {
           add(w.values.start);
@@ -79,11 +142,15 @@ class ResponseSnapshot {
           w is DecoratedBox ||
           w is RawImage;
       if (meaningful) {
+        final object = render ?? element.findRenderObject();
+        final rect = identical(object, render) ? renderBounds : bounds(object);
+        if (rect != null && !rect.overlaps(viewport)) {
+          element
+              .visitChildren((child) => visit(child, depth + 1, materialChild));
+          return;
+        }
         add(TargetResolver.typeName(w));
-        final object = element.findRenderObject();
-        if (object is RenderBox && object.attached && object.hasSize) {
-          final rect = MatrixUtils.transformRect(
-              object.getTransformTo(null), Offset.zero & object.size);
+        if (rect != null) {
           add(rect.left.round());
           add(rect.top.round());
           add(rect.width.round());
@@ -91,10 +158,12 @@ class ResponseSnapshot {
         }
         // Content contributes only to this short-lived, in-memory digest. No
         // string, span.toString(), key or diagnostic map leaves this method.
-        if (w is Text)
+        if (w is Text) {
           add(w.data ?? w.textSpan?.toPlainText(includeSemanticsLabels: false));
-        if (w is RichText)
+        }
+        if (w is RichText) {
           add(w.text.toPlainText(includeSemanticsLabels: false));
+        }
         if (w is Text) add(w.style);
         if (w is RichText) add(w.text.style);
         if (w is ColoredBox) add(w.color);
@@ -106,7 +175,6 @@ class ResponseSnapshot {
           add(w.size);
         }
         if (w is Image) {
-          final object = element.findRenderObject();
           if (object is RenderImage) add(identityHashCode(object.image));
         }
         if (TargetResolver.isButton(w)) add(TargetResolver.deadEligible(w));
