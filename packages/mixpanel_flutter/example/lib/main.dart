@@ -4,6 +4,7 @@ import 'package:mixpanel_flutter_example/widget.dart';
 
 import 'analytics.dart';
 import 'event.dart';
+import 'frustration_signals.dart';
 import 'event_bridge.dart';
 import 'feature_flags.dart';
 import 'gdpr.dart';
@@ -63,30 +64,47 @@ class MyApp extends StatefulWidget {
 class _MyAppState extends State<MyApp> {
   late final Future<Mixpanel> _mixpanelFuture;
   late final MixpanelNavigatorObserver _navigatorObserver;
+  Mixpanel? _instance;
+  MixpanelAutocaptureNavigatorObserver? _captureObserver;
 
   @override
   void initState() {
     super.initState();
     _mixpanelFuture = MixpanelManager.init();
     _navigatorObserver = MixpanelNavigatorObserver(_mixpanelFuture);
+    _mixpanelFuture.then((instance) {
+      if (!mounted) return;
+      setState(() {
+        _instance = instance;
+        _captureObserver =
+            MixpanelAutocaptureNavigatorObserver(instance: instance);
+      });
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      initialRoute: '/',
-      navigatorObservers: [_navigatorObserver],
-      routes: {
-        '/': (context) => FirstScreen(),
-        '/event': (context) => EventScreen(),
-        '/profile': (context) => ProfileScreen(),
-        '/gdpr': (context) => GDPRScreen(),
-        '/group': (context) => GroupScreen(),
-        '/feature_flags': (context) => FeatureFlagsScreen(),
-        '/event_bridge': (context) => EventBridgeScreen(),
-      },
-    );
+    return MixpanelAutocaptureWidget(
+        instance: _instance,
+        child: MaterialApp(
+          debugShowCheckedModeBanner: false,
+          initialRoute: '/',
+          navigatorObservers: [
+            _navigatorObserver,
+            if (_captureObserver != null) _captureObserver!
+          ],
+          routes: {
+            '/': (context) => FirstScreen(),
+            '/event': (context) => EventScreen(),
+            '/frustration_signals': (context) =>
+                const FrustrationSignalsScreen(),
+            '/profile': (context) => ProfileScreen(),
+            '/gdpr': (context) => GDPRScreen(),
+            '/group': (context) => GroupScreen(),
+            '/feature_flags': (context) => FeatureFlagsScreen(),
+            '/event_bridge': (context) => EventBridgeScreen(),
+          },
+        ));
   }
 }
 
@@ -103,6 +121,11 @@ class FirstScreen extends StatelessWidget {
         children: [
           SizedBox(
             height: 40,
+          ),
+          TextButton(
+            onPressed: () =>
+                Navigator.pushNamed(context, '/frustration_signals'),
+            child: const Text('MANUAL FRUSTRATION SIGNALS'),
           ),
           SizedBox(
             width: MediaQuery.of(context).size.width * 0.65,

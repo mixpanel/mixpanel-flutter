@@ -6,7 +6,15 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
 import 'package:mixpanel_flutter/codec/mixpanel_message_codec.dart';
 import 'package:mixpanel_flutter/src/version.dart';
+import 'package:mixpanel_flutter/src/autocapture/click_event.dart';
+import 'package:mixpanel_flutter/src/autocapture/autocapture_options.dart';
+import 'package:mixpanel_flutter/src/autocapture/autocapture_controller.dart';
+
 import 'package:mixpanel_flutter_common/mixpanel_flutter_common.dart';
+
+export 'package:mixpanel_flutter/src/autocapture/click_event.dart';
+export 'package:mixpanel_flutter/src/autocapture/autocapture_options.dart';
+export 'package:mixpanel_flutter/src/autocapture/autocapture_widget.dart';
 
 /// Describes why the SDK returned a fallback variant.
 ///
@@ -442,6 +450,12 @@ class Mixpanel {
   final People _people;
   final FeatureFlags _featureFlags;
   Autocapture? _autocapture;
+  static AutocaptureController? _activeAutocapture;
+  static int _autocaptureInitGeneration = 0;
+
+  /// Internal adapter for the root widget, not an application API.
+  /// @nodoc
+  AutocaptureController? autocaptureController;
 
   Mixpanel(String token)
       : _token = token,
@@ -458,6 +472,10 @@ class Mixpanel {
   ///  include app sessions, first app opens, app updated, etc.
   ///  * [superProperties] Optional super properties to register
   ///  * [config] Optional A dictionary of config options to override (WEB ONLY)
+  ///  * [autocaptureOptions] Opt into **experimental (beta)** pointer signals on Android/iOS.
+  ///    Also wrap the app in MixpanelAutocaptureWidget. Omit to disable.
+  ///    See [AutocaptureOptions] for the Beta notice: APIs and captured properties
+  ///    may change before general availability.
   ///  * [featureFlags] Optional Feature flags configuration
   ///  * [serverURL] Optional base URL for Mixpanel API requests. Use for EU/India data
   ///  residency or a custom proxy. Defaults to https://api.mixpanel.com
@@ -468,7 +486,11 @@ class Mixpanel {
       Map<String, dynamic>? superProperties,
       Map<String, dynamic>? config,
       FeatureFlagsConfig? featureFlags,
-      String? serverURL}) async {
+      String? serverURL,
+      AutocaptureOptions? autocaptureOptions}) async {
+    final initGeneration = ++_autocaptureInitGeneration;
+    _activeAutocapture?.close();
+    _activeAutocapture = null;
     // Defer the reverse-channel wiring until something actually reads
     // MixpanelEventBridge.events. Apps that never subscribe pay only the
     // stored function reference — no MethodCallHandler, no native subscribe.
@@ -490,7 +512,16 @@ class Mixpanel {
       allProperties['serverURL'] = serverURL;
     }
     await _channel.invokeMethod<void>('initialize', allProperties);
-    return Mixpanel(token);
+    final instance = Mixpanel(token);
+    if (initGeneration == _autocaptureInitGeneration &&
+        autocaptureOptions != null && autocaptureOptions.isEnabled) {
+      final controller = AutocaptureController(autocaptureOptions,
+          (name, event) => instance.autocapture._trackClickEvent(name, event, null));
+      instance.autocaptureController = controller;
+      _activeAutocapture = controller;
+      await controller.refreshConsent(instance.hasOptedOutTracking);
+    }
+    return instance;
   }
 
   /// Set the base URL used for Mixpanel API requests.
@@ -555,7 +586,13 @@ class Mixpanel {
   /// calls will be sent to Mixpanel after using this method.
   /// This method will internally track an opt-in event to your project.
   void optInTracking() {
-    _channel.invokeMethod<void>('optInTracking');
+    final controller = _activeAutocapture;
+    final generation = controller?.suspend();
+    _channel.invokeMethod<void>('optInTracking').then<void>((_) async {
+      if (controller != null) {
+        await controller.refreshConsent(hasOptedOutTracking, generation: generation);
+      }
+    }).catchError((Object _) {});
   }
 
   /// Use this method to opt-out a user from tracking. Events and people updates that haven't been
@@ -564,7 +601,8 @@ class Mixpanel {
   ///
   /// This method will also remove any user-related information from the device.
   void optOutTracking() {
-    _channel.invokeMethod<void>('optOutTracking');
+    _activeAutocapture?.suspend();
+    _channel.invokeMethod<void>('optOutTracking').catchError((Object _) {});
   }
 
   /// Set the number of events sent in a single network request to the Mixpanel server.
@@ -593,8 +631,13 @@ class Mixpanel {
   /// value is globally unique for each individual user you intend to track.
   Future<void> identify(String distinctId) async {
     if (_MixpanelHelper.isValidString(distinctId)) {
+      final controller = _activeAutocapture;
+      final generation = controller?.suspend();
       await _channel.invokeMethod<void>(
           'identify', <String, dynamic>{'distinctId': distinctId});
+      if (controller != null) {
+        await controller.refreshConsent(hasOptedOutTracking, generation: generation);
+      }
     } else {
       developer.log('`identify` failed: distinctId cannot be blank',
           name: 'Mixpanel');
@@ -662,7 +705,11 @@ class Mixpanel {
   }
 
   /// Returns an Autocapture object that can be used to manually track
-  /// screen view and screen leave events with autocapture metadata.
+  /// screen and frustration signal events with autocapture metadata.
+  ///
+  /// **Experimental (beta).** Autocapture may contain issues, and its API and the
+  /// properties it captures may change in a future release before general
+  /// availability. Pin your SDK version if you build reports on autocaptured events.
   Autocapture get autocapture {
     _autocapture ??= Autocapture();
     return _autocapture!;
@@ -866,7 +913,12 @@ class Mixpanel {
   /// Clear super properties and generates a new random distinctId for this instance.
   /// Useful for clearing data when a user logs out.
   Future<void> reset() async {
+    final controller = _activeAutocapture;
+    final generation = controller?.suspend();
     await _channel.invokeMethod<void>('reset');
+    if (controller != null) {
+      await controller.refreshConsent(hasOptedOutTracking, generation: generation);
+    }
   }
 
   /// Returns the current distinct id of the user.
@@ -1362,10 +1414,14 @@ class FeatureFlags {
   }
 }
 
-/// Provides methods to manually track screen view and screen leave events
+/// Provides methods to manually track screen and frustration signal events
 /// with autocapture metadata.
 ///
 /// Access via `mixpanel.autocapture`.
+///
+/// **Experimental (beta).** Autocapture may contain issues, and its API and the
+/// properties it captures may change in a future release before general
+/// availability. Pin your SDK version if you build reports on autocaptured events.
 class Autocapture {
   // ignore: prefer_const_declarations
   static final MethodChannel _channel = kIsWeb
@@ -1374,6 +1430,86 @@ class Autocapture {
           'mixpanel_flutter', StandardMethodCodec(MixpanelMessageCodec()));
 
   Autocapture();
+
+  /// Manually tracks a `$mp_click` event using [clickEvent] metadata.
+  ///
+  /// **Experimental (beta).** See [Autocapture] for the Beta notice.
+  ///
+  /// Does not start automatic rage or dead click detection.
+  /// Blank identifiers and nonfinite coordinates are silently ignored.
+  /// [properties] may contain additional developer-supplied event properties;
+  /// click metadata and `$mp_autocapture` take precedence over those values.
+  Future<void> trackClick(ClickEvent clickEvent,
+      {Map<String, dynamic>? properties}) async {
+    await _trackClickEvent(r'$mp_click', clickEvent, properties);
+  }
+
+  /// Manually tracks a `$mp_rage_click` event using [clickEvent] metadata.
+  ///
+  /// **Experimental (beta).** See [Autocapture] for the Beta notice.
+  ///
+  /// The caller determines whether a rage click occurred.
+  /// Validation and property precedence are the same as [trackClick].
+  Future<void> trackRageClick(ClickEvent clickEvent,
+      {Map<String, dynamic>? properties}) async {
+    await _trackClickEvent(r'$mp_rage_click', clickEvent, properties);
+  }
+
+  /// Manually tracks a `$mp_dead_click` event using [clickEvent] metadata.
+  ///
+  /// **Experimental (beta).** See [Autocapture] for the Beta notice.
+  ///
+  /// The caller determines whether a dead click occurred.
+  /// Use this for app-detected signals on surfaces whose UI response cannot be
+  /// inspected reliably, such as WebViews, embedded native views, or custom
+  /// painting. An unobservable response must not be assumed to be a dead click.
+  /// This method emits only the supplied signal; it does not inspect the UI or
+  /// start an automatic detector. Automatic detection must skip unknown or
+  /// failed response observations (see context/AUTOCAPTURE.md).
+  /// Validation and property precedence are the same as [trackClick].
+  Future<void> trackDeadClick(ClickEvent clickEvent,
+      {Map<String, dynamic>? properties}) async {
+    await _trackClickEvent(r'$mp_dead_click', clickEvent, properties);
+  }
+
+  Future<void> _trackClickEvent(String eventName, ClickEvent event,
+      Map<String, dynamic>? properties) async {
+    if (!_MixpanelHelper.isValidString(event.elementId) ||
+        !event.x.isFinite ||
+        !event.y.isFinite) {
+      developer.log('Autocapture click ignored: invalid identifier or coordinates',
+          name: 'Mixpanel');
+      return;
+    }
+    try {
+      final merged = <String, dynamic>{...?properties};
+      // These fields belong to the typed event, including when absent.
+      for (final key in [r'$el_tag_name', r'$attr-role', r'$elements']) {
+        merged.remove(key);
+      }
+      merged.addAll(<String, dynamic>{
+        r'$x': event.x.toInt(),
+        r'$y': event.y.toInt(),
+        r'$el_id': event.elementId,
+        if (event.tagName != null &&
+            _MixpanelHelper.isValidString(event.tagName!))
+          r'$el_tag_name': event.tagName,
+        if (event.role != null && _MixpanelHelper.isValidString(event.role!))
+          r'$attr-role': event.role,
+        if (event.elements != null &&
+            _MixpanelHelper.isValidString(event.elements!))
+          r'$elements': event.elements,
+        r'$mp_autocapture': true,
+      });
+      await _channel.invokeMethod<void>('track', <String, dynamic>{
+        'eventName': eventName,
+        'properties': _MixpanelHelper.ensureSerializableProperties(merged),
+      });
+    } catch (_) {
+      // Do not include platform exception messages: they may contain payloads.
+      developer.log('Autocapture click tracking failed', name: 'Mixpanel');
+    }
+  }
 
   /// Tracks a screen view event (`$mp_page_view`) with autocapture metadata.
   ///

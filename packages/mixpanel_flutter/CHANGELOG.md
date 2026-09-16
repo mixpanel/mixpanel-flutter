@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Raise the minimum Flutter version to 3.19.0 and Dart to 3.3.0 for SDK-30.
+- Add Beta manual click, rage-click, and dead-click tracking APIs.
+- Add opt-in Android/iOS automatic signals (Beta), root widget and navigation observer,
+  consent/lifecycle invalidation, privacy-safe targeting, and response detection.
+
 ## [v2.13.0](https://github.com/mixpanel/mixpanel-flutter/tree/v2.13.0) (2026-07-27)
 
 ### Features
