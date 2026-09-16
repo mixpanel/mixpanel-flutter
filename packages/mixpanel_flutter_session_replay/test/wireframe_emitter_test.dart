@@ -812,6 +812,39 @@ void main() {
       expect(second, isNotNull);
     });
 
+    test(
+      'should emit the opening wireframe when a late previous-session frame repopulates dedup after reset',
+      () {
+        // GIVEN - session B starts while session A still has a capture in flight
+        final emitter = WireframeEmitter(
+          sensitiveRules: const [],
+          debugEmitter: null,
+          logger: logger,
+        );
+        emitter.resetDedup();
+
+        // WHEN - A finishes after B's reset, followed by B's identical frame
+        final lateSessionA = emitter.emit(
+          rawElements: [el(text: 'Same screen')],
+          maskRegions: const [],
+          viewport: defaultViewport,
+          timestamp: defaultTimestamp,
+          sessionId: 'session-a',
+        );
+        final openingSessionB = emitter.emit(
+          rawElements: [el(text: 'Same screen')],
+          maskRegions: const [],
+          viewport: defaultViewport,
+          timestamp: defaultTimestamp,
+          sessionId: 'session-b',
+        );
+
+        // THEN - the session boundary prevents A from suppressing B
+        expect(lateSessionA, isNotNull);
+        expect(openingSessionB, isNotNull);
+      },
+    );
+
     test('emits again when a mask region starts stripping text', () {
       // GIVEN
       final emitter = WireframeEmitter(
