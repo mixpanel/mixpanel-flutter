@@ -126,9 +126,9 @@ void main() {
     testWidgets('independent flags $mask and Android burst reset',
         (tester) async {
       await init(AutocaptureOptions(
-          click: mask & 1 != 0,
-          rageClick: mask & 2 != 0,
-          deadClick: mask & 4 != 0));
+          clickOptions: ClickOptions(enabled: mask & 1 != 0),
+          rageClickOptions: RageClickOptions(enabled: mask & 2 != 0),
+          deadClickOptions: DeadClickOptions(enabled: mask & 4 != 0)));
       await tester.pumpWidget(host(button()));
       for (var i = 0; i < 8; i++) {
         await tester.tap(find.text('Buy'));
@@ -363,7 +363,8 @@ void main() {
   testWidgets(
       'unrelated large render subtree does not suppress target resolution',
       (tester) async {
-    await init(const AutocaptureOptions(deadClick: false));
+    await init(const AutocaptureOptions(
+        deadClickOptions: DeadClickOptions(enabled: false)));
     await tester.pumpWidget(host(Stack(children: [
       // A mounted tree well above the old 2,000-node budget, not on hit path.
       IgnorePointer(
@@ -584,7 +585,8 @@ void main() {
   testWidgets(
       'over-budget portal fallback skips instead of naming root listener',
       (tester) async {
-    await init(const AutocaptureOptions(deadClick: false));
+    await init(const AutocaptureOptions(
+        deadClickOptions: DeadClickOptions(enabled: false)));
     final portal = OverlayPortalController();
     await tester.pumpWidget(host(Stack(children: [
       IgnorePointer(
@@ -716,6 +718,42 @@ void main() {
       expect(named(r'$mp_dead_click'), hasLength(offscreen ? 1 : 0));
     });
   }
+
+  testWidgets('nested rage settings work when basic click emission is disabled',
+      (tester) async {
+    await init(const AutocaptureOptions(
+      clickOptions: ClickOptions(enabled: false),
+      rageClickOptions:
+          RageClickOptions(clickThreshold: 2, timeWindowMs: 100, radius: 8),
+      deadClickOptions: DeadClickOptions(enabled: false),
+    ));
+    await tester.pumpWidget(host(button()));
+    await tester.tap(find.text('Buy'));
+    await tester.pump(const Duration(milliseconds: 20));
+    await tester.tap(find.text('Buy'));
+    await tester.pump();
+    expect(named(r'$mp_click'), isEmpty);
+    expect(named(r'$mp_rage_click'), hasLength(1));
+    expect(named(r'$mp_dead_click'), isEmpty);
+  });
+
+  testWidgets('nested dead window controls deadline independently',
+      (tester) async {
+    await init(const AutocaptureOptions(
+      clickOptions: ClickOptions(enabled: false),
+      rageClickOptions: RageClickOptions(enabled: false),
+      deadClickOptions: DeadClickOptions(timeWindowMs: 100),
+    ));
+    await tester.pumpWidget(host(button()));
+    await tester.tap(find.text('Buy'));
+    await tester.pump(const Duration(milliseconds: 99));
+    expect(events, isEmpty);
+    await tester.pump(const Duration(milliseconds: 2));
+    await tester.pump();
+    expect(named(r'$mp_click'), isEmpty);
+    expect(named(r'$mp_rage_click'), isEmpty);
+    expect(named(r'$mp_dead_click'), hasLength(1));
+  });
 
   test('structural hash uses specified FNV-1a bytes', () {
     expect(TargetResolver.stableHash('hello'), '4f9f2cab');

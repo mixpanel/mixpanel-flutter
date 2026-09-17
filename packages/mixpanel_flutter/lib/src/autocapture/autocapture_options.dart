@@ -1,46 +1,83 @@
 /// Options for automatic clicks and frustration signals.
 ///
-/// Omit these options from Mixpanel.init to disable automatic capture. All three
-/// signals default to enabled when options are supplied. Distances are logical
-/// pixels, independent of device density.
+/// Omit from Mixpanel.init to disable automatic capture. Each signal defaults
+/// to enabled when options are supplied, matching the native SDK structure.
 ///
 /// **Experimental (beta).** Autocapture may contain issues, and its API and the
 /// properties it captures may change in a future release before general
 /// availability. Pin your SDK version if you build reports on autocaptured events.
 class AutocaptureOptions {
   const AutocaptureOptions({
-    this.click = true,
-    this.rageClick = true,
-    this.deadClick = true,
-    int rageClickThreshold = 4,
-    int rageClickWindowMs = 1000,
-    double rageClickRadius = 44,
-    int deadClickTimeoutMs = 500,
-  })  : _threshold = rageClickThreshold,
-        _window = rageClickWindowMs,
-        _radius = rageClickRadius,
-        _timeout = deadClickTimeoutMs;
+    this.clickOptions = const ClickOptions(),
+    this.rageClickOptions = const RageClickOptions(),
+    this.deadClickOptions = const DeadClickOptions(),
+  });
 
-  final bool click;
-  final bool rageClick;
-  final bool deadClick;
+  final ClickOptions clickOptions;
+  final RageClickOptions rageClickOptions;
+  final DeadClickOptions deadClickOptions;
+
+  bool get isEnabled =>
+      clickOptions.enabled ||
+      rageClickOptions.enabled ||
+      deadClickOptions.enabled;
+}
+
+/// Configuration for basic click capture.
+///
+/// **Experimental (beta).** Autocapture may contain issues, and its API and the
+/// properties it captures may change in a future release before general
+/// availability. Pin your SDK version if you build reports on autocaptured events.
+class ClickOptions {
+  const ClickOptions({this.enabled = true});
+
+  /// Whether basic click events are emitted. Defaults to true.
+  final bool enabled;
+}
+
+/// Configuration for rage-click detection. Distances use logical pixels.
+///
+/// **Experimental (beta).** Autocapture may contain issues, and its API and the
+/// properties it captures may change in a future release before general
+/// availability. Pin your SDK version if you build reports on autocaptured events.
+class RageClickOptions {
+  const RageClickOptions({
+    this.enabled = true,
+    int clickThreshold = 4,
+    int timeWindowMs = 1000,
+    double radius = 44,
+  })  : _threshold = clickThreshold,
+        _window = timeWindowMs,
+        _radius = radius;
+
+  final bool enabled;
   final int _threshold;
   final int _window;
   final double _radius;
-  final int _timeout;
 
-  /// Count clamped to 2–100, bounding the supported burst size.
-  int get rageClickThreshold => _threshold.clamp(2, 100);
+  /// Number of taps required. Defaults to 4; clamped to 2–100.
+  int get clickThreshold => _threshold.clamp(2, 100);
 
-  /// Window clamped to 1–60000 ms to bound retained history.
-  int get rageClickWindowMs => _window.clamp(1, 60000);
+  /// Rolling window. Defaults to 1000 ms; clamped to 1–60000 ms.
+  int get timeWindowMs => _window.clamp(1, 60000);
 
-  /// Nonfinite values use 44; negative radii use zero.
-  double get rageClickRadius =>
-      _radius.isFinite ? _radius.clamp(0, 100000) : 44;
+  /// Radius in logical pixels. Defaults to 44. Nonfinite values use 44;
+  /// finite values are clamped to 0–100000.
+  double get radius => _radius.isFinite ? _radius.clamp(0, 100000) : 44;
+}
 
-  /// Response deadline clamped to 1–60000 ms.
-  int get deadClickTimeoutMs => _timeout.clamp(1, 60000);
+/// Configuration for dead-click detection.
+///
+/// **Experimental (beta).** Autocapture may contain issues, and its API and the
+/// properties it captures may change in a future release before general
+/// availability. Pin your SDK version if you build reports on autocaptured events.
+class DeadClickOptions {
+  const DeadClickOptions({this.enabled = true, int timeWindowMs = 500})
+      : _window = timeWindowMs;
 
-  bool get isEnabled => click || rageClick || deadClick;
+  final bool enabled;
+  final int _window;
+
+  /// Response deadline. Defaults to 500 ms; clamped to 1–60000 ms.
+  int get timeWindowMs => _window.clamp(1, 60000);
 }

@@ -221,9 +221,11 @@ final mixpanel = await Mixpanel.init(
   'YOUR_PROJECT_TOKEN',
   trackAutomaticEvents: false,
   autocaptureOptions: const AutocaptureOptions(
-    click: true,
-    rageClick: true,
-    deadClick: true,
+    clickOptions: ClickOptions(enabled: true),
+    rageClickOptions: RageClickOptions(
+      enabled: true, clickThreshold: 4, timeWindowMs: 1000, radius: 44,
+    ),
+    deadClickOptions: DeadClickOptions(enabled: true, timeWindowMs: 500),
   ),
 );
 final observer = MixpanelAutocaptureNavigatorObserver(instance: mixpanel);

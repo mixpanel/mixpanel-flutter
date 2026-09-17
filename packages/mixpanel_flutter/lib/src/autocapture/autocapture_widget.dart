@@ -92,7 +92,7 @@ class _CaptureState extends State<MixpanelAutocaptureWidget>
     _controller = controller;
     if (controller == null || _viewId == null) return;
     _ownsView = controller.claim(_viewId!, this);
-    _rage = RageClickTracker(controller.options);
+    _rage = RageClickTracker(controller.options.rageClickOptions);
     controller.addListener(_sync);
     _sync();
   }
@@ -211,7 +211,8 @@ class _CaptureState extends State<MixpanelAutocaptureWidget>
       _moved = false;
       // Normal tap handlers run after this baseline. Custom raw pointer handlers
       // can run earlier, so their response coverage is intentionally unsupported.
-      if (controller.options.deadClick && (_pressed?.deadEligible ?? false)) {
+      if (controller.options.deadClickOptions.enabled &&
+          (_pressed?.deadEligible ?? false)) {
         _pressBaseline = _snapshot();
       }
     } catch (_) {
@@ -270,15 +271,20 @@ class _CaptureState extends State<MixpanelAutocaptureWidget>
     final options = controller.options;
     // Android parity: even an ineligible new tap cancels the previous check.
     _dead.cancel();
-    if (options.click) controller.emit(r'$mp_click', click, generation);
-    if (options.rageClick && rage.record(click.x, click.y, event.timeStamp)) {
+    if (options.clickOptions.enabled) {
+      controller.emit(r'$mp_click', click, generation);
+    }
+    if (options.rageClickOptions.enabled &&
+        rage.record(click.x, click.y, event.timeStamp)) {
       controller.emit(r'$mp_rage_click', click, generation);
     }
-    if (options.deadClick && target.deadEligible && baseline != null) {
+    if (options.deadClickOptions.enabled &&
+        target.deadEligible &&
+        baseline != null) {
       _deadGeneration = generation;
       _deadTarget = WeakReference(target.element);
       _dead.begin(baseline);
-      _dead.arm(click, options.deadClickTimeoutMs);
+      _dead.arm(click, options.deadClickOptions.timeWindowMs);
     }
   }
 

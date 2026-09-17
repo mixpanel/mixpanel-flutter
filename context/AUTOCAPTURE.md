@@ -229,3 +229,24 @@ Validation: 236 tests pass on Flutter 3.19.0 and 3.44.6, including 16 new
 lifecycle-failure tests. Coverage includes original-error preservation, all
 consent outcomes, pending detection cancellation, opt-out during native/recovery
 work, newer reset and reinitialization. Focused analysis and format checks pass.
+
+
+## Configuration shape — 2026-09-17
+
+AutocaptureOptions now contains clickOptions: ClickOptions,
+rageClickOptions: RageClickOptions, and deadClickOptions: DeadClickOptions.
+Each nested options class has enabled (default true). Rage settings are
+clickThreshold, timeWindowMs, radius; dead settings are timeWindowMs. Defaults,
+normalization bounds, opt-in and independent detection behavior are unchanged.
+This intentionally replaces the unreleased flat API before Beta.
+
+Verified native Android/Swift and RN source: all use per-signal options; RN
+additionally allows boolean-or-object shorthand and short top-level names.
+Flutter follows native member names with Dart const named constructors and
+strongly typed option values, not Object/dynamic unions. Public options retain
+the Beta notice. The rage detector depends only on RageClickOptions.
+
+Nested-options validation: all 239 tests pass on Flutter 3.19.0 and 3.44.6.
+Added default/boundary coverage and end-to-end custom rage/dead configuration
+checks with basic click emission disabled. All eight enable combinations retain
+coverage through the nested API. Focused analysis and formatting pass.
