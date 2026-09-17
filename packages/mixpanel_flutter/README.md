@@ -167,3 +167,118 @@ No worries, here are some links that you will find useful:
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/mixpanel/mixpanel-flutter)
 
 Have any questions? Reach out to Mixpanel [Support](https://help.mixpanel.com/hc/en-us/requests/new) to speak to someone smart, quickly.
+
+
+### SDK requirements
+
+The next analytics release requires Flutter 3.19.0 or later (Dart 3.3.0 or
+later). This package requirement applies even when automatic capture is disabled.
+
+### Manual frustration signals (Beta)
+
+> **Autocapture is in beta.** Autocapture — `$mp_click`, `$mp_rage_click` and
+> `$mp_dead_click`, and the `mixpanel.autocapture` API — may contain issues, and
+> its API and the properties it captures may change in a future release before
+> general availability. Pin your SDK version if you build reports on autocaptured events.
+
+Use `mixpanel.autocapture.trackClick`, `trackRageClick`, or `trackDeadClick`
+when your application has already detected the corresponding interaction:
+
+```dart
+await mixpanel.autocapture.trackClick(const ClickEvent(
+  x: 120,
+  y: 240,
+  elementId: 'checkout_button',
+  tagName: 'ElevatedButton',
+  role: 'Button',
+));
+```
+
+Coordinates are in the owning Flutter view's logical pixels. Supply a static
+identifier without personal data; do not use accessibility labels, input values,
+or visible text. Optional metadata and extra properties are developer-supplied
+and are not automatically sanitized. Blank identifiers or nonfinite coordinates
+are ignored. Typed click metadata and `$mp_autocapture: true` override conflicting
+extra properties. Events use the existing analytics transport and its opt-out
+handling.
+
+These methods emit one event each. They do not observe gestures or automatically
+detect rage/dead clicks. Automatic capture is still under development for SDK-30.
+The example app's **Manual Frustration Signals** page provides test fixtures.
+
+### Automatic frustration signals (Beta, Android/iOS)
+
+> **Autocapture is in beta.** Autocapture — `$mp_click`, `$mp_rage_click` and
+> `$mp_dead_click`, and the `mixpanel.autocapture` API — may contain issues, and
+> its API and the properties it captures may change in a future release before
+> general availability. Pin your SDK version if you build reports on autocaptured events.
+
+Requires Flutter 3.19 / Dart 3.3. No additional package is needed. Capture is off
+unless `autocaptureOptions` is supplied at initialization:
+
+```dart
+final mixpanel = await Mixpanel.init(
+  'YOUR_PROJECT_TOKEN',
+  trackAutomaticEvents: false,
+  autocaptureOptions: const AutocaptureOptions(
+    clickOptions: ClickOptions(enabled: true),
+    rageClickOptions: RageClickOptions(
+      enabled: true, clickThreshold: 4, timeWindowMs: 1000, radius: 44,
+    ),
+    deadClickOptions: DeadClickOptions(enabled: true, timeWindowMs: 500),
+  ),
+);
+final observer = MixpanelAutocaptureNavigatorObserver(instance: mixpanel);
+runApp(MixpanelAutocaptureWidget(
+  instance: mixpanel,
+  child: MaterialApp(
+    navigatorObservers: [observer],
+    home: const MyHomePage(),
+  ),
+));
+```
+
+Place one wrapper above the app's navigators. Register a separate observer for
+**each** nested Navigator too; retain observers across rebuilds. The wrapper
+accepts a null instance during asynchronous initialization and preserves child
+state when capture changes. This uses Flutter's built-in NavigatorObserver.
+
+A rage click means four accepted taps within a rolling 1,000 ms window and
+44 logical pixels of the latest tap. Emitting clears the burst history. A dead
+click means an eligible control had no observed meaningful response within
+500 ms. Thresholds are configurable through `AutocaptureOptions`. Any new
+accepted tap cancels the previous pending dead check, even a noninteractive tap.
+Manual signal APIs remain independent of these detectors.
+
+Metadata contains logical coordinates, canonical widget type/role, structural
+ancestry, and either a developer-supplied `Semantics(identifier: 'checkout')` or
+a structural fallback ID. Do not put personal data in identifiers. Labels,
+editable values, passwords, widget keys, and arbitrary widget descriptions are
+never used as event metadata. Noneditable display text is compared transiently
+in memory to detect responses; neither that text nor its digest is transmitted,
+logged, or persisted. Structural fallback IDs can change with layout changes.
+
+Automatic dead detection is conservative: text entry and feedback controls are
+ineligible. Visible platform views, textures, and app-owned CustomPaint surfaces
+suppress automatic dead detection for the observed view because their responses
+cannot be reliably inspected. Missing/over-budget snapshots also suppress it.
+Material border/ripple feedback does not itself count as a meaningful response.
+Use manual APIs for app-detected signals on unsupported surfaces. Custom render
+objects and raw-pointer response handlers require further coverage validation;
+this experimental observer is not a general pixel-difference detector.
+
+Opt-out immediately stops collection and cancels pending detections. Identity
+changes, reset, navigation, backgrounding, and disposal invalidate pending work.
+Unknown consent disables capture. Automatic capture currently does nothing on
+web, desktop, keyboard activation, and assistive-technology activation.
+
+
+Automatic pointer capture accepts primary touch/mouse taps lasting at most
+500 ms, matching Android (including exactly 500 ms). Stylus and inverted-stylus
+input are not captured in this Beta. iPad trackpad clicks delivered by Flutter
+as mouse/touch events follow the same rules.
+
+Target lookup follows hit-test render ancestry. Response checks retain a bounded
+view traversal; exceeding the node/depth budget suppresses affected signals and
+emits one generic diagnostic per process. This protects app responsiveness but
+means exceptionally complex visible views can lack automatic dead-click events.
