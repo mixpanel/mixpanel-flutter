@@ -13,7 +13,7 @@ class MixpanelManager {
             rageClickOptions: RageClickOptions(),
             deadClickOptions: DeadClickOptions(),
           ),
-          featureFlags: const FeatureFlagsConfig(enabled: true));
+          featureFlags: FeatureFlagsConfig(enabled: true));
       _instance?.setLoggingEnabled(true);
     }
     return _instance!;

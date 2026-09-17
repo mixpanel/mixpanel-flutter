@@ -51,8 +51,8 @@ abstract class MixpanelFlagVariantSource {
   const factory MixpanelFlagVariantSource.network() = NetworkSource;
   factory MixpanelFlagVariantSource.persistence(
       {required DateTime persistedAt}) = PersistenceSource;
-  const factory MixpanelFlagVariantSource.fallback({FallbackReason reason}) =
-      FallbackSource;
+  const factory MixpanelFlagVariantSource.fallback(
+      {FallbackReason reason}) = FallbackSource;
 
   /// Decodes a source map produced by the platform handlers. Falls back to
   /// [FallbackSource] for missing, malformed, or unrecognized payloads.
@@ -107,8 +107,7 @@ class NetworkSource extends MixpanelFlagVariantSource {
   bool operator ==(Object other) => other is NetworkSource;
 
   @override
-  int get hashCode =>
-      0x4e57; // arbitrary stable constant for the singleton-ish case
+  int get hashCode => 0x4e57; // arbitrary stable constant for the singleton-ish case
 }
 
 /// The variant was loaded from the on-disk persistence layer.
@@ -503,10 +502,8 @@ class Mixpanel {
     allProperties['optOutTrackingDefault'] = optOutTrackingDefault;
     allProperties['trackAutomaticEvents'] = trackAutomaticEvents;
     allProperties['mixpanelProperties'] = _mixpanelProperties;
-    allProperties['superProperties'] =
-        _MixpanelHelper.ensureSerializableProperties(superProperties);
-    allProperties['config'] =
-        _MixpanelHelper.ensureSerializableProperties(config);
+    allProperties['superProperties'] = _MixpanelHelper.ensureSerializableProperties(superProperties);
+    allProperties['config'] = _MixpanelHelper.ensureSerializableProperties(config);
     if (featureFlags != null) {
       allProperties['featureFlags'] = featureFlags.toMap();
     }
@@ -702,10 +699,8 @@ class Mixpanel {
     Map<String, dynamic>? properties,
   }) async {
     if (_MixpanelHelper.isValidString(eventName)) {
-      await _channel.invokeMethod<void>('track', <String, dynamic>{
-        'eventName': eventName,
-        'properties': _MixpanelHelper.ensureSerializableProperties(properties)
-      });
+      await _channel.invokeMethod<void>('track',
+          <String, dynamic>{'eventName': eventName, 'properties': _MixpanelHelper.ensureSerializableProperties(properties)});
     } else {
       developer.log('`track` failed: eventName cannot be blank',
           name: 'Mixpanel');
@@ -769,10 +764,8 @@ class Mixpanel {
   /// * [groupID] The group the user belongs to.
   void setGroup(String groupKey, dynamic groupID) {
     if (_MixpanelHelper.isValidString(groupKey)) {
-      _channel.invokeMethod<void>('setGroup', <String, dynamic>{
-        'groupKey': groupKey,
-        'groupID': _MixpanelHelper.ensureSerializableValue(groupID)
-      });
+      _channel.invokeMethod<void>('setGroup',
+          <String, dynamic>{'groupKey': groupKey, 'groupID': _MixpanelHelper.ensureSerializableValue(groupID)});
     } else {
       developer.log('`setGroup` failed: groupKey cannot be blank',
           name: 'Mixpanel');
@@ -787,8 +780,7 @@ class Mixpanel {
   /// return an instance of MixpanelGroup that you can use to update
   ///     records in Mixpanel Group Analytics
   MixpanelGroup getGroup(String groupKey, dynamic groupID) {
-    return MixpanelGroup(
-        _token, groupKey, _MixpanelHelper.ensureSerializableValue(groupID));
+    return MixpanelGroup(_token, groupKey, _MixpanelHelper.ensureSerializableValue(groupID));
   }
 
   /// Add a group to this user's membership for a particular group key
@@ -797,10 +789,8 @@ class Mixpanel {
   /// * [groupID] The new group the user belongs to.
   void addGroup(String groupKey, dynamic groupID) {
     if (_MixpanelHelper.isValidString(groupKey)) {
-      _channel.invokeMethod<void>('addGroup', <String, dynamic>{
-        'groupKey': groupKey,
-        'groupID': _MixpanelHelper.ensureSerializableValue(groupID)
-      });
+      _channel.invokeMethod<void>('addGroup',
+          <String, dynamic>{'groupKey': groupKey, 'groupID': _MixpanelHelper.ensureSerializableValue(groupID)});
     } else {
       developer.log('`addGroup` failed: groupKey cannot be blank',
           name: 'Mixpanel');
@@ -813,10 +803,8 @@ class Mixpanel {
   /// * [groupID] The group value to remove.
   void removeGroup(String groupKey, dynamic groupID) {
     if (_MixpanelHelper.isValidString(groupKey)) {
-      _channel.invokeMethod<void>('removeGroup', <String, dynamic>{
-        'groupKey': groupKey,
-        'groupID': _MixpanelHelper.ensureSerializableValue(groupID)
-      });
+      _channel.invokeMethod<void>('removeGroup',
+          <String, dynamic>{'groupKey': groupKey, 'groupID': _MixpanelHelper.ensureSerializableValue(groupID)});
     } else {
       developer.log('`removeGroup` failed: groupKey cannot be blank',
           name: 'Mixpanel');
@@ -832,10 +820,8 @@ class Mixpanel {
   /// to Group Analytics using the same group value will create and store new values.
   void deleteGroup(String groupKey, dynamic groupID) {
     if (_MixpanelHelper.isValidString(groupKey)) {
-      _channel.invokeMethod<void>('deleteGroup', <String, dynamic>{
-        'groupKey': groupKey,
-        'groupID': _MixpanelHelper.ensureSerializableValue(groupID)
-      });
+      _channel.invokeMethod<void>('deleteGroup',
+          <String, dynamic>{'groupKey': groupKey, 'groupID': _MixpanelHelper.ensureSerializableValue(groupID)});
     } else {
       developer.log('`deleteGroup` failed: groupKey cannot be blank',
           name: 'Mixpanel');
@@ -857,9 +843,7 @@ class Mixpanel {
   /// * [properties] A Map containing super properties to register
   Future<void> registerSuperProperties(Map<String, dynamic> properties) async {
     await _channel.invokeMethod<void>(
-        'registerSuperProperties', <String, dynamic>{
-      'properties': _MixpanelHelper.ensureSerializableProperties(properties)
-    });
+        'registerSuperProperties', <String, dynamic>{'properties': _MixpanelHelper.ensureSerializableProperties(properties)});
   }
 
   /// Register super properties for events, only if no other super property with the
@@ -871,10 +855,8 @@ class Mixpanel {
   Future<void> registerSuperPropertiesOnce(
     Map<String, dynamic> properties,
   ) async {
-    await _channel.invokeMethod<void>(
-        'registerSuperPropertiesOnce', <String, dynamic>{
-      'properties': _MixpanelHelper.ensureSerializableProperties(properties)
-    });
+    await _channel.invokeMethod<void>('registerSuperPropertiesOnce',
+        <String, dynamic>{'properties': _MixpanelHelper.ensureSerializableProperties(properties)});
   }
 
   /// Remove a single superProperty, so that it will not be sent with future calls to track().
@@ -1019,10 +1001,8 @@ class People {
   void set(String prop, dynamic to) {
     if (_MixpanelHelper.isValidString(prop)) {
       Map<String, dynamic> properties = {prop: to};
-      _channel.invokeMethod<void>('set', <String, dynamic>{
-        'token': _token,
-        'properties': _MixpanelHelper.ensureSerializableProperties(properties)
-      });
+      _channel.invokeMethod<void>('set',
+          <String, dynamic>{'token': _token, 'properties': _MixpanelHelper.ensureSerializableProperties(properties)});
     } else {
       developer.log('`people set` failed: prop cannot be blank',
           name: 'Mixpanel');
@@ -1036,10 +1016,8 @@ class People {
   void setOnce(String prop, dynamic to) {
     if (_MixpanelHelper.isValidString(prop)) {
       Map<String, dynamic> properties = {prop: to};
-      _channel.invokeMethod<void>('setOnce', <String, dynamic>{
-        'token': _token,
-        'properties': _MixpanelHelper.ensureSerializableProperties(properties)
-      });
+      _channel.invokeMethod<void>('setOnce',
+          <String, dynamic>{'token': _token, 'properties': _MixpanelHelper.ensureSerializableProperties(properties)});
     } else {
       developer.log('`people setOnce` failed: prop cannot be blank',
           name: 'Mixpanel');
@@ -1055,10 +1033,8 @@ class People {
   void increment(String prop, double by) {
     Map<String, dynamic> properties = {prop: by};
     if (_MixpanelHelper.isValidString(prop)) {
-      _channel.invokeMethod<void>('increment', <String, dynamic>{
-        'token': _token,
-        'properties': _MixpanelHelper.ensureSerializableProperties(properties)
-      });
+      _channel.invokeMethod<void>('increment',
+          <String, dynamic>{'token': _token, 'properties': _MixpanelHelper.ensureSerializableProperties(properties)});
     } else {
       developer.log('`people increment` failed: prop cannot be blank',
           name: 'Mixpanel');
@@ -1074,10 +1050,8 @@ class People {
     if (_MixpanelHelper.isValidString(name)) {
       if (kIsWeb || Platform.isIOS || Platform.isMacOS) {
         Map<String, dynamic> properties = {name: value};
-        _channel.invokeMethod<void>('append', <String, dynamic>{
-          'token': _token,
-          'properties': _MixpanelHelper.ensureSerializableProperties(properties)
-        });
+        _channel.invokeMethod<void>('append',
+            <String, dynamic>{'token': _token, 'properties': _MixpanelHelper.ensureSerializableProperties(properties)});
       } else {
         _channel.invokeMethod<void>('append', <String, dynamic>{
           'token': _token,
@@ -1101,10 +1075,8 @@ class People {
     if (_MixpanelHelper.isValidString(name)) {
       if (kIsWeb || Platform.isIOS || Platform.isMacOS) {
         Map<String, dynamic> properties = {name: value};
-        _channel.invokeMethod<void>('union', <String, dynamic>{
-          'token': _token,
-          'properties': _MixpanelHelper.ensureSerializableProperties(properties)
-        });
+        _channel.invokeMethod<void>('union',
+            <String, dynamic>{'token': _token, 'properties': _MixpanelHelper.ensureSerializableProperties(properties)});
       } else {
         _channel.invokeMethod<void>('union', <String, dynamic>{
           'token': _token,
@@ -1128,10 +1100,8 @@ class People {
     if (_MixpanelHelper.isValidString(name)) {
       if (kIsWeb || Platform.isIOS || Platform.isMacOS) {
         Map<String, dynamic> properties = {name: value};
-        _channel.invokeMethod<void>('remove', <String, dynamic>{
-          'token': _token,
-          'properties': _MixpanelHelper.ensureSerializableProperties(properties)
-        });
+        _channel.invokeMethod<void>('remove',
+            <String, dynamic>{'token': _token, 'properties': _MixpanelHelper.ensureSerializableProperties(properties)});
       } else {
         _channel.invokeMethod<void>('remove', <String, dynamic>{
           'token': _token,
@@ -1178,8 +1148,8 @@ class People {
 
   /// Permanently clear the whole transaction history for the identified people profile.
   void clearCharges() {
-    _channel
-        .invokeMethod<void>('clearCharges', <String, dynamic>{'token': _token});
+    _channel.invokeMethod<void>(
+        'clearCharges', <String, dynamic>{'token': _token});
   }
 
   /// Permanently deletes the identified user's record from People Analytics.
@@ -1187,8 +1157,8 @@ class People {
   /// Calling deleteUser deletes an entire record completely. Any future calls
   /// to People Analytics using the same distinct id will create and store new values.
   void deleteUser() {
-    _channel
-        .invokeMethod<void>('deleteUser', <String, dynamic>{'token': _token});
+    _channel.invokeMethod<void>(
+        'deleteUser', <String, dynamic>{'token': _token});
   }
 }
 
@@ -1356,8 +1326,7 @@ class FeatureFlags {
           name: 'Mixpanel');
       return fallback;
     }
-    final result =
-        await _channel.invokeMethod<Map>('getVariant', <String, dynamic>{
+    final result = await _channel.invokeMethod<Map>('getVariant', <String, dynamic>{
       'token': _token,
       'flagName': flagName,
       'fallback': fallback.toMap(),
@@ -1374,15 +1343,13 @@ class FeatureFlags {
   /// * [fallbackValue] A fallback value to use if the flag is not found or not ready
   ///
   /// Returns the value of the flag, or the fallback value if not available.
-  Future<dynamic> getVariantValue(
-      String flagName, dynamic fallbackValue) async {
+  Future<dynamic> getVariantValue(String flagName, dynamic fallbackValue) async {
     if (!_MixpanelHelper.isValidString(flagName)) {
       developer.log('`getVariantValue` failed: flagName cannot be blank',
           name: 'Mixpanel');
       return fallbackValue;
     }
-    final result = await _channel
-        .invokeMethod<dynamic>('getVariantValue', <String, dynamic>{
+    final result = await _channel.invokeMethod<dynamic>('getVariantValue', <String, dynamic>{
       'token': _token,
       'flagName': flagName,
       'fallbackValue': _MixpanelHelper.ensureSerializableValue(fallbackValue),
@@ -1406,8 +1373,7 @@ class FeatureFlags {
           name: 'Mixpanel');
       return fallbackValue;
     }
-    final result =
-        await _channel.invokeMethod<bool>('isEnabled', <String, dynamic>{
+    final result = await _channel.invokeMethod<bool>('isEnabled', <String, dynamic>{
       'token': _token,
       'flagName': flagName,
       'fallbackValue': fallbackValue,
@@ -1444,8 +1410,8 @@ class FeatureFlags {
   /// that fail silently, `loadFlags` propagates errors so developers can
   /// implement kill-switch scenarios and respond to flag loading failures.
   Future<void> loadFlags() async {
-    await _channel
-        .invokeMethod<void>('loadFlags', <String, dynamic>{'token': _token});
+    await _channel.invokeMethod<void>(
+        'loadFlags', <String, dynamic>{'token': _token});
   }
 
   /// Asynchronously retrieves all loaded feature flag variants.
@@ -1581,12 +1547,14 @@ class Autocapture {
   Future<void> trackScreenView(String screenName,
       {Map<String, dynamic>? properties}) async {
     if (_MixpanelHelper.isValidString(screenName)) {
-      await _channel.invokeMethod<void>('trackScreenView', <String, dynamic>{
+      await _channel.invokeMethod<void>(
+          'trackScreenView', <String, dynamic>{
         'screenName': screenName,
         'properties': _MixpanelHelper.ensureSerializableProperties(properties),
       });
     } else {
-      developer.log('`trackScreenView` failed: screenName cannot be blank',
+      developer.log(
+          '`trackScreenView` failed: screenName cannot be blank',
           name: 'Mixpanel');
     }
   }
@@ -1604,12 +1572,14 @@ class Autocapture {
   Future<void> trackScreenLeave(String screenName,
       {Map<String, dynamic>? properties}) async {
     if (_MixpanelHelper.isValidString(screenName)) {
-      await _channel.invokeMethod<void>('trackScreenLeave', <String, dynamic>{
+      await _channel.invokeMethod<void>(
+          'trackScreenLeave', <String, dynamic>{
         'screenName': screenName,
         'properties': _MixpanelHelper.ensureSerializableProperties(properties),
       });
     } else {
-      developer.log('`trackScreenLeave` failed: screenName cannot be blank',
+      developer.log(
+          '`trackScreenLeave` failed: screenName cannot be blank',
           name: 'Mixpanel');
     }
   }
@@ -1642,8 +1612,7 @@ class _MixpanelHelper {
   }
 
   /// Converts properties map for web platform
-  static Map<String, dynamic>? ensureSerializableProperties(
-      Map<String, dynamic>? properties) {
+  static Map<String, dynamic>? ensureSerializableProperties(Map<String, dynamic>? properties) {
     if (!kIsWeb || properties == null) {
       return properties;
     }
