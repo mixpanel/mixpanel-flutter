@@ -1,5 +1,18 @@
 # Changelog
 
+## [session-replay-v1.2.0](https://github.com/mixpanel/mixpanel-flutter/tree/session-replay-v1.2.0) (2026-09-17)
+
+### Features
+- update native SDKs for semver and date flag operators ([#281](https://github.com/mixpanel/mixpanel-flutter/pull/281))
+- wireframes (beta) ([#278](https://github.com/mixpanel/mixpanel-flutter/pull/278))
+- send app bundle_id and build_number as settings API query params ([#279](https://github.com/mixpanel/mixpanel-flutter/pull/279))
+
+### Fixes
+- Optimize mask detection traversal ([#280](https://github.com/mixpanel/mixpanel-flutter/pull/280))
+- [SDK-127] pin capture identity so a frame cannot land in another user's replay ([#284](https://github.com/mixpanel/mixpanel-flutter/pull/284))
+
+[Full Changelog](https://github.com/mixpanel/mixpanel-flutter/compare/session-replay-v1.1.1...session-replay-v1.2.0)
+
 ## [session-replay-v1.1.1](https://github.com/mixpanel/mixpanel-flutter/tree/session-replay-v1.1.1) (2026-07-20)
 
 ### Fixes
