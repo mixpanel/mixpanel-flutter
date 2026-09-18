@@ -1231,9 +1231,11 @@ void main() {
       expect(find.byType(MaskOverlay), findsOneWidget);
     });
 
-    testWidgets('excludes the debug overlay for rendered-surface capture', (
+    testWidgets('keeps the debug overlay out of the rendered-surface tree', (
       tester,
     ) async {
+      // GIVEN - capture reads a shared rendered surface, so anything painted
+      // into the Flutter tree would be baked into the replay
       final fake = FakeWidgetCoordinator(
         recordingState: RecordingState.recording,
         capturesRenderedSurface: true,
@@ -1243,6 +1245,7 @@ void main() {
         expect(find.byType(MaskOverlay), findsNothing);
       };
 
+      // WHEN
       await tester.pumpWidget(
         MaterialApp(
           home: FrameMonitor(
@@ -1256,8 +1259,43 @@ void main() {
       await tester.pump();
       await tester.pump();
 
+      // THEN - never in the tree, so there is no per-capture hide/show cycle
       expect(fake.captureSnapshotCallCount, 1);
-      expect(find.byType(MaskOverlay), findsOneWidget);
+      expect(find.byType(MaskOverlay), findsNothing);
+    });
+
+    testWidgets('does not rebuild when mask regions change on web', (
+      tester,
+    ) async {
+      // GIVEN - the out-of-surface overlay redraws itself, so a region change
+      // must not schedule a Flutter frame that would trigger another capture
+      final fake = FakeWidgetCoordinator(
+        recordingState: RecordingState.recording,
+        capturesRenderedSurface: true,
+      );
+      final frameNotifier = ChangeNotifier();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: FrameMonitor(
+            frameNotifier: frameNotifier,
+            coordinator: fake,
+            debugOptions: const DebugOptions(),
+            child: const SizedBox(width: 100, height: 100),
+          ),
+        ),
+      );
+      await tester.pump();
+      final capturesAfterFirstFrame = fake.captureSnapshotCallCount;
+
+      // WHEN
+      fake.maskRegionsNotifier.value = [
+        MaskRegionInfo(const Rect.fromLTWH(0, 0, 10, 10), MaskSource.auto),
+      ];
+      await tester.pump();
+
+      // THEN
+      expect(fake.captureSnapshotCallCount, capturesAfterFirstFrame);
     });
 
     testWidgets('cleans up listener on dispose', (tester) async {
