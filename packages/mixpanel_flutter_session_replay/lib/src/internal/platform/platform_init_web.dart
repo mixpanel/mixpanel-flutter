@@ -7,7 +7,6 @@ import '../storage/memory_event_queue.dart';
 import '../logger.dart';
 import '../wireframe/wireframe_emitter.dart';
 import '../../models/masking_directive.dart';
-import '../../models/configuration.dart';
 import '../session/web_session_resume.dart';
 import '../screenshot_capturer.dart';
 import 'gzip_compress.dart';
@@ -24,7 +23,6 @@ Future<PlatformInitResult> platformInit({
   required bool mobileWifiOnly,
   required Duration webIdleTimeout,
   required Duration webMaxSessionDuration,
-  required WebPlatformViewCapturePolicy webPlatformViewCapturePolicy,
   WireframeEmitter? wireframeEmitter,
   required bool useAccessibilityLabelFallback,
   required MixpanelLogger logger,
@@ -97,10 +95,7 @@ Future<PlatformInitResult> platformInit({
     logger.debug('No resumable session; preserving queued upload backlog');
   }
 
-  final imageCompressor = WebImageCompressor(
-    logger: logger,
-    platformViewCapturePolicy: webPlatformViewCapturePolicy,
-  );
+  final imageCompressor = WebImageCompressor(logger: logger);
   try {
     await imageCompressor.initialize();
   } catch (error) {

@@ -12,8 +12,7 @@ export 'src/models/configuration.dart'
         RemoteSettingsMode,
         PlatformOptions,
         MobileOptions,
-        WebOptions,
-        WebPlatformViewCapturePolicy;
+        WebOptions;
 export 'src/models/data_residency.dart' show DataResidency;
 export 'src/models/debug_overlay_colors.dart'
     show DebugOptions, DebugOverlayColors;

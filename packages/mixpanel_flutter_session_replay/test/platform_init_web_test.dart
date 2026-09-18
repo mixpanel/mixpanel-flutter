@@ -41,8 +41,6 @@ void main() {
         mobileWifiOnly: false,
         webIdleTimeout: const Duration(minutes: 30),
         webMaxSessionDuration: const Duration(hours: 24),
-        webPlatformViewCapturePolicy:
-            WebPlatformViewCapturePolicy.maskEntireFrame,
         useAccessibilityLabelFallback: false,
         logger: MixpanelLogger(LogLevel.none),
         eventQueue: queue,

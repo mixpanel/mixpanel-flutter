@@ -229,8 +229,6 @@ class MixpanelSessionReplay {
         mobileWifiOnly: options.platformOptions.mobile.wifiOnly,
         webIdleTimeout: options.platformOptions.web.idleTimeout,
         webMaxSessionDuration: options.platformOptions.web.maxSessionDuration,
-        webPlatformViewCapturePolicy:
-            options.platformOptions.web.platformViewCapturePolicy,
         wireframeEmitter: wireframeEmitter,
         useAccessibilityLabelFallback:
             wireframesOptions?.useAccessibilityLabelFallback ?? false,
