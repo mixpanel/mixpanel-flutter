@@ -9,7 +9,6 @@ import 'package:web/web.dart' as web;
 import 'web_image_worker.dart';
 import '../screenshot_capturer.dart';
 import '../logger.dart';
-import '../../models/configuration.dart';
 
 /// Web image compressor using browser-native JPEG encoding.
 ///
@@ -22,7 +21,6 @@ class WebImageCompressor extends ImageCompressor {
 
   final MixpanelLogger _logger;
   final double jpegQuality;
-  final WebPlatformViewCapturePolicy platformViewCapturePolicy;
 
   WebImageWorker? _worker;
   bool _workerUnavailable = false;
@@ -31,12 +29,8 @@ class WebImageCompressor extends ImageCompressor {
   /// integration benchmarks; these durations do not affect capture behavior.
   WebImageCaptureTimings? lastCaptureTimings;
 
-  WebImageCompressor({
-    required MixpanelLogger logger,
-    this.jpegQuality = 0.8,
-    this.platformViewCapturePolicy =
-        WebPlatformViewCapturePolicy.maskEntireFrame,
-  }) : _logger = logger;
+  WebImageCompressor({required MixpanelLogger logger, this.jpegQuality = 0.8})
+    : _logger = logger;
 
   @override
   bool get isAvailable => !_workerUnavailable;
@@ -166,19 +160,6 @@ class WebImageCompressor extends ImageCompressor {
       }
       final snapshotValidation = captureWatch.elapsed - snapshotValidationStart;
       _worker ??= _initWorker();
-      final effectiveMaskRects =
-          _hasPlatformViews() &&
-              platformViewCapturePolicy ==
-                  WebPlatformViewCapturePolicy.maskEntireFrame
-          ? [
-              Rect.fromLTWH(
-                0,
-                0,
-                outputWidth.toDouble(),
-                outputHeight.toDouble(),
-              ),
-            ]
-          : maskRects;
       final workerStart = captureWatch.elapsed;
       final result = await _worker!
           .processImageBitmap(
@@ -186,7 +167,7 @@ class WebImageCompressor extends ImageCompressor {
             width: outputWidth,
             height: outputHeight,
             jpegQuality: jpegQuality,
-            maskRects: effectiveMaskRects,
+            maskRects: maskRects,
           )
           .timeout(_workerTimeout);
       lastCaptureTimings = WebImageCaptureTimings(
@@ -262,22 +243,6 @@ class WebImageCompressor extends ImageCompressor {
         .toList(growable: false);
   }
 
-  static bool _hasPlatformViews() {
-    if (_querySelectorCount(web.document, 'flt-platform-view') > 0) {
-      return true;
-    }
-    final hosts = web.document.querySelectorAll(_engineSurfaceHostSelector);
-    for (var index = 0; index < hosts.length; index++) {
-      final host = hosts.item(index) as web.Element?;
-      final shadowRoot = _shadowRoot(host);
-      if (shadowRoot != null &&
-          _querySelectorCount(shadowRoot, 'flt-platform-view') > 0) {
-        return true;
-      }
-    }
-    return false;
-  }
-
   /// Returns only canvases contained by a known Flutter engine surface host.
   ///
   /// Restricting lookup to these small subtrees avoids both capturing an
@@ -317,11 +282,6 @@ class WebImageCompressor extends ImageCompressor {
 
   static web.ShadowRoot? _shadowRoot(web.Element? host) =>
       host?.getProperty('shadowRoot'.toJS);
-
-  static int _querySelectorCount(JSObject root, String selector) => root
-      .callMethod<JSObject>('querySelectorAll'.toJS, selector.toJS)
-      .getProperty<JSNumber>('length'.toJS)
-      .toDartInt;
 
   @override
   Future<void> dispose() async {

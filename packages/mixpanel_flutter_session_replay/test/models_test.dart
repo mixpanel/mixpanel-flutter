@@ -744,10 +744,6 @@ void main() {
         // THEN
         expect(options.web.idleTimeout, expectedIdleTimeout);
         expect(options.web.maxSessionDuration, expectedMaxSessionDuration);
-        expect(
-          options.web.platformViewCapturePolicy,
-          WebPlatformViewCapturePolicy.maskEntireFrame,
-        );
       });
 
       test('allows custom web options', () {
@@ -760,18 +756,12 @@ void main() {
           web: WebOptions(
             idleTimeout: Duration(minutes: 15),
             maxSessionDuration: Duration(hours: 8),
-            platformViewCapturePolicy:
-                WebPlatformViewCapturePolicy.captureNormally,
           ),
         );
 
         // THEN
         expect(options.web.idleTimeout, expectedIdleTimeout);
         expect(options.web.maxSessionDuration, expectedMaxSessionDuration);
-        expect(
-          options.web.platformViewCapturePolicy,
-          WebPlatformViewCapturePolicy.captureNormally,
-        );
       });
 
       test('allows disabling idle timeout with Duration.zero', () {

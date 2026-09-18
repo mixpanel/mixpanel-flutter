@@ -359,16 +359,18 @@ void main() {
   });
 
   test(
-    'rendered surface capture masks the entire frame for platform views',
+    'captures the canvas normally when a platform view is present',
     () async {
+      // GIVEN - a platform view's pixels live in a DOM node, so they are never
+      // in the canvas backing store; its presence must not alter the capture
       final platformView = web.document.createElement('flt-platform-view');
       web.document.body!.appendChild(platformView);
       addTearDown(() => platformView.remove());
       final canvas = _appendCanvas(
-        logicalWidth: 61,
-        logicalHeight: 43,
-        backingWidth: 61,
-        backingHeight: 43,
+        logicalWidth: 63,
+        logicalHeight: 45,
+        backingWidth: 63,
+        backingHeight: 45,
       );
       addTearDown(() => _removeCanvasHost(canvas));
       final context = canvas.getContext('2d')! as web.CanvasRenderingContext2D;
@@ -376,56 +378,23 @@ void main() {
       context.fillRect(0, 0, canvas.width, canvas.height);
       final compressor = WebImageCompressor(
         logger: MixpanelLogger(LogLevel.none),
+        jpegQuality: 1,
       );
       addTearDown(compressor.dispose);
       await compressor.initialize();
 
       final result = await compressor.captureRenderedSurface(
-        logicalSize: const Size(61, 43),
-        outputWidth: 61,
-        outputHeight: 43,
+        logicalSize: const Size(63, 45),
+        outputWidth: 63,
+        outputHeight: 45,
       );
 
-      final pixel = img.decodeJpg(result!)!.getPixel(30, 21);
-      expect(pixel.r, closeTo(204, 8));
-      expect(pixel.g, closeTo(204, 8));
-      expect(pixel.b, closeTo(204, 8));
+      final pixel = img.decodeJpg(result!)!.getPixel(31, 22);
+      expect(pixel.r, greaterThan(240));
+      expect(pixel.g, lessThan(15));
+      expect(pixel.b, lessThan(15));
     },
   );
-
-  test('platform-view masking can be explicitly disabled', () async {
-    final platformView = web.document.createElement('flt-platform-view');
-    web.document.body!.appendChild(platformView);
-    addTearDown(() => platformView.remove());
-    final canvas = _appendCanvas(
-      logicalWidth: 63,
-      logicalHeight: 45,
-      backingWidth: 63,
-      backingHeight: 45,
-    );
-    addTearDown(() => _removeCanvasHost(canvas));
-    final context = canvas.getContext('2d')! as web.CanvasRenderingContext2D;
-    context.fillStyle = '#ff0000'.toJS;
-    context.fillRect(0, 0, canvas.width, canvas.height);
-    final compressor = WebImageCompressor(
-      logger: MixpanelLogger(LogLevel.none),
-      jpegQuality: 1,
-      platformViewCapturePolicy: WebPlatformViewCapturePolicy.captureNormally,
-    );
-    addTearDown(compressor.dispose);
-    await compressor.initialize();
-
-    final result = await compressor.captureRenderedSurface(
-      logicalSize: const Size(63, 45),
-      outputWidth: 63,
-      outputHeight: 45,
-    );
-
-    final pixel = img.decodeJpg(result!)!.getPixel(31, 22);
-    expect(pixel.r, greaterThan(240));
-    expect(pixel.g, lessThan(15));
-    expect(pixel.b, lessThan(15));
-  });
 
   test('ImageBitmap is immutable before snapshot validation runs', () async {
     final canvas = _appendCanvas(

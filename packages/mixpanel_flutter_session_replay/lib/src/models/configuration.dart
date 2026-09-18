@@ -72,23 +72,6 @@ class MobileOptions {
   final bool wifiOnly;
 }
 
-/// How Flutter web captures a frame that contains an HTML platform view.
-enum WebPlatformViewCapturePolicy {
-  /// Replace the complete replay frame with the standard privacy mask.
-  ///
-  /// Flutter's canvas and the browser-managed platform view are separate
-  /// surfaces, so their pixels cannot be combined and masked atomically.
-  /// Masking the complete frame is the privacy-safe default.
-  maskEntireFrame,
-
-  /// Capture the Flutter canvas normally without adding a platform-view mask.
-  ///
-  /// The HTML platform view itself is not guaranteed to appear in the captured
-  /// image. Use this only when the application has independently established
-  /// that the platform view cannot expose sensitive information.
-  captureNormally,
-}
-
 /// Web-specific configuration options
 ///
 /// These options only apply to the web platform (Flutter web).
@@ -96,8 +79,6 @@ class WebOptions {
   const WebOptions({
     this.idleTimeout = const Duration(minutes: 30),
     this.maxSessionDuration = const Duration(hours: 24),
-    this.platformViewCapturePolicy =
-        WebPlatformViewCapturePolicy.maskEntireFrame,
   });
 
   /// Duration of user inactivity before the session is ended (default: 30 min).
@@ -114,9 +95,6 @@ class WebOptions {
   /// Hard cap regardless of user activity. When exceeded, the current session
   /// ends and a new session starts on the next user interaction.
   final Duration maxSessionDuration;
-
-  /// Privacy behavior when a frame contains an HTML platform view.
-  final WebPlatformViewCapturePolicy platformViewCapturePolicy;
 }
 
 /// Platform-specific configuration options

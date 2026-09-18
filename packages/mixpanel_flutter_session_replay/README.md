@@ -242,10 +242,7 @@ final result = await MixpanelSessionReplay.initialize(
     flushInterval: Duration(seconds: 10),
     platformOptions: PlatformOptions(
       mobile: MobileOptions(wifiOnly: true),
-      web: WebOptions(
-        platformViewCapturePolicy:
-            WebPlatformViewCapturePolicy.maskEntireFrame,
-      ),
+      web: WebOptions(idleTimeout: Duration(minutes: 30)),
     ),
   ),
 );
@@ -267,7 +264,33 @@ continues but analytics events cannot be linked to the replay automatically.
 | `web` | Flutter web-specific options. See properties below | `WebOptions()` |
 | `web.idleTimeout` | Inactivity duration after which a web replay session ends. `Duration.zero` disables it | `30 minutes` |
 | `web.maxSessionDuration` | Maximum duration of one web replay session | `24 hours` |
-| `web.platformViewCapturePolicy` | `maskEntireFrame` masks the whole replay image whenever an HTML platform view is present. `captureNormally` captures the Flutter canvas without adding that mask; the platform-view pixels are not guaranteed to appear | `maskEntireFrame` |
+
+#### Platform views are not recorded on web
+
+Web capture reads the Flutter `<canvas>` backing store. An HTML platform view
+(`HtmlElementView`) renders into a separate DOM element that the browser
+composites alongside that canvas, so **its content is never part of a replay**.
+This is a property of how the browser renders, not a setting — there is no
+configuration that captures it.
+
+Two consequences to be aware of:
+
+- **The platform view is missing from the replay.** Maps, videos, embedded
+  iframes and similar widgets appear as empty space. Nothing marks that
+  something was there.
+- **Flutter content behind the platform view is still recorded.** Anything
+  Flutter painted underneath is in the canvas and is captured, even though the
+  platform view covered it on screen and the user never saw it. Normal masking
+  still applies to it, so text and images are masked as usual, but treat that
+  area as recorded rather than hidden.
+
+This also applies to platform views you did not add yourself. Some framework
+widgets create one internally — notably `SelectionArea` on web, which mounts a
+full-screen transparent `HtmlElementView` to receive the browser's native
+context menu.
+
+If a platform view displays sensitive information, wrap it in `MixpanelMask`
+so the region is masked in the replay.
 
 #### Debug options
 

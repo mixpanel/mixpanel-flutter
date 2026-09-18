@@ -1,6 +1,5 @@
 export 'platform_init_types.dart';
 
-import '../../models/configuration.dart';
 import '../../models/masking_directive.dart';
 import '../logger.dart';
 import '../native_image_compressor.dart';
@@ -18,7 +17,6 @@ Future<PlatformInitResult> platformInit({
   required bool mobileWifiOnly,
   required Duration webIdleTimeout,
   required Duration webMaxSessionDuration,
-  required WebPlatformViewCapturePolicy webPlatformViewCapturePolicy,
   WireframeEmitter? wireframeEmitter,
   required bool useAccessibilityLabelFallback,
   required MixpanelLogger logger,
