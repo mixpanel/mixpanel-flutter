@@ -1,6 +1,47 @@
 import '../../models/session_event.dart';
 import '../../models/session.dart';
 
+/// Payload-free event information used for queue ordering decisions.
+///
+/// Storage implementations should avoid reading or deserializing event payloads
+/// when returning this value.
+class QueuedEventHeader {
+  final int id;
+  final String sessionId;
+  final String distinctId;
+  final DateTime timestamp;
+
+  const QueuedEventHeader({
+    required this.id,
+    required this.sessionId,
+    required this.distinctId,
+    required this.timestamp,
+  });
+
+  factory QueuedEventHeader.fromDbRow(Map<String, dynamic> row) {
+    return QueuedEventHeader(
+      id: row['id'] as int,
+      sessionId: row['session_id'] as String,
+      distinctId: row['distinct_id'] as String,
+      timestamp: DateTime.fromMillisecondsSinceEpoch(
+        row['timestamp'] as int,
+        isUtc: true,
+      ),
+    );
+  }
+}
+
+/// Counts returned after pruning an expired persistent replay backlog.
+class RetentionCleanupResult {
+  final int removedEvents;
+  final int removedSessions;
+
+  const RetentionCleanupResult({
+    required this.removedEvents,
+    required this.removedSessions,
+  });
+}
+
 /// Abstract interface for event queue implementations
 ///
 /// Implementations can use different storage mechanisms (SQLite, in-memory, file-based, etc.)
@@ -26,6 +67,12 @@ abstract class EventQueue {
   /// Get the newest event across all sessions (for flush cutoff)
   /// Returns null if no events exist
   Future<PersistedSessionReplayEvent?> fetchNewest();
+
+  /// Get payload-free metadata for the oldest event across all sessions.
+  Future<QueuedEventHeader?> fetchOldestHeader();
+
+  /// Get payload-free metadata for the newest event across all sessions.
+  Future<QueuedEventHeader?> fetchNewestHeader();
 
   /// Fetch batch of consecutive events for a specific sessionId and distinctId
   ///

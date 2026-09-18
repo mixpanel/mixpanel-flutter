@@ -33,6 +33,7 @@ migrate_working_dir/
 /build/
 /coverage/
 pubspec.lock
+local.env
 
 # Symbolication related
 app.*.symbols

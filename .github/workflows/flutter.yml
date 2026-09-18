@@ -151,6 +151,132 @@ jobs:
           name: session-replay-coverage
           path: packages/mixpanel_flutter_session_replay/coverage/lcov.info
 
+  test-session-replay-web:
+    name: SR Web Tests & Build
+    needs: [compat-check-session-replay, test-session-replay]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+      - uses: ./.github/actions/setup-flutter
+        with:
+          flutter-version: '3.41.2'
+      - name: Install dependencies
+        run: flutter pub get
+        working-directory: packages/mixpanel_flutter_session_replay
+      - name: Run browser tests
+        run: >-
+          flutter test --platform chrome
+          test/gzip_compress_web_test.dart
+          test/indexed_db_event_queue_test.dart
+          test/web_session_resume_test.dart
+          test/platform_init_web_test.dart
+          test/web_image_compressor_test.dart
+          test/debug_overlay_host_web_test.dart
+        working-directory: packages/mixpanel_flutter_session_replay
+      - name: Build web example
+        run: flutter build web
+        working-directory: packages/mixpanel_flutter_session_replay/example
+
+  validate-session-replay-web-browsers:
+    name: SR Web Pipeline & Performance (${{ matrix.browser }}/${{ matrix.renderer }})
+    needs: [test-session-replay-web]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - browser: chrome
+            runner: ubuntu-latest
+            added-frame-delay-budget: 24
+            renderer: canvaskit
+            wasm_flag: ''
+          - browser: chrome
+            runner: ubuntu-latest
+            added-frame-delay-budget: 24
+            renderer: skwasm
+            wasm_flag: --wasm
+          - browser: firefox
+            runner: ubuntu-latest
+            added-frame-delay-budget: 34
+            renderer: canvaskit
+            wasm_flag: ''
+          - browser: safari
+            runner: macos-26
+            added-frame-delay-budget: 34
+            renderer: canvaskit
+            wasm_flag: ''
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+      - uses: ./.github/actions/setup-flutter
+        with:
+          flutter-version: '3.41.2'
+      - name: Install Chrome and matching ChromeDriver
+        if: matrix.browser == 'chrome'
+        uses: browser-actions/setup-chrome@48483d551c22a1fe6154c6a195ccc6d5773dc8c4  # v2
+        with:
+          chrome-version: stable
+          install-chromedriver: true
+      - name: Install Firefox
+        if: matrix.browser == 'firefox'
+        uses: browser-actions/setup-firefox@2ddc1281882c66dd6a359947714eed0a4b91afc1  # v1
+        with:
+          firefox-version: latest
+      - name: Install GeckoDriver
+        if: matrix.browser == 'firefox'
+        uses: browser-actions/setup-geckodriver@bf8266f624ca122cedb6d0381a031f18f6c431cd
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Install example dependencies
+        run: flutter pub get
+        working-directory: packages/mixpanel_flutter_session_replay/example
+      - name: Start WebDriver
+        shell: bash
+        run: |
+          case "${{ matrix.browser }}" in
+            chrome)
+              chromedriver --port=4444 > "$RUNNER_TEMP/webdriver.log" 2>&1 &
+              ;;
+            firefox)
+              geckodriver --port 4444 > "$RUNNER_TEMP/webdriver.log" 2>&1 &
+              ;;
+            safari)
+              sudo safaridriver --enable
+              safaridriver -p 4444 > "$RUNNER_TEMP/webdriver.log" 2>&1 &
+              ;;
+          esac
+          for attempt in {1..30}; do
+            if curl --silent --fail http://127.0.0.1:4444/status > /dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat "$RUNNER_TEMP/webdriver.log"
+          exit 1
+      - name: Validate real browser pipeline and UI-thread budget
+        run: >-
+          flutter drive -d web-server
+          --browser-name=${{ matrix.browser }}
+          --browser-dimension=1920x1080
+          --profile
+          ${{ matrix.wasm_flag }}
+          --driver=test_driver/web_validation_test.dart
+          --target=integration_test/web_validation_test.dart
+          --timeout=300
+          --dart-define=WEB_PERFORMANCE_ALLOWED_ADDED_FRAME_DELAY_MS=${{ matrix.added-frame-delay-budget }}
+        working-directory: packages/mixpanel_flutter_session_replay/example
+      - name: Upload web validation metrics
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
+        with:
+          name: session-replay-web-${{ matrix.browser }}-${{ matrix.renderer }}-validation
+          path: |
+            packages/mixpanel_flutter_session_replay/example/build/integration_response_data.json
+            packages/mixpanel_flutter_session_replay/example/build/web_motion_mask_validation/**
+            ${{ runner.temp }}/webdriver.log
+          if-no-files-found: warn
+
   test-session-replay-ios-integration:
     name: SR Integration Tests (iOS Simulator)
     needs: [compat-check-session-replay, test-session-replay]

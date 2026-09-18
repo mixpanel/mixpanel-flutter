@@ -32,6 +32,9 @@ class RRWebIncrementalSource {
 
 /// rrweb mouse interaction types
 class RRWebMouseInteraction {
+  static const int mouseUp = 0;
+  static const int mouseDown = 1;
+  static const int click = 2;
   static const int touchStart = 7;
   static const int touchEnd = 9;
   static const int touchCancel = 10;

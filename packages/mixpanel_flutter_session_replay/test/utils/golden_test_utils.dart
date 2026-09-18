@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mixpanel_flutter_session_replay/src/internal/native_image_compressor.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/logger.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/masking/mask_detector.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/screenshot_capturer.dart';
@@ -115,7 +116,7 @@ Future<void> captureGolden(
     directive: MaskingDirective(autoMaskTypes: maskTypes),
     logger: MixpanelLogger(LogLevel.none),
     debugOverlayEnabled: false,
-    compressionMode: CompressionMode.dartPng,
+    compressor: DartPngCompressor(),
   );
 
   // Use runAsync to allow the capture's endOfFrame to complete

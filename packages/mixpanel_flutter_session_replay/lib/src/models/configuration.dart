@@ -72,6 +72,31 @@ class MobileOptions {
   final bool wifiOnly;
 }
 
+/// Web-specific configuration options
+///
+/// These options only apply to the web platform (Flutter web).
+class WebOptions {
+  const WebOptions({
+    this.idleTimeout = const Duration(minutes: 30),
+    this.maxSessionDuration = const Duration(hours: 24),
+  });
+
+  /// Duration of user inactivity before the session is ended (default: 30 min).
+  ///
+  /// Reset on every user interaction or screenshot capture.
+  /// When the timeout fires, recording stops and a new session starts
+  /// on the next user interaction.
+  ///
+  /// Set to [Duration.zero] to disable idle timeout.
+  final Duration idleTimeout;
+
+  /// Maximum total duration of a single session (default: 24 hours).
+  ///
+  /// Hard cap regardless of user activity. When exceeded, the current session
+  /// ends and a new session starts on the next user interaction.
+  final Duration maxSessionDuration;
+}
+
 /// Platform-specific configuration options
 ///
 /// Use this to configure options that only apply to specific platforms.
@@ -82,12 +107,19 @@ class MobileOptions {
 ///   logLevel: LogLevel.debug,
 ///   platformOptions: PlatformOptions(
 ///     mobile: MobileOptions(wifiOnly: true),
+///     web: WebOptions(idleTimeout: Duration(minutes: 15)),
 ///   ),
 /// )
 /// ```
 class PlatformOptions {
-  const PlatformOptions({this.mobile = const MobileOptions()});
+  const PlatformOptions({
+    this.mobile = const MobileOptions(),
+    this.web = const WebOptions(),
+  });
 
   /// Mobile-specific options (iOS and Android)
   final MobileOptions mobile;
+
+  /// Web-specific options (Flutter web)
+  final WebOptions web;
 }

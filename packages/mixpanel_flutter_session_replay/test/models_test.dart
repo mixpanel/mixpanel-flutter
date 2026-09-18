@@ -732,6 +732,59 @@ void main() {
         // THEN
         expect(options.mobile.wifiOnly, expectedWifiOnly);
       });
+
+      test('has correct web defaults', () {
+        // GIVEN
+        final expectedIdleTimeout = const Duration(minutes: 30);
+        final expectedMaxSessionDuration = const Duration(hours: 24);
+
+        // WHEN
+        const options = PlatformOptions();
+
+        // THEN
+        expect(options.web.idleTimeout, expectedIdleTimeout);
+        expect(options.web.maxSessionDuration, expectedMaxSessionDuration);
+      });
+
+      test('allows custom web options', () {
+        // GIVEN
+        final expectedIdleTimeout = const Duration(minutes: 15);
+        final expectedMaxSessionDuration = const Duration(hours: 8);
+
+        // WHEN
+        const options = PlatformOptions(
+          web: WebOptions(
+            idleTimeout: Duration(minutes: 15),
+            maxSessionDuration: Duration(hours: 8),
+          ),
+        );
+
+        // THEN
+        expect(options.web.idleTimeout, expectedIdleTimeout);
+        expect(options.web.maxSessionDuration, expectedMaxSessionDuration);
+      });
+
+      test('allows disabling idle timeout with Duration.zero', () {
+        // WHEN
+        const options = PlatformOptions(
+          web: WebOptions(idleTimeout: Duration.zero),
+        );
+
+        // THEN
+        expect(options.web.idleTimeout, Duration.zero);
+      });
+
+      test('allows setting both mobile and web options', () {
+        // WHEN
+        const options = PlatformOptions(
+          mobile: MobileOptions(wifiOnly: false),
+          web: WebOptions(idleTimeout: Duration(minutes: 10)),
+        );
+
+        // THEN
+        expect(options.mobile.wifiOnly, false);
+        expect(options.web.idleTimeout, const Duration(minutes: 10));
+      });
     });
   });
 

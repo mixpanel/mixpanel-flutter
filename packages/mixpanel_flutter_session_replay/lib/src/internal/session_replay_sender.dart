@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, defaultTargetPlatform, kIsWeb;
 import 'package:flutter/services.dart';
 
 /// Integrates Session Replay data with the main Mixpanel event tracking SDK.
@@ -12,10 +14,21 @@ import 'package:flutter/services.dart';
 ///
 /// Since `mixpanel_flutter` wraps these native SDKs, the registered super
 /// properties automatically flow through to all tracked events.
+///
+/// On web and macOS, those native bridges do not exist. Calls are instead sent
+/// to the `mixpanel_flutter` plugin's existing super-property methods, which
+/// delegate to the platform Mixpanel SDK.
 class SessionReplaySender {
   SessionReplaySender._();
 
-  static const _channel = MethodChannel('com.mixpanel.flutter_session_replay');
+  static const _channelTimeout = Duration(seconds: 1);
+  static const _sessionReplayChannel = MethodChannel(
+    'com.mixpanel.flutter_session_replay',
+  );
+  static const _mixpanelFlutterChannel = MethodChannel('mixpanel_flutter');
+
+  static bool get _usesMixpanelFlutterChannel =>
+      kIsWeb || defaultTargetPlatform == TargetPlatform.macOS;
 
   /// Register super properties with the main Mixpanel SDK via native IPC.
   ///
@@ -23,7 +36,17 @@ class SessionReplaySender {
   /// On Android, sends a broadcast intent. On iOS, posts a notification.
   static Future<void> register(Map<String, dynamic> properties) async {
     try {
-      await _channel.invokeMethod<void>('registerSuperProperties', properties);
+      if (_usesMixpanelFlutterChannel) {
+        await _mixpanelFlutterChannel
+            .invokeMethod<void>('registerSuperProperties', {
+              'properties': properties,
+            })
+            .timeout(_channelTimeout);
+      } else {
+        await _sessionReplayChannel
+            .invokeMethod<void>('registerSuperProperties', properties)
+            .timeout(_channelTimeout);
+      }
     } catch (_) {
       // Best-effort — don't crash the host app if the channel call fails
     }
@@ -36,9 +59,19 @@ class SessionReplaySender {
   /// notification.
   static Future<void> unregister(String propertyName) async {
     try {
-      await _channel.invokeMethod<void>('unregisterSuperProperty', {
-        'key': propertyName,
-      });
+      if (_usesMixpanelFlutterChannel) {
+        await _mixpanelFlutterChannel
+            .invokeMethod<void>('unregisterSuperProperty', {
+              'propertyName': propertyName,
+            })
+            .timeout(_channelTimeout);
+      } else {
+        await _sessionReplayChannel
+            .invokeMethod<void>('unregisterSuperProperty', {
+              'key': propertyName,
+            })
+            .timeout(_channelTimeout);
+      }
     } catch (_) {
       // Best-effort — don't crash the host app if the channel call fails
     }
