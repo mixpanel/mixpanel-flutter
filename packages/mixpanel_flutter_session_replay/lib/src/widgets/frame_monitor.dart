@@ -52,7 +52,16 @@ class _FrameMonitorState extends State<FrameMonitor> {
     _capturesRenderedSurface = widget.coordinator.capturesRenderedSurface;
     if (_capturesRenderedSurface && _debugOverlayEnabled) {
       _debugOverlayHost = createDebugOverlayHost();
+    }
+    if (_debugOverlayHost != null) {
       widget.coordinator.maskRegionsNotifier.addListener(_onMaskRegionsChanged);
+      // The notifier only fires on change, and the coordinator suppresses a
+      // capture whose regions match the stored ones. Paint the current value
+      // once so a host attached to an already-populated notifier is not blank
+      // until the layout happens to move.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _onMaskRegionsChanged();
+      });
     }
 
     // Listen to frame notifications from parent widget
@@ -174,13 +183,12 @@ class _FrameMonitorState extends State<FrameMonitor> {
   @override
   void dispose() {
     widget.frameNotifier.removeListener(_onFrame);
-    if (_debugOverlayHost != null) {
-      widget.coordinator.maskRegionsNotifier.removeListener(
-        _onMaskRegionsChanged,
-      );
-      _debugOverlayHost!.dispose();
-      _debugOverlayHost = null;
-    }
+    // Unconditional: removeListener is a no-op for a listener never added, so
+    // this cannot desync from the registration condition above.
+    widget.coordinator.maskRegionsNotifier.removeListener(
+      _onMaskRegionsChanged,
+    );
+    _debugOverlayHost?.dispose();
     _scheduler.dispose();
     super.dispose();
   }
