@@ -1264,11 +1264,12 @@ void main() {
       expect(find.byType(MaskOverlay), findsNothing);
     });
 
-    testWidgets('does not rebuild when mask regions change on web', (
+    testWidgets('does not schedule a frame when mask regions change on web', (
       tester,
     ) async {
-      // GIVEN - the out-of-surface overlay redraws itself, so a region change
-      // must not schedule a Flutter frame that would trigger another capture
+      // GIVEN - the out-of-surface overlay redraws itself. A region change
+      // must not dirty the widget tree, because the frame that rebuild would
+      // schedule is what drives the next capture.
       final fake = FakeWidgetCoordinator(
         recordingState: RecordingState.recording,
         capturesRenderedSurface: true,
@@ -1286,16 +1287,16 @@ void main() {
         ),
       );
       await tester.pump();
-      final capturesAfterFirstFrame = fake.captureSnapshotCallCount;
+      // Precondition: without it the assertion below proves nothing.
+      expect(tester.binding.hasScheduledFrame, isFalse);
 
       // WHEN
       fake.maskRegionsNotifier.value = [
         MaskRegionInfo(const Rect.fromLTWH(0, 0, 10, 10), MaskSource.auto),
       ];
-      await tester.pump();
 
-      // THEN
-      expect(fake.captureSnapshotCallCount, capturesAfterFirstFrame);
+      // THEN - an in-tree ValueListenableBuilder would have called setState
+      expect(tester.binding.hasScheduledFrame, isFalse);
     });
 
     testWidgets('cleans up listener on dispose', (tester) async {

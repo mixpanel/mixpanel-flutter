@@ -115,7 +115,11 @@ class _DomDebugOverlayHost implements DebugOverlayHost {
     void addAll(bool Function(MaskSource) matches, Color? color) {
       if (color == null) return;
       for (final region in regions) {
-        if (matches(region.source)) painted.add((region, color));
+        // A non-finite edge formats as 'NaNpx'/'Infinitypx', which CSSOM drops
+        // silently — a reused node would keep the previous region's geometry.
+        if (matches(region.source) && region.bounds.isFinite) {
+          painted.add((region, color));
+        }
       }
     }
 
