@@ -172,6 +172,7 @@ jobs:
           test/web_session_resume_test.dart
           test/platform_init_web_test.dart
           test/web_image_compressor_test.dart
+          test/debug_overlay_host_web_test.dart
         working-directory: packages/mixpanel_flutter_session_replay
       - name: Build web example
         run: flutter build web

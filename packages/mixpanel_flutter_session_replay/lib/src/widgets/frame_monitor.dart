@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart' show kDebugMode;
 
 import '../internal/widget_coordinator.dart';
 import '../internal/capture/capture_scheduler.dart';
+import '../internal/platform/debug_overlay_host.dart';
 import '../internal/settings/settings_service.dart';
 import '../models/debug_overlay_colors.dart';
 import '../models/masking_directive.dart';
@@ -34,8 +35,12 @@ class FrameMonitor extends StatefulWidget {
 class _FrameMonitorState extends State<FrameMonitor> {
   final GlobalKey _repaintBoundaryKey = GlobalKey();
   late final CaptureScheduler _scheduler;
-  bool _hideDebugOverlayForCapture = false;
-  int _internalOverlayFrames = 0;
+
+  /// True where capture reads a shared rendered surface (web) rather than this
+  /// widget's [RepaintBoundary]. The overlay widget would be captured there, so
+  /// it is drawn outside the Flutter surface by [_debugOverlayHost] instead.
+  late final bool _capturesRenderedSurface;
+  DebugOverlayHost? _debugOverlayHost;
 
   @override
   void initState() {
@@ -43,6 +48,12 @@ class _FrameMonitorState extends State<FrameMonitor> {
 
     // Create timing scheduler (private to this widget)
     _scheduler = CaptureScheduler(logger: widget.coordinator.logger);
+
+    _capturesRenderedSurface = widget.coordinator.capturesRenderedSurface;
+    if (_capturesRenderedSurface && _debugOverlayEnabled) {
+      _debugOverlayHost = createDebugOverlayHost();
+      widget.coordinator.maskRegionsNotifier.addListener(_onMaskRegionsChanged);
+    }
 
     // Listen to frame notifications from parent widget
     widget.frameNotifier.addListener(_onFrame);
@@ -54,12 +65,28 @@ class _FrameMonitorState extends State<FrameMonitor> {
     });
   }
 
+  bool get _debugOverlayEnabled =>
+      kDebugMode && widget.debugOptions?.overlayColors != null;
+
+  /// Redraws the out-of-surface overlay. Touching the DOM directly keeps this
+  /// off Flutter's build pipeline, so the overlay cannot schedule the frame
+  /// that would trigger the next capture.
+  void _onMaskRegionsChanged() {
+    final host = _debugOverlayHost;
+    final colors = widget.debugOptions?.overlayColors;
+    if (host == null || colors == null) return;
+    final boundary = _repaintBoundaryKey.currentContext?.findRenderObject();
+    if (boundary is! RenderBox || !boundary.hasSize) return;
+    host.update(
+      regions: widget.coordinator.maskRegionsNotifier.value,
+      colors: colors,
+      boundaryOrigin: boundary.localToGlobal(Offset.zero),
+      boundarySize: boundary.size,
+    );
+  }
+
   void _onFrame() {
     if (!mounted) return;
-    if (_internalOverlayFrames > 0) {
-      _internalOverlayFrames--;
-      return;
-    }
 
     // Skip processing if remotely disabled
     if (widget.coordinator.remoteEnablementState ==
@@ -119,32 +146,14 @@ class _FrameMonitorState extends State<FrameMonitor> {
 
     // Tell scheduler we're starting
     _scheduler.markCaptureStarted();
-    unawaited(_captureWithoutWebDebugOverlay());
+    unawaited(_runCapture());
   }
 
-  Future<void> _captureWithoutWebDebugOverlay() async {
-    final shouldHideOverlay =
-        widget.coordinator.capturesRenderedSurface &&
-        kDebugMode &&
-        widget.debugOptions?.overlayColors != null;
-    if (shouldHideOverlay && mounted) {
-      _internalOverlayFrames++;
-      setState(() => _hideDebugOverlayForCapture = true);
-      // Web captures the browser's rendered canvas rather than only the
-      // RepaintBoundary. Wait until the overlay-free frame is presented before
-      // selecting that canvas, otherwise the diagnostic paint can enter replay.
-      await WidgetsBinding.instance.endOfFrame;
-    }
-
+  Future<void> _runCapture() async {
     try {
-      if (!mounted) return;
       await _captureCurrentBoundary();
     } finally {
       if (mounted) {
-        if (_hideDebugOverlayForCapture) {
-          _internalOverlayFrames++;
-          setState(() => _hideDebugOverlayForCapture = false);
-        }
         // The 500 ms rate limit starts whether capture succeeded or failed.
         _scheduler.markCaptureCompleted();
       }
@@ -165,6 +174,13 @@ class _FrameMonitorState extends State<FrameMonitor> {
   @override
   void dispose() {
     widget.frameNotifier.removeListener(_onFrame);
+    if (_debugOverlayHost != null) {
+      widget.coordinator.maskRegionsNotifier.removeListener(
+        _onMaskRegionsChanged,
+      );
+      _debugOverlayHost!.dispose();
+      _debugOverlayHost = null;
+    }
     _scheduler.dispose();
     super.dispose();
   }
@@ -176,9 +192,13 @@ class _FrameMonitorState extends State<FrameMonitor> {
       child: widget.child,
     );
 
-    // Conditionally wrap with mask overlay for debugging (only in debug mode)
+    // Conditionally wrap with mask overlay for debugging (only in debug mode).
+    // Skipped where capture reads the rendered surface — the overlay would end
+    // up in the replay, so it is drawn outside that surface instead. Skipped
+    // there even when no host could be created, so the diagnostic paint can
+    // never leak into an upload.
     final overlayColors = widget.debugOptions?.overlayColors;
-    if (overlayColors != null && kDebugMode && !_hideDebugOverlayForCapture) {
+    if (overlayColors != null && kDebugMode && !_capturesRenderedSurface) {
       child = ValueListenableBuilder<List<MaskRegionInfo>>(
         valueListenable: widget.coordinator.maskRegionsNotifier,
         builder: (context, maskRegions, child) {
