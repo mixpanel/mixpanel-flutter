@@ -89,6 +89,14 @@ class SessionReplayCoordinator implements WidgetCoordinator {
   /// Absolute expiry time for the current session's max duration
   DateTime? _maxSessionExpiry;
 
+  /// Wall-clock deadline mirroring [_idleTimer].
+  ///
+  /// The timer alone is not enough: a hidden tab throttles timers but still
+  /// fires them, whereas bfcache and OS suspension freeze the page entirely,
+  /// so wall-clock time passes without the timer advancing. Kept in step with
+  /// the timer by [_restartIdleWindow] and checked on foreground.
+  DateTime? _idleExpiry;
+
   /// A persisted web session waiting for the fresh remote enablement verdict.
   /// Keeping it staged prevents screenshots and interactions from being
   /// captured locally before the project has allowed recording this launch.
@@ -481,13 +489,20 @@ class SessionReplayCoordinator implements WidgetCoordinator {
     // Mark app as foregrounded (allows FrameMonitor captures)
     _isAppInForeground = true;
 
-    // A session carried across a hidden interval may have outlived its max
-    // duration while away. The idle timeout needs no equivalent check: its
-    // timer kept running, so hidden time already counted against it.
-    // This stops recording and marks the session idled out, so the branches
-    // below start a fresh one.
-    if (_recordingState == RecordingState.recording) {
-      _checkMaxSessionExpired();
+    // A session carried across a hidden interval may have outlived either
+    // window while away. Both are checked against wall clock: the idle timer
+    // does not advance while the page is frozen in bfcache or suspended by
+    // the OS, so it cannot be trusted on its own here. Either check stops
+    // recording and marks the session idled out, so the branches below start
+    // a fresh one.
+    if (_recordingState == RecordingState.recording &&
+        !_checkMaxSessionExpired() &&
+        _idleWindowExpired()) {
+      _logger.info(
+        'Idle window elapsed while the page was away, ending session',
+        tag: 'coordinator',
+      );
+      handleIdleTimeout();
     }
 
     switch (_remoteEnablementState) {
@@ -768,7 +783,7 @@ class SessionReplayCoordinator implements WidgetCoordinator {
         }
         _recordingState = RecordingState.recording;
         _uploadService.startAutoFlush();
-        _idleTimer?.start();
+        _restartIdleWindow();
         // Persist initial expiry to IndexedDB (web only, force write)
         _lastExpiryWriteTime = null;
         _persistExpiryDebounced();
@@ -821,6 +836,7 @@ class SessionReplayCoordinator implements WidgetCoordinator {
     // Stop automatic uploads and idle timer
     _uploadService.stopAutoFlush();
     _idleTimer?.stop();
+    _idleExpiry = null;
     _maxSessionExpiry = null;
 
     // Unregister replay ID from the main Mixpanel SDK
@@ -896,7 +912,7 @@ class SessionReplayCoordinator implements WidgetCoordinator {
 
     _recordingState = RecordingState.recording;
     _uploadService.startAutoFlush();
-    _idleTimer?.start();
+    _restartIdleWindow();
   }
 
   /// Stage a persisted web session until remote recording enablement has been
@@ -913,8 +929,26 @@ class SessionReplayCoordinator implements WidgetCoordinator {
   /// Reset idle timer and persist expiry (debounced). Called on every
   /// successful capture or interaction.
   void _onActivity() {
-    _idleTimer?.reset();
+    _restartIdleWindow();
     _persistExpiryDebounced();
+  }
+
+  /// Start or restart the idle window, keeping the timer and its wall-clock
+  /// twin in step.
+  void _restartIdleWindow() {
+    final timer = _idleTimer;
+    if (timer == null) return;
+    timer.reset();
+    _idleExpiry = clock.now().add(timer.timeout);
+  }
+
+  /// Whether wall-clock time has passed the idle deadline.
+  ///
+  /// Catches the intervals [_idleTimer] cannot see, where the page was frozen
+  /// rather than merely hidden.
+  bool _idleWindowExpired() {
+    final expiry = _idleExpiry;
+    return expiry != null && clock.now().isAfter(expiry);
   }
 
   /// Check if max session duration has been exceeded.

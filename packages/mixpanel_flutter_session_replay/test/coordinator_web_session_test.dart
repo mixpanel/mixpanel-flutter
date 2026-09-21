@@ -561,6 +561,89 @@ void main() {
         expect(coordinator.replayId, isNot(replayId));
       });
 
+      test(
+        'a frozen page whose idle window elapsed does not keep recording',
+        () async {
+          // GIVEN a web session hidden with a 30 minute idle window.
+          // The idle Timer is deliberately never fired: this models bfcache
+          // or OS suspension, where the page is frozen and timers do not
+          // advance even though wall-clock time passes.
+          final idleTimer = IdleTimeoutTimer(
+            timeout: const Duration(minutes: 30),
+            onTimeout: () {},
+          );
+          addTearDown(idleTimer.dispose);
+          final coordinator = createCoordinator(
+            autoRecordSessionsPercent: 100,
+            backgroundEndsSession: false,
+            idleTimer: idleTimer,
+          );
+          final hiddenAt = DateTime.utc(2026, 1, 1, 12);
+          String? replayId;
+          await withClock(Clock.fixed(hiddenAt), () async {
+            coordinator.startRecording(sessionsPercent: 100);
+            await pumpEventQueue();
+            replayId = coordinator.replayId;
+            coordinator.onAppBackgrounded();
+            await pumpEventQueue();
+            // Still recording: hiding alone is not a boundary.
+            expect(coordinator.recordingState, RecordingState.recording);
+          });
+
+          // WHEN the page is restored 45 minutes later
+          await withClock(
+            Clock.fixed(hiddenAt.add(const Duration(minutes: 45))),
+            () async {
+              coordinator.onAppForegrounded();
+              await pumpEventQueue();
+            },
+          );
+
+          // THEN the stale session is not carried on, even though the timer
+          // never fired
+          expect(coordinator.replayId, isNot(replayId));
+        },
+      );
+
+      test(
+        'a frozen page within its idle window keeps the same session',
+        () async {
+          // GIVEN the same setup, restored before the window elapses
+          final idleTimer = IdleTimeoutTimer(
+            timeout: const Duration(minutes: 30),
+            onTimeout: () {},
+          );
+          addTearDown(idleTimer.dispose);
+          final coordinator = createCoordinator(
+            autoRecordSessionsPercent: 100,
+            backgroundEndsSession: false,
+            idleTimer: idleTimer,
+          );
+          final hiddenAt = DateTime.utc(2026, 1, 1, 12);
+          String? replayId;
+          await withClock(Clock.fixed(hiddenAt), () async {
+            coordinator.startRecording(sessionsPercent: 100);
+            await pumpEventQueue();
+            replayId = coordinator.replayId;
+            coordinator.onAppBackgrounded();
+            await pumpEventQueue();
+          });
+
+          // WHEN restored after 10 minutes
+          await withClock(
+            Clock.fixed(hiddenAt.add(const Duration(minutes: 10))),
+            () async {
+              coordinator.onAppForegrounded();
+              await pumpEventQueue();
+            },
+          );
+
+          // THEN it is still one continuous replay
+          expect(coordinator.recordingState, RecordingState.recording);
+          expect(coordinator.replayId, replayId);
+        },
+      );
+
       test('an explicit stop while hidden stays stopped on return', () async {
         // GIVEN a hidden web session
         final coordinator = createCoordinator(
