@@ -318,6 +318,7 @@ class MixpanelSessionReplay {
         debugOptions: options.debugOptions,
         idleTimer: idleTimer,
         maxSessionDuration: platformResult.maxSessionDuration,
+        backgroundEndsSession: platformResult.backgroundEndsSession,
         persistIdleExpiry: platformResult.persistIdleExpiry,
       );
 

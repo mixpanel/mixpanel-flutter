@@ -137,5 +137,6 @@ Future<PlatformInitResult> platformInit({
     maxSessionDuration: webMaxSessionDuration,
     resumableSession: resumeInfo?.session,
     persistIdleExpiry: persistIdleExpiry,
+    backgroundEndsSession: false,
   );
 }

@@ -97,6 +97,10 @@ class SessionReplayCoordinator implements WidgetCoordinator {
   /// True when recording was stopped due to idle timeout (awaiting next interaction)
   bool _isIdledOut = false;
 
+  /// Whether leaving the foreground ends the session. See
+  /// [PlatformInitResult.backgroundEndsSession].
+  final bool _backgroundEndsSession;
+
   /// Callback to persist idle expiry to IndexedDB (web only)
   final Future<void> Function(
     String sessionId,
@@ -124,6 +128,7 @@ class SessionReplayCoordinator implements WidgetCoordinator {
     BackgroundTaskManager? backgroundTaskManager,
     IdleTimeoutTimer? idleTimer,
     Duration? maxSessionDuration,
+    bool backgroundEndsSession = true,
     Future<void> Function(
       String sessionId,
       int idleExpiresMs,
@@ -143,6 +148,7 @@ class SessionReplayCoordinator implements WidgetCoordinator {
        _debugOptions = debugOptions,
        _idleTimer = idleTimer,
        _maxSessionDuration = maxSessionDuration,
+       _backgroundEndsSession = backgroundEndsSession,
        _persistIdleExpiry = persistIdleExpiry {
     // Note: We do NOT auto-start recording in constructor
     // Recording will be started by LifecycleObserver when it detects app is resumed
@@ -395,6 +401,25 @@ class SessionReplayCoordinator implements WidgetCoordinator {
     // Mark app as backgrounded (stops FrameMonitor captures)
     _isAppInForeground = false;
 
+    // Where leaving the foreground is not a session boundary (web), the
+    // session simply keeps running: recording state, the idle timer, and the
+    // registered $mp_replay_id all stay as they are. Nothing is captured
+    // regardless, because _isAppInForeground gates FrameMonitor and a hidden
+    // tab paints no frames. Only the idle timeout and the max session
+    // duration end a web session, which is what Mixpanel JS does.
+    if (!_backgroundEndsSession) {
+      if (_recordingState == RecordingState.recording) {
+        // Force past the debounce so the persisted expiry reflects the moment
+        // the tab went away, not the last capture before it.
+        _lastExpiryWriteTime = null;
+        _persistExpiryDebounced();
+      }
+      // Still flush: the queue should not sit unsent while the tab is away,
+      // and this page may never come back.
+      _flushWithBackgroundTask();
+      return;
+    }
+
     // Stop recording and flush with background task protection (iOS)
     // This requests extended execution time so the flush HTTP request
     // completes before the OS suspends the process.
@@ -421,6 +446,24 @@ class SessionReplayCoordinator implements WidgetCoordinator {
     });
   }
 
+  /// Flush without ending the session, for platforms where leaving the
+  /// foreground is not a session boundary.
+  void _flushWithBackgroundTask() {
+    _backgroundTaskManager.beginBackgroundTask();
+    _uploadService
+        .flush()
+        .catchError((e) {
+          _logger.error(
+            'Failed to flush events on background: $e',
+            null,
+            null,
+            'coordinator',
+          );
+          return FlushResult();
+        })
+        .whenComplete(_backgroundTaskManager.endBackgroundTask);
+  }
+
   /// Handle app returning to foreground
   @override
   void onAppForegrounded() {
@@ -437,6 +480,15 @@ class SessionReplayCoordinator implements WidgetCoordinator {
 
     // Mark app as foregrounded (allows FrameMonitor captures)
     _isAppInForeground = true;
+
+    // A session carried across a hidden interval may have outlived its max
+    // duration while away. The idle timeout needs no equivalent check: its
+    // timer kept running, so hidden time already counted against it.
+    // This stops recording and marks the session idled out, so the branches
+    // below start a fresh one.
+    if (_recordingState == RecordingState.recording) {
+      _checkMaxSessionExpired();
+    }
 
     switch (_remoteEnablementState) {
       case RemoteEnablementState.pending:
