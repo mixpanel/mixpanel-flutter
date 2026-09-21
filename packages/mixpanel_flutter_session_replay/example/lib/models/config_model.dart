@@ -18,8 +18,17 @@ class ConfigModel extends ChangeNotifier {
   bool _enableWireframes = false;
   bool _enableWireframeDebugEmitter = true;
   bool _useAccessibilityLabelFallback = false;
-  String _webIdleTimeoutSeconds = '1800';
-  String _webMaxSessionSeconds = '86400';
+  // Overridable at launch so integration tests and manual runs can reach the
+  // idle-out and max-duration paths without retyping the fields each time:
+  //   flutter run --dart-define=WEB_IDLE_TIMEOUT_SECONDS=60
+  String _webIdleTimeoutSeconds = const String.fromEnvironment(
+    'WEB_IDLE_TIMEOUT_SECONDS',
+    defaultValue: '1800',
+  );
+  String _webMaxSessionSeconds = const String.fromEnvironment(
+    'WEB_MAX_SESSION_SECONDS',
+    defaultValue: '86400',
+  );
 
   String? _tokenError;
   String? _distinctIdError;
