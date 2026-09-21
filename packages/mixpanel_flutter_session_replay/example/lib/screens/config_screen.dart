@@ -24,6 +24,10 @@ class _ConfigScreenState extends State<ConfigScreen> {
   late TextEditingController _flushIntervalController;
   late TextEditingController _autoRecordController;
   late TextEditingController _storageQuotaController;
+  late TextEditingController _webIdleTimeoutController;
+  late TextEditingController _webMaxSessionController;
+
+  bool get _isWebPlatform => kIsWeb;
 
   bool get _isMobilePlatform =>
       !kIsWeb &&
@@ -45,6 +49,12 @@ class _ConfigScreenState extends State<ConfigScreen> {
     _storageQuotaController = TextEditingController(
       text: configVm.storageQuota,
     );
+    _webIdleTimeoutController = TextEditingController(
+      text: configVm.webIdleTimeoutSeconds,
+    );
+    _webMaxSessionController = TextEditingController(
+      text: configVm.webMaxSessionSeconds,
+    );
 
     // Update ViewModel when text changes
     _tokenController.addListener(
@@ -62,6 +72,12 @@ class _ConfigScreenState extends State<ConfigScreen> {
     _storageQuotaController.addListener(
       () => configVm.setStorageQuota(_storageQuotaController.text),
     );
+    _webIdleTimeoutController.addListener(
+      () => configVm.setWebIdleTimeoutSeconds(_webIdleTimeoutController.text),
+    );
+    _webMaxSessionController.addListener(
+      () => configVm.setWebMaxSessionSeconds(_webMaxSessionController.text),
+    );
   }
 
   @override
@@ -71,6 +87,8 @@ class _ConfigScreenState extends State<ConfigScreen> {
     _flushIntervalController.dispose();
     _autoRecordController.dispose();
     _storageQuotaController.dispose();
+    _webIdleTimeoutController.dispose();
+    _webMaxSessionController.dispose();
     super.dispose();
   }
 
@@ -229,6 +247,35 @@ class _ConfigScreenState extends State<ConfigScreen> {
                     _buildLogLevelDropdown(configVm, _isInitializing),
                     const SizedBox(height: 16),
                     _buildRemoteSettingsModeDropdown(configVm, _isInitializing),
+                    if (_isWebPlatform) ...[
+                      const SizedBox(height: 16),
+                      _buildTextField(
+                        controller: _webIdleTimeoutController,
+                        label: 'Idle Timeout (seconds, 0 = disabled) [Web]',
+                        enabled: !_isInitializing,
+                        keyboardType: TextInputType.number,
+                        errorText: configVm.webIdleTimeoutError,
+                      ),
+                      const SizedBox(height: 16),
+                      _buildTextField(
+                        controller: _webMaxSessionController,
+                        label: 'Max Session Duration (seconds) [Web]',
+                        enabled: !_isInitializing,
+                        keyboardType: TextInputType.number,
+                        errorText: configVm.webMaxSessionError,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Defaults are 1800s idle / 86400s max, matching '
+                        'Mixpanel JS. Shorten them to observe an idle-out or '
+                        'a max-duration rollover by hand.',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontStyle: FontStyle.italic,
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                    ],
                     if (_isMobilePlatform) ...[
                       const SizedBox(height: 16),
                       _buildSwitch(

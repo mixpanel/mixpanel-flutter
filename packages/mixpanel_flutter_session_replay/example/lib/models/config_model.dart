@@ -18,12 +18,16 @@ class ConfigModel extends ChangeNotifier {
   bool _enableWireframes = false;
   bool _enableWireframeDebugEmitter = true;
   bool _useAccessibilityLabelFallback = false;
+  String _webIdleTimeoutSeconds = '1800';
+  String _webMaxSessionSeconds = '86400';
 
   String? _tokenError;
   String? _distinctIdError;
   String? _flushIntervalError;
   String? _autoRecordPercentError;
   String? _storageQuotaError;
+  String? _webIdleTimeoutError;
+  String? _webMaxSessionError;
 
   // Getters
   String get token => _token;
@@ -40,12 +44,16 @@ class ConfigModel extends ChangeNotifier {
   bool get enableWireframes => _enableWireframes;
   bool get enableWireframeDebugEmitter => _enableWireframeDebugEmitter;
   bool get useAccessibilityLabelFallback => _useAccessibilityLabelFallback;
+  String get webIdleTimeoutSeconds => _webIdleTimeoutSeconds;
+  String get webMaxSessionSeconds => _webMaxSessionSeconds;
 
   String? get tokenError => _tokenError;
   String? get distinctIdError => _distinctIdError;
   String? get flushIntervalError => _flushIntervalError;
   String? get autoRecordPercentError => _autoRecordPercentError;
   String? get storageQuotaError => _storageQuotaError;
+  String? get webIdleTimeoutError => _webIdleTimeoutError;
+  String? get webMaxSessionError => _webMaxSessionError;
 
   // Setters
   void setToken(String value) {
@@ -75,6 +83,18 @@ class ConfigModel extends ChangeNotifier {
   void setStorageQuota(String value) {
     _storageQuota = value;
     _storageQuotaError = null;
+    notifyListeners();
+  }
+
+  void setWebIdleTimeoutSeconds(String value) {
+    _webIdleTimeoutSeconds = value;
+    _webIdleTimeoutError = null;
+    notifyListeners();
+  }
+
+  void setWebMaxSessionSeconds(String value) {
+    _webMaxSessionSeconds = value;
+    _webMaxSessionError = null;
     notifyListeners();
   }
 
@@ -155,6 +175,20 @@ class ConfigModel extends ChangeNotifier {
       isValid = false;
     }
 
+    // Validate web idle timeout (0 disables it)
+    final idleSeconds = int.tryParse(_webIdleTimeoutSeconds);
+    if (idleSeconds == null || idleSeconds < 0) {
+      _webIdleTimeoutError = 'Must be 0 or greater';
+      isValid = false;
+    }
+
+    // Validate web max session duration (0 would expire every session at once)
+    final maxSeconds = int.tryParse(_webMaxSessionSeconds);
+    if (maxSeconds == null || maxSeconds <= 0) {
+      _webMaxSessionError = 'Must be a positive number';
+      isValid = false;
+    }
+
     // Validate storage quota
     final storageQuotaInt = int.tryParse(_storageQuota);
     if (storageQuotaInt == null || storageQuotaInt <= 0) {
@@ -183,6 +217,8 @@ class ConfigModel extends ChangeNotifier {
       enableWireframes: _enableWireframes,
       enableWireframeDebugEmitter: _enableWireframeDebugEmitter,
       useAccessibilityLabelFallback: _useAccessibilityLabelFallback,
+      webIdleTimeoutSeconds: int.parse(_webIdleTimeoutSeconds),
+      webMaxSessionSeconds: int.parse(_webMaxSessionSeconds),
     );
   }
 }

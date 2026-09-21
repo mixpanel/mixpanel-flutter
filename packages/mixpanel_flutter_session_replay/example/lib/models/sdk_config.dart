@@ -18,6 +18,8 @@ class SdkConfig {
     required this.enableWireframes,
     required this.enableWireframeDebugEmitter,
     required this.useAccessibilityLabelFallback,
+    required this.webIdleTimeoutSeconds,
+    required this.webMaxSessionSeconds,
   });
 
   final String token;
@@ -34,6 +36,14 @@ class SdkConfig {
   final bool enableWireframes;
   final bool enableWireframeDebugEmitter;
   final bool useAccessibilityLabelFallback;
+
+  /// Web idle timeout in seconds. 0 disables it. Exposed here so a tester can
+  /// shorten the 30 minute default and actually observe an idle-out by hand.
+  final int webIdleTimeoutSeconds;
+
+  /// Web max session duration in seconds. Same reason: the 24 hour default
+  /// cannot be reached in a manual test.
+  final int webMaxSessionSeconds;
 
   /// Default configuration
   factory SdkConfig.defaultConfig() {
@@ -52,8 +62,13 @@ class SdkConfig {
       enableWireframes: false,
       enableWireframeDebugEmitter: true,
       useAccessibilityLabelFallback: false,
+      webIdleTimeoutSeconds: 1800,
+      webMaxSessionSeconds: 86400,
     );
   }
+
+  /// Check if platform is web
+  static bool get isWebPlatform => kIsWeb;
 
   /// Check if platform is mobile (Android or iOS)
   static bool get isMobilePlatform =>
@@ -86,6 +101,10 @@ class SdkConfig {
       storageQuotaMB: storageQuota,
       platformOptions: PlatformOptions(
         mobile: MobileOptions(wifiOnly: wifiOnly),
+        web: WebOptions(
+          idleTimeout: Duration(seconds: webIdleTimeoutSeconds),
+          maxSessionDuration: Duration(seconds: webMaxSessionSeconds),
+        ),
       ),
       debugOptions: (showDebugMaskOverlay || wantsEmitter)
           ? DebugOptions(
