@@ -6,6 +6,7 @@ import 'package:mixpanel_flutter_session_replay/mixpanel_flutter_session_replay.
 import 'package:provider/provider.dart';
 
 import '../main.dart';
+import '../services/mixpanel_analytics.dart';
 import '../utils/constants.dart';
 
 /// Settings tab with SDK controls
@@ -64,8 +65,11 @@ class _SettingsTabState extends State<SettingsTab> {
     }
   }
 
+  /// Update the distinct ID on both SDKs so replays and events stay
+  /// attributed to the same user.
   void _identify(String distinctId) {
     context.read<MixpanelModel>().sdk?.identify(distinctId);
+    MixpanelAnalytics.instance?.identify(distinctId);
   }
 
   @override

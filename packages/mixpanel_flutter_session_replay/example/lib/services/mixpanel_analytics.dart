@@ -37,14 +37,19 @@ class MixpanelAnalytics {
     _instance = MixpanelAnalytics._(mixpanel);
   }
 
+  /// Update the distinct ID for the analytics SDK.
+  void identify(String distinctId) {
+    _mixpanel?.identify(distinctId);
+  }
+
   /// Track an event with optional properties.
   void track(String eventName, {Map<String, dynamic>? properties}) {
     _mixpanel?.track(eventName, properties: properties);
-    _mixpanel?.flush();
+    if (!kIsWeb) _mixpanel?.flush(); // no-op on web; JS SDK sends immediately
   }
 
   /// Flush queued events.
   void flush() {
-    _mixpanel?.flush();
+    if (!kIsWeb) _mixpanel?.flush(); // no-op on web; JS SDK sends immediately
   }
 }
