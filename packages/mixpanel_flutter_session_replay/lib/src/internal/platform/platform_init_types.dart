@@ -21,6 +21,9 @@ class PlatformInitResult {
   final Duration? idleTimeout;
   final Duration? maxSessionDuration;
   final Session? resumableSession;
+
+  /// Persisted idle deadline for [resumableSession], when one was stored.
+  final DateTime? resumableIdleExpiry;
   final Future<void> Function(
     String sessionId,
     int idleExpiresMs,
@@ -48,6 +51,7 @@ class PlatformInitResult {
     this.idleTimeout,
     this.maxSessionDuration,
     this.resumableSession,
+    this.resumableIdleExpiry,
     this.persistIdleExpiry,
     this.backgroundEndsSession = true,
   });

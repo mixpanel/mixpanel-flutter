@@ -15,10 +15,17 @@ class IdleTimeoutTimer {
   IdleTimeoutTimer({required this.timeout, required this.onTimeout});
 
   /// Reset the timer. Called on every user activity.
-  void reset() {
+  void reset() => resetWith(timeout);
+
+  /// Arm for an explicit remaining duration rather than the full [timeout].
+  ///
+  /// Used when resuming a persisted session, whose idle deadline was set
+  /// before this page load: re-arming for the full timeout would hand the
+  /// session another complete inactivity window.
+  void resetWith(Duration remaining) {
     _timer?.cancel();
-    if (timeout > Duration.zero) {
-      _timer = Timer(timeout, onTimeout);
+    if (remaining > Duration.zero) {
+      _timer = Timer(remaining, onTimeout);
     }
   }
 

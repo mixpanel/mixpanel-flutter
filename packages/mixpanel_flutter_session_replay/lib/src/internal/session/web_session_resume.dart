@@ -8,7 +8,17 @@ class SessionResumeInfo {
   final Session session;
   final int lastSequenceNumber;
 
-  SessionResumeInfo({required this.session, required this.lastSequenceNumber});
+  /// The persisted idle deadline, when one was stored.
+  ///
+  /// Carried through so a resumed session keeps the remaining inactivity
+  /// window instead of being granted a fresh one.
+  final DateTime? idleExpiry;
+
+  SessionResumeInfo({
+    required this.session,
+    required this.lastSequenceNumber,
+    this.idleExpiry,
+  });
 }
 
 Future<SessionResumeInfo?> checkWebSessionResume({
@@ -67,6 +77,9 @@ Future<SessionResumeInfo?> checkWebSessionResume({
       status: SessionStatus.active,
     ),
     lastSequenceNumber: lastSequenceNumber,
+    idleExpiry: idleExpiresMs == null
+        ? null
+        : DateTime.fromMillisecondsSinceEpoch(idleExpiresMs),
   );
 }
 

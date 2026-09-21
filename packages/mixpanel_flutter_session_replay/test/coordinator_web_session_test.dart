@@ -376,6 +376,130 @@ void main() {
       });
     });
 
+    group('PR #283 review findings', () {
+      test(
+        'resuming a persisted session keeps its remaining idle window',
+        () async {
+          // GIVEN a persisted session whose 30 minute idle deadline is 2
+          // minutes away
+          final idleTimer = IdleTimeoutTimer(
+            timeout: const Duration(minutes: 30),
+            onTimeout: () {},
+          );
+          addTearDown(idleTimer.dispose);
+          final coordinator = createCoordinator(
+            autoRecordSessionsPercent: 100,
+            backgroundEndsSession: false,
+            idleTimer: idleTimer,
+          );
+          final now = DateTime.utc(2026, 1, 1, 12);
+          final storedDeadline = now.add(const Duration(minutes: 2));
+          final session = Session(
+            id: 'resumed-with-deadline',
+            startTime: now.subtract(const Duration(minutes: 28)),
+            status: SessionStatus.active,
+          );
+
+          // WHEN it resumes, then goes away for 5 minutes
+          await withClock(Clock.fixed(now), () async {
+            coordinator.prepareSessionResume(
+              session,
+              idleExpiry: storedDeadline,
+            );
+            coordinator.onAppForegrounded();
+            await pumpEventQueue();
+            expect(coordinator.replayId, 'resumed-with-deadline');
+            coordinator.onAppBackgrounded();
+            await pumpEventQueue();
+          });
+          await withClock(
+            Clock.fixed(now.add(const Duration(minutes: 5))),
+            () async {
+              coordinator.onAppForegrounded();
+              await pumpEventQueue();
+            },
+          );
+
+          // THEN the stored deadline governed: 5 minutes is past it, so the
+          // session is replaced. Re-arming for a fresh 30 minutes would have
+          // kept it alive.
+          expect(coordinator.replayId, isNot('resumed-with-deadline'));
+        },
+      );
+
+      test(
+        'resuming without a stored deadline falls back to a full window',
+        () async {
+          // GIVEN a resume that carries no persisted deadline
+          final idleTimer = IdleTimeoutTimer(
+            timeout: const Duration(minutes: 30),
+            onTimeout: () {},
+          );
+          addTearDown(idleTimer.dispose);
+          final coordinator = createCoordinator(
+            autoRecordSessionsPercent: 100,
+            backgroundEndsSession: false,
+            idleTimer: idleTimer,
+          );
+          final now = DateTime.utc(2026, 1, 1, 12);
+          final session = Session(
+            id: 'resumed-no-deadline',
+            startTime: now,
+            status: SessionStatus.active,
+          );
+
+          // WHEN it resumes and returns 5 minutes later
+          await withClock(Clock.fixed(now), () async {
+            coordinator.prepareSessionResume(session);
+            coordinator.onAppForegrounded();
+            await pumpEventQueue();
+            coordinator.onAppBackgrounded();
+            await pumpEventQueue();
+          });
+          await withClock(
+            Clock.fixed(now.add(const Duration(minutes: 5))),
+            () async {
+              coordinator.onAppForegrounded();
+              await pumpEventQueue();
+            },
+          );
+
+          // THEN it is still within a full 30 minute window
+          expect(coordinator.replayId, 'resumed-no-deadline');
+        },
+      );
+
+      test(
+        'max duration ends a static session with the idle timeout disabled',
+        () async {
+          // GIVEN recording with no idle timer at all (idleTimeout: 0) and a
+          // 1 minute cap -- nothing captures, nothing interacts, and the app
+          // never leaves the foreground
+          final coordinator = createCoordinator(
+            autoRecordSessionsPercent: 100,
+            backgroundEndsSession: false,
+            maxSessionDuration: const Duration(minutes: 1),
+          );
+          coordinator.startRecording(sessionsPercent: 100);
+          await pumpEventQueue();
+          expect(coordinator.recordingState, RecordingState.recording);
+
+          // WHEN the cap elapses with no activity of any kind
+          await Future<void>.delayed(const Duration(milliseconds: 20));
+
+          // THEN a timer is armed to end it, rather than the session waiting
+          // for a capture that will never come
+          expect(
+            coordinator.hasMaxSessionTimerForTest,
+            isTrue,
+            reason:
+                'max duration must be enforced by a timer, not only on '
+                'the capture and interaction paths',
+          );
+        },
+      );
+    });
+
     group('background/foreground continuity', () {
       /// Records super-property traffic on whichever channel
       /// [SessionReplaySender] picks for the host platform.
