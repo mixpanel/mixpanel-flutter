@@ -56,6 +56,10 @@ class SessionReplayCoordinator implements WidgetCoordinator {
   bool _isAppInForeground = false;
   bool _isDisposed = false;
 
+  /// Incremented when a background pause invalidates captures that started
+  /// while recording was active.
+  int _captureGeneration = 0;
+
   @override
   bool get capturesRenderedSurface =>
       _screenshotCapturer.capturesRenderedSurface;
@@ -266,6 +270,7 @@ class SessionReplayCoordinator implements WidgetCoordinator {
     // Check max session duration (web only)
     if (_checkMaxSessionExpired()) return;
 
+    final captureGeneration = _captureGeneration;
     _logger.debug('Capturing snapshot', tag: 'coordinator');
 
     // Get JPG bytes from screenshot capturer
@@ -275,6 +280,18 @@ class SessionReplayCoordinator implements WidgetCoordinator {
       getDistinctId: _eventRecorder.getDistinctId,
       boundaryElement: boundaryElement,
     );
+
+    // A pause may have happened while the asynchronous image capture was in
+    // flight, followed by a resume before it completed. Checking only the
+    // current recording state would let that stale frame cross the pause
+    // boundary, so use the generation captured when the work began.
+    if (_captureGeneration != captureGeneration) {
+      _logger.debug(
+        'Discarding snapshot captured across a background pause',
+        tag: 'coordinator',
+      );
+      return;
+    }
 
     // Handle result using pattern matching
     switch (result) {
@@ -815,6 +832,7 @@ class SessionReplayCoordinator implements WidgetCoordinator {
     }
 
     _logger.debug('Pausing recording for background', tag: 'coordinator');
+    _captureGeneration++;
     _recordingState = RecordingState.paused;
     _backgroundPauseExpiry = clock.now().add(idleTimeout);
 

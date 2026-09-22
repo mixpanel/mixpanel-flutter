@@ -18,6 +18,7 @@ class SdkConfig {
     required this.enableWireframes,
     required this.enableWireframeDebugEmitter,
     required this.useAccessibilityLabelFallback,
+    required this.backgroundBehavior,
     required this.webIdleTimeoutSeconds,
     required this.webMaxSessionSeconds,
   });
@@ -36,6 +37,7 @@ class SdkConfig {
   final bool enableWireframes;
   final bool enableWireframeDebugEmitter;
   final bool useAccessibilityLabelFallback;
+  final ReplayBackgroundBehavior backgroundBehavior;
 
   /// Web idle timeout in seconds. 0 disables it. Exposed here so a tester can
   /// shorten the 30 minute default and actually observe an idle-out by hand.
@@ -62,6 +64,11 @@ class SdkConfig {
       enableWireframes: false,
       enableWireframeDebugEmitter: true,
       useAccessibilityLabelFallback: false,
+      backgroundBehavior: kIsWeb
+          ? const ReplayBackgroundBehavior.pause(
+              idleTimeout: Duration(minutes: 30),
+            )
+          : ReplayBackgroundBehavior.stop,
       webIdleTimeoutSeconds: 1800,
       webMaxSessionSeconds: 86400,
     );
@@ -100,10 +107,14 @@ class SdkConfig {
       remoteSettingsMode: remoteSettingsMode,
       storageQuotaMB: storageQuota,
       platformOptions: PlatformOptions(
-        mobile: MobileOptions(wifiOnly: wifiOnly),
+        mobile: MobileOptions(
+          wifiOnly: wifiOnly,
+          onBackground: backgroundBehavior,
+        ),
         web: WebOptions(
           idleTimeout: Duration(seconds: webIdleTimeoutSeconds),
           maxSessionDuration: Duration(seconds: webMaxSessionSeconds),
+          onBackground: backgroundBehavior,
         ),
       ),
       debugOptions: (showDebugMaskOverlay || wantsEmitter)

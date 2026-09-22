@@ -1662,6 +1662,44 @@ void main() {
         },
       );
 
+      test('should discard a frame that crosses a background pause', () async {
+        // GIVEN - a capture is in flight for a replay that pauses in the
+        // background instead of ending.
+        final coordinator = createCoordinator(
+          backgroundBehavior: const ReplayBackgroundBehavior.pause(
+            idleTimeout: Duration(minutes: 30),
+          ),
+        );
+        coordinator.startRecording(sessionsPercent: 100.0);
+        await pumpEventQueue();
+        final sessionId = sessionManager.getCurrentSession().id;
+        final capture = coordinator.captureSnapshot(
+          RenderRepaintBoundary(),
+          boundaryElement: boundaryElement,
+        );
+        await pumpEventQueue();
+
+        // WHEN - the replay pauses and resumes before capture completes.
+        coordinator.onAppBackgrounded();
+        coordinator.onAppForegrounded();
+        pendingCapturer.completeWithPinnedIdentity();
+        await capture;
+        await pumpEventQueue();
+
+        // THEN - recording continues with the same replay, but the frame
+        // that crossed the pause boundary is not queued.
+        expect(coordinator.recordingState, RecordingState.recording);
+        expect(sessionManager.getCurrentSession().id, sessionId);
+        expect(
+          recordingQueue.addedEvents.where(
+            (event) =>
+                event.type == EventType.screenshot ||
+                event.type == EventType.wireframe,
+          ),
+          isEmpty,
+        );
+      });
+
       test(
         'should pin metadata to the captured session when a cross-session frame lands after rotation',
         () async {
