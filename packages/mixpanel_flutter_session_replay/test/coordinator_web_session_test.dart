@@ -38,7 +38,8 @@ void main() {
       double autoRecordSessionsPercent = 0,
       IdleTimeoutTimer? idleTimer,
       Duration? maxSessionDuration,
-      bool backgroundEndsSession = true,
+      ReplayBackgroundBehavior backgroundBehavior =
+          ReplayBackgroundBehavior.stop,
       Future<void> Function(String, int, int)? persistIdleExpiry,
     }) {
       return SessionReplayCoordinator(
@@ -53,7 +54,7 @@ void main() {
         debugOptions: null,
         idleTimer: idleTimer,
         maxSessionDuration: maxSessionDuration,
-        backgroundEndsSession: backgroundEndsSession,
+        backgroundBehavior: backgroundBehavior,
         persistIdleExpiry: persistIdleExpiry,
       );
     }
@@ -389,7 +390,9 @@ void main() {
           addTearDown(idleTimer.dispose);
           final coordinator = createCoordinator(
             autoRecordSessionsPercent: 100,
-            backgroundEndsSession: false,
+            backgroundBehavior: const ReplayBackgroundBehavior.pause(
+              idleTimeout: Duration(minutes: 30),
+            ),
             idleTimer: idleTimer,
           );
           final now = DateTime.utc(2026, 1, 1, 12);
@@ -438,7 +441,9 @@ void main() {
           addTearDown(idleTimer.dispose);
           final coordinator = createCoordinator(
             autoRecordSessionsPercent: 100,
-            backgroundEndsSession: false,
+            backgroundBehavior: const ReplayBackgroundBehavior.pause(
+              idleTimeout: Duration(minutes: 30),
+            ),
             idleTimer: idleTimer,
           );
           final now = DateTime.utc(2026, 1, 1, 12);
@@ -477,7 +482,9 @@ void main() {
           // never leaves the foreground
           final coordinator = createCoordinator(
             autoRecordSessionsPercent: 100,
-            backgroundEndsSession: false,
+            backgroundBehavior: const ReplayBackgroundBehavior.pause(
+              idleTimeout: Duration(minutes: 30),
+            ),
             maxSessionDuration: const Duration(minutes: 1),
           );
           coordinator.startRecording(sessionsPercent: 100);
@@ -524,11 +531,13 @@ void main() {
         return calls;
       }
 
-      test('web keeps recording while hidden', () async {
+      test('web pauses recording while hidden', () async {
         // GIVEN a web coordinator recording a session
         final coordinator = createCoordinator(
           autoRecordSessionsPercent: 100,
-          backgroundEndsSession: false,
+          backgroundBehavior: const ReplayBackgroundBehavior.pause(
+            idleTimeout: Duration(minutes: 30),
+          ),
         );
         coordinator.startRecording(sessionsPercent: 100);
         await pumpEventQueue();
@@ -539,16 +548,18 @@ void main() {
         coordinator.onAppBackgrounded();
         await pumpEventQueue();
 
-        // THEN the session is untouched -- visibility is not a boundary
-        expect(coordinator.recordingState, RecordingState.recording);
-        expect(coordinator.replayId, replayId);
+        // THEN capture pauses without ending the replay
+        expect(coordinator.recordingState, RecordingState.paused);
+        expect(coordinator.replayId, isNull);
       });
 
       test('web keeps the same session after the tab is shown again', () async {
         // GIVEN a web coordinator recording a session
         final coordinator = createCoordinator(
           autoRecordSessionsPercent: 100,
-          backgroundEndsSession: false,
+          backgroundBehavior: const ReplayBackgroundBehavior.pause(
+            idleTimeout: Duration(minutes: 30),
+          ),
         );
         coordinator.startRecording(sessionsPercent: 100);
         await pumpEventQueue();
@@ -565,33 +576,69 @@ void main() {
         expect(coordinator.replayId, replayId);
       });
 
-      test('web keeps a manual recording alive while hidden', () async {
-        // GIVEN manual-only recording (autoRecord disabled) started by hand
+      test('pause idle timeout replaces the session on return', () async {
         final coordinator = createCoordinator(
-          autoRecordSessionsPercent: 0,
-          backgroundEndsSession: false,
+          autoRecordSessionsPercent: 100,
+          backgroundBehavior: const ReplayBackgroundBehavior.pause(
+            idleTimeout: Duration(minutes: 5),
+          ),
         );
-        coordinator.startRecording(sessionsPercent: 100);
-        await pumpEventQueue();
-        final replayId = coordinator.replayId;
+        final backgroundedAt = DateTime.utc(2026, 1, 1, 12);
+        String? replayId;
+        await withClock(Clock.fixed(backgroundedAt), () async {
+          coordinator.startRecording(sessionsPercent: 100);
+          await pumpEventQueue();
+          replayId = coordinator.replayId;
+          coordinator.onAppBackgrounded();
+          await pumpEventQueue();
+        });
 
-        // WHEN hidden and shown again
-        coordinator.onAppBackgrounded();
-        await pumpEventQueue();
-        coordinator.onAppForegrounded();
-        await pumpEventQueue();
+        await withClock(
+          Clock.fixed(backgroundedAt.add(const Duration(minutes: 6))),
+          () async {
+            coordinator.onAppForegrounded();
+            await pumpEventQueue();
+          },
+        );
 
-        // THEN it survives, though a 0% roll would never have restarted it
         expect(coordinator.recordingState, RecordingState.recording);
-        expect(coordinator.replayId, replayId);
+        expect(coordinator.replayId, isNot(replayId));
       });
 
-      test('web leaves \$mp_replay_id registered while hidden', () async {
+      test(
+        'web keeps an explicitly started recording alive while hidden',
+        () async {
+          // GIVEN recording started explicitly while auto-recording is disabled
+          final coordinator = createCoordinator(
+            autoRecordSessionsPercent: 0,
+            backgroundBehavior: const ReplayBackgroundBehavior.pause(
+              idleTimeout: Duration(minutes: 30),
+            ),
+          );
+          coordinator.startRecording(sessionsPercent: 100);
+          await pumpEventQueue();
+          final replayId = coordinator.replayId;
+
+          // WHEN hidden and shown again
+          coordinator.onAppBackgrounded();
+          await pumpEventQueue();
+          coordinator.onAppForegrounded();
+          await pumpEventQueue();
+
+          // THEN it survives, though a 0% roll would never have restarted it
+          expect(coordinator.recordingState, RecordingState.recording);
+          expect(coordinator.replayId, replayId);
+        },
+      );
+
+      test('web unregisters \$mp_replay_id while hidden', () async {
         // GIVEN a recording web session, with sender traffic captured
         final calls = recordSenderCalls();
         final coordinator = createCoordinator(
           autoRecordSessionsPercent: 100,
-          backgroundEndsSession: false,
+          backgroundBehavior: const ReplayBackgroundBehavior.pause(
+            idleTimeout: Duration(minutes: 30),
+          ),
         );
         coordinator.startRecording(sessionsPercent: 100);
         await pumpEventQueue();
@@ -607,13 +654,13 @@ void main() {
         coordinator.onAppBackgrounded();
         await pumpEventQueue();
 
-        // THEN the replay id stays attached, so events tracked by the host
-        // from a hidden tab still carry it
-        expect(calls, isNot(contains('unregisterSuperProperty')));
+        // THEN analytics events emitted while hidden are not associated with
+        // a replay interval that has no captured frames.
+        expect(calls, contains('unregisterSuperProperty'));
       });
 
       test('native ends the session on background', () async {
-        // GIVEN a native coordinator (backgroundEndsSession defaults to true)
+        // GIVEN a native coordinator (stop is the default)
         final coordinator = createCoordinator(autoRecordSessionsPercent: 0);
         coordinator.startRecording(sessionsPercent: 100);
         await pumpEventQueue();
@@ -635,7 +682,9 @@ void main() {
           // GIVEN a web session hidden with its idle timer still running
           final coordinator = createCoordinator(
             autoRecordSessionsPercent: 100,
-            backgroundEndsSession: false,
+            backgroundBehavior: const ReplayBackgroundBehavior.pause(
+              idleTimeout: Duration(minutes: 30),
+            ),
           );
           coordinator.startRecording(sessionsPercent: 100);
           await pumpEventQueue();
@@ -659,7 +708,9 @@ void main() {
         // GIVEN a web session recording under a 24h cap
         final coordinator = createCoordinator(
           autoRecordSessionsPercent: 100,
-          backgroundEndsSession: false,
+          backgroundBehavior: const ReplayBackgroundBehavior.pause(
+            idleTimeout: Duration(minutes: 30),
+          ),
           maxSessionDuration: const Duration(hours: 24),
         );
         final startedAt = DateTime.utc(2026, 1, 1, 12);
@@ -699,7 +750,9 @@ void main() {
           addTearDown(idleTimer.dispose);
           final coordinator = createCoordinator(
             autoRecordSessionsPercent: 100,
-            backgroundEndsSession: false,
+            backgroundBehavior: const ReplayBackgroundBehavior.pause(
+              idleTimeout: Duration(minutes: 30),
+            ),
             idleTimer: idleTimer,
           );
           final hiddenAt = DateTime.utc(2026, 1, 1, 12);
@@ -710,8 +763,8 @@ void main() {
             replayId = coordinator.replayId;
             coordinator.onAppBackgrounded();
             await pumpEventQueue();
-            // Still recording: hiding alone is not a boundary.
-            expect(coordinator.recordingState, RecordingState.recording);
+            // Paused, but the replay session is still retained.
+            expect(coordinator.recordingState, RecordingState.paused);
           });
 
           // WHEN the page is restored 45 minutes later
@@ -740,7 +793,9 @@ void main() {
           addTearDown(idleTimer.dispose);
           final coordinator = createCoordinator(
             autoRecordSessionsPercent: 100,
-            backgroundEndsSession: false,
+            backgroundBehavior: const ReplayBackgroundBehavior.pause(
+              idleTimeout: Duration(minutes: 30),
+            ),
             idleTimer: idleTimer,
           );
           final hiddenAt = DateTime.utc(2026, 1, 1, 12);
@@ -772,7 +827,9 @@ void main() {
         // GIVEN a hidden web session
         final coordinator = createCoordinator(
           autoRecordSessionsPercent: 0,
-          backgroundEndsSession: false,
+          backgroundBehavior: const ReplayBackgroundBehavior.pause(
+            idleTimeout: Duration(minutes: 30),
+          ),
         );
         coordinator.startRecording(sessionsPercent: 100);
         await pumpEventQueue();

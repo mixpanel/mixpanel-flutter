@@ -41,12 +41,22 @@ void main() {
         mobileWifiOnly: false,
         webIdleTimeout: const Duration(minutes: 30),
         webMaxSessionDuration: const Duration(hours: 24),
+        mobileBackgroundBehavior: ReplayBackgroundBehavior.stop,
+        webBackgroundBehavior: const ReplayBackgroundBehavior.pause(
+          idleTimeout: Duration(minutes: 30),
+        ),
         useAccessibilityLabelFallback: false,
         logger: MixpanelLogger(LogLevel.none),
         eventQueue: queue,
       );
 
       expect(result.resumableSession, isNull);
+      expect(result.backgroundBehavior, isA<ReplayBackgroundPauseBehavior>());
+      expect(
+        (result.backgroundBehavior as ReplayBackgroundPauseBehavior)
+            .idleTimeout,
+        const Duration(minutes: 30),
+      );
       expect(queue.eventCount, 1);
 
       await result.screenshotCapturer.dispose();

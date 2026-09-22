@@ -2,6 +2,8 @@ import 'package:flutter/foundation.dart';
 import 'package:mixpanel_flutter_session_replay/mixpanel_flutter_session_replay.dart';
 import '../models/sdk_config.dart';
 
+enum BackgroundBehaviorSelection { pause, stop }
+
 /// ViewModel for configuration screen
 class ConfigModel extends ChangeNotifier {
   String _token = const String.fromEnvironment('MIXPANEL_TOKEN');
@@ -18,6 +20,10 @@ class ConfigModel extends ChangeNotifier {
   bool _enableWireframes = false;
   bool _enableWireframeDebugEmitter = true;
   bool _useAccessibilityLabelFallback = false;
+  BackgroundBehaviorSelection _backgroundBehavior = kIsWeb
+      ? BackgroundBehaviorSelection.pause
+      : BackgroundBehaviorSelection.stop;
+  String _backgroundPauseIdleSeconds = '1800';
   // Overridable at launch so integration tests and manual runs can reach the
   // idle-out and max-duration paths without retyping the fields each time:
   //   flutter run --dart-define=WEB_IDLE_TIMEOUT_SECONDS=60
@@ -37,6 +43,7 @@ class ConfigModel extends ChangeNotifier {
   String? _storageQuotaError;
   String? _webIdleTimeoutError;
   String? _webMaxSessionError;
+  String? _backgroundPauseIdleError;
 
   // Getters
   String get token => _token;
@@ -53,6 +60,8 @@ class ConfigModel extends ChangeNotifier {
   bool get enableWireframes => _enableWireframes;
   bool get enableWireframeDebugEmitter => _enableWireframeDebugEmitter;
   bool get useAccessibilityLabelFallback => _useAccessibilityLabelFallback;
+  BackgroundBehaviorSelection get backgroundBehavior => _backgroundBehavior;
+  String get backgroundPauseIdleSeconds => _backgroundPauseIdleSeconds;
   String get webIdleTimeoutSeconds => _webIdleTimeoutSeconds;
   String get webMaxSessionSeconds => _webMaxSessionSeconds;
 
@@ -63,6 +72,7 @@ class ConfigModel extends ChangeNotifier {
   String? get storageQuotaError => _storageQuotaError;
   String? get webIdleTimeoutError => _webIdleTimeoutError;
   String? get webMaxSessionError => _webMaxSessionError;
+  String? get backgroundPauseIdleError => _backgroundPauseIdleError;
 
   // Setters
   void setToken(String value) {
@@ -104,6 +114,20 @@ class ConfigModel extends ChangeNotifier {
   void setWebMaxSessionSeconds(String value) {
     _webMaxSessionSeconds = value;
     _webMaxSessionError = null;
+    notifyListeners();
+  }
+
+  void setBackgroundBehavior(BackgroundBehaviorSelection value) {
+    _backgroundBehavior = value;
+    if (value == BackgroundBehaviorSelection.stop) {
+      _backgroundPauseIdleError = null;
+    }
+    notifyListeners();
+  }
+
+  void setBackgroundPauseIdleSeconds(String value) {
+    _backgroundPauseIdleSeconds = value;
+    _backgroundPauseIdleError = null;
     notifyListeners();
   }
 
@@ -198,6 +222,14 @@ class ConfigModel extends ChangeNotifier {
       isValid = false;
     }
 
+    if (_backgroundBehavior == BackgroundBehaviorSelection.pause) {
+      final pauseIdleSeconds = int.tryParse(_backgroundPauseIdleSeconds);
+      if (pauseIdleSeconds == null || pauseIdleSeconds <= 0) {
+        _backgroundPauseIdleError = 'Must be a positive number';
+        isValid = false;
+      }
+    }
+
     // Validate storage quota
     final storageQuotaInt = int.tryParse(_storageQuota);
     if (storageQuotaInt == null || storageQuotaInt <= 0) {
@@ -211,6 +243,13 @@ class ConfigModel extends ChangeNotifier {
 
   /// Get configuration from current values
   SdkConfig getConfig() {
+    final backgroundBehavior = switch (_backgroundBehavior) {
+      BackgroundBehaviorSelection.pause => ReplayBackgroundBehavior.pause(
+        idleTimeout: Duration(seconds: int.parse(_backgroundPauseIdleSeconds)),
+      ),
+      BackgroundBehaviorSelection.stop => ReplayBackgroundBehavior.stop,
+    };
+
     return SdkConfig(
       token: _token.trim(),
       distinctId: _distinctId.trim(),
@@ -226,6 +265,7 @@ class ConfigModel extends ChangeNotifier {
       enableWireframes: _enableWireframes,
       enableWireframeDebugEmitter: _enableWireframeDebugEmitter,
       useAccessibilityLabelFallback: _useAccessibilityLabelFallback,
+      backgroundBehavior: backgroundBehavior,
       webIdleTimeoutSeconds: int.parse(_webIdleTimeoutSeconds),
       webMaxSessionSeconds: int.parse(_webMaxSessionSeconds),
     );

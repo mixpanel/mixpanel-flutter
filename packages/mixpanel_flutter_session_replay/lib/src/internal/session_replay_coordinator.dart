@@ -56,6 +56,10 @@ class SessionReplayCoordinator implements WidgetCoordinator {
   bool _isAppInForeground = false;
   bool _isDisposed = false;
 
+  /// Incremented when a background pause invalidates captures that started
+  /// while recording was active.
+  int _captureGeneration = 0;
+
   @override
   bool get capturesRenderedSurface =>
       _screenshotCapturer.capturesRenderedSurface;
@@ -117,9 +121,11 @@ class SessionReplayCoordinator implements WidgetCoordinator {
   /// True when recording was stopped due to idle timeout (awaiting next interaction)
   bool _isIdledOut = false;
 
-  /// Whether leaving the foreground ends the session. See
-  /// [PlatformInitResult.backgroundEndsSession].
-  final bool _backgroundEndsSession;
+  /// Configured behavior when the app or page leaves the foreground.
+  final ReplayBackgroundBehavior _backgroundBehavior;
+
+  /// Wall-clock deadline for retaining a replay while backgrounded.
+  DateTime? _backgroundPauseExpiry;
 
   /// Callback to persist idle expiry to IndexedDB (web only)
   final Future<void> Function(
@@ -148,7 +154,7 @@ class SessionReplayCoordinator implements WidgetCoordinator {
     BackgroundTaskManager? backgroundTaskManager,
     IdleTimeoutTimer? idleTimer,
     Duration? maxSessionDuration,
-    bool backgroundEndsSession = true,
+    required ReplayBackgroundBehavior backgroundBehavior,
     Future<void> Function(
       String sessionId,
       int idleExpiresMs,
@@ -168,7 +174,7 @@ class SessionReplayCoordinator implements WidgetCoordinator {
        _debugOptions = debugOptions,
        _idleTimer = idleTimer,
        _maxSessionDuration = maxSessionDuration,
-       _backgroundEndsSession = backgroundEndsSession,
+       _backgroundBehavior = backgroundBehavior,
        _persistIdleExpiry = persistIdleExpiry {
     // Note: We do NOT auto-start recording in constructor
     // Recording will be started by LifecycleObserver when it detects app is resumed
@@ -264,6 +270,7 @@ class SessionReplayCoordinator implements WidgetCoordinator {
     // Check max session duration (web only)
     if (_checkMaxSessionExpired()) return;
 
+    final captureGeneration = _captureGeneration;
     _logger.debug('Capturing snapshot', tag: 'coordinator');
 
     // Get JPG bytes from screenshot capturer
@@ -273,6 +280,18 @@ class SessionReplayCoordinator implements WidgetCoordinator {
       getDistinctId: _eventRecorder.getDistinctId,
       boundaryElement: boundaryElement,
     );
+
+    // A pause may have happened while the asynchronous image capture was in
+    // flight, followed by a resume before it completed. Checking only the
+    // current recording state would let that stale frame cross the pause
+    // boundary, so use the generation captured when the work began.
+    if (_captureGeneration != captureGeneration) {
+      _logger.debug(
+        'Discarding snapshot captured across a background pause',
+        tag: 'coordinator',
+      );
+      return;
+    }
 
     // Handle result using pattern matching
     switch (result) {
@@ -403,8 +422,7 @@ class SessionReplayCoordinator implements WidgetCoordinator {
     return await _uploadService.flush();
   }
 
-  /// Handle app going to background
-  /// Stops recording and flushes all pending events
+  /// Handle the app or page leaving the foreground.
   @override
   void onAppBackgrounded() {
     // Check if disposed first
@@ -421,67 +439,30 @@ class SessionReplayCoordinator implements WidgetCoordinator {
     // Mark app as backgrounded (stops FrameMonitor captures)
     _isAppInForeground = false;
 
-    // Where leaving the foreground is not a session boundary (web), the
-    // session simply keeps running: recording state, the idle timer, and the
-    // registered $mp_replay_id all stay as they are. Nothing is captured
-    // regardless, because _isAppInForeground gates FrameMonitor and a hidden
-    // tab paints no frames. Only the idle timeout and the max session
-    // duration end a web session, which is what Mixpanel JS does.
-    if (!_backgroundEndsSession) {
-      if (_recordingState == RecordingState.recording) {
-        // Force past the debounce so the persisted expiry reflects the moment
-        // the tab went away, not the last capture before it.
-        _lastExpiryWriteTime = null;
-        _persistExpiryDebounced();
-      }
-      // Still flush: the queue should not sit unsent while the tab is away,
-      // and this page may never come back.
-      _flushWithBackgroundTask();
-      return;
-    }
-
-    // Stop recording and flush with background task protection (iOS)
-    // This requests extended execution time so the flush HTTP request
-    // completes before the OS suspends the process.
-    _stopRecordingWithBackgroundTask();
+    _applyBackgroundBehaviorWithBackgroundTask();
   }
 
-  /// Stop recording with background task protection for flush.
+  /// Apply the configured background transition with background task
+  /// protection for the final flush.
   ///
   /// On iOS, requests ~30 seconds of background execution time via
   /// UIApplication.beginBackgroundTask() so the flush can complete.
-  /// On other platforms, this is a no-op wrapper around stopRecording().
-  void _stopRecordingWithBackgroundTask() {
-    // Request background time (fire-and-forget — don't delay stopRecording)
+  /// On other platforms, the background task wrapper is a no-op.
+  void _applyBackgroundBehaviorWithBackgroundTask() {
     _backgroundTaskManager.beginBackgroundTask();
 
-    // stopRecording() must execute synchronously (state transitions immediately).
-    // It triggers a fire-and-forget flush internally.
-    stopRecording(cancelPendingResume: false);
+    switch (_backgroundBehavior) {
+      case ReplayBackgroundPauseBehavior(:final idleTimeout):
+        _pauseForBackground(idleTimeout);
+      case ReplayBackgroundStopBehavior():
+        stopRecording(cancelPendingResume: false);
+    }
 
     // Call flush() to join the in-progress flush via the completer,
     // then end the background task when it completes.
     _uploadService.flush().whenComplete(() {
       _backgroundTaskManager.endBackgroundTask();
     });
-  }
-
-  /// Flush without ending the session, for platforms where leaving the
-  /// foreground is not a session boundary.
-  void _flushWithBackgroundTask() {
-    _backgroundTaskManager.beginBackgroundTask();
-    _uploadService
-        .flush()
-        .catchError((e) {
-          _logger.error(
-            'Failed to flush events on background: $e',
-            null,
-            null,
-            'coordinator',
-          );
-          return FlushResult();
-        })
-        .whenComplete(_backgroundTaskManager.endBackgroundTask);
   }
 
   /// Handle app returning to foreground
@@ -507,7 +488,8 @@ class SessionReplayCoordinator implements WidgetCoordinator {
     // the OS, so it cannot be trusted on its own here. Either check stops
     // recording and marks the session idled out, so the branches below start
     // a fresh one.
-    if (_recordingState == RecordingState.recording &&
+    if ((_recordingState == RecordingState.recording ||
+            _recordingState == RecordingState.paused) &&
         !_checkMaxSessionExpired() &&
         _idleWindowExpired()) {
       _logger.info(
@@ -581,7 +563,7 @@ class SessionReplayCoordinator implements WidgetCoordinator {
 
               // Resume a persisted session only after the fresh enablement
               // verdict. Otherwise apply the normal auto-record decision.
-              _startOrResumeRecording();
+              _resumeBackgroundPauseOrStart();
             })
             .catchError((error) {
               _logger.error(
@@ -594,7 +576,7 @@ class SessionReplayCoordinator implements WidgetCoordinator {
             });
 
       case RemoteEnablementState.enabled:
-        _startOrResumeRecording();
+        _resumeBackgroundPauseOrStart();
 
       case RemoteEnablementState.disabled:
         _logger.debug(
@@ -602,6 +584,22 @@ class SessionReplayCoordinator implements WidgetCoordinator {
           tag: 'coordinator',
         );
     }
+  }
+
+  void _resumeBackgroundPauseOrStart() {
+    if (_recordingState == RecordingState.paused) {
+      if (_backgroundPauseExpired()) {
+        _logger.info(
+          'Background pause idle timeout elapsed, ending session',
+          tag: 'coordinator',
+        );
+        stopRecording(cancelPendingResume: false);
+      } else {
+        _resumeFromBackground();
+        return;
+      }
+    }
+    _startOrResumeRecording();
   }
 
   void _startOrResumeRecording() {
@@ -814,6 +812,113 @@ class SessionReplayCoordinator implements WidgetCoordinator {
     }
   }
 
+  /// Pause the current replay while the app or page is backgrounded.
+  void _pauseForBackground(Duration idleTimeout) {
+    if (_isDisposed) {
+      _logger.debug(
+        'Coordinator disposed, skipping background pause',
+        tag: 'coordinator',
+      );
+      return;
+    }
+
+    if (_recordingState != RecordingState.initializing &&
+        _recordingState != RecordingState.recording) {
+      _logger.debug(
+        'Recording is not active, skipping background pause',
+        tag: 'coordinator',
+      );
+      return;
+    }
+
+    _logger.debug('Pausing recording for background', tag: 'coordinator');
+    _captureGeneration++;
+    _recordingState = RecordingState.paused;
+    _backgroundPauseExpiry = clock.now().add(idleTimeout);
+
+    // Preserve the latest web idle deadline before the page may be frozen or
+    // discarded. Native platforms do not provide this callback.
+    _lastExpiryWriteTime = null;
+    _persistExpiryDebounced();
+
+    if (_maskRegions.value.isNotEmpty) {
+      _maskRegions.value = const <MaskRegionInfo>[];
+    }
+
+    _uploadService.stopAutoFlush();
+    SessionReplaySender.unregister('\$mp_replay_id');
+    _uploadService.flush().catchError((e) {
+      _logger.error(
+        'Failed to flush events on pause: $e',
+        null,
+        null,
+        'coordinator',
+      );
+      return FlushResult();
+    });
+
+    _logger.debug('Recording paused', tag: 'coordinator');
+  }
+
+  /// Resume a paused replay with the same replay ID.
+  void _resumeFromBackground() {
+    if (_isDisposed) {
+      _logger.debug(
+        'Coordinator disposed, skipping foreground resume',
+        tag: 'coordinator',
+      );
+      return;
+    }
+
+    if (_recordingState != RecordingState.paused) {
+      _logger.debug(
+        'Recording is not paused, skipping foreground resume',
+        tag: 'coordinator',
+      );
+      return;
+    }
+
+    if (_remoteEnablementState == RemoteEnablementState.disabled) {
+      _logger.warning(
+        'Cannot resume recording - recording remotely disabled',
+        tag: 'coordinator',
+      );
+      return;
+    }
+
+    // Web sessions still obey their idle and maximum-duration boundaries
+    // while paused. Native platforms have neither deadline configured.
+    if (_checkMaxSessionExpired()) return;
+    if (_idleWindowExpired()) {
+      handleIdleTimeout();
+      return;
+    }
+
+    final session = _sessionManager.getCurrentSession();
+    _logger.debug(
+      'Resuming session replay recording: ${session.id}',
+      tag: 'coordinator',
+    );
+
+    _screenshotCapturer.resetWireframeDedup();
+    SessionReplaySender.register({'\$mp_replay_id': session.id});
+
+    _recordingState = RecordingState.recording;
+    _backgroundPauseExpiry = null;
+    _uploadService.startAutoFlush();
+
+    // If backgrounding interrupted initial session setup, the metadata callback
+    // did not start the web idle window because the state was paused. Initialize
+    // it now. Existing sessions retain their original idle deadline.
+    if (_idleTimer != null && _idleExpiry == null) {
+      _restartIdleWindow();
+      _lastExpiryWriteTime = null;
+      _persistExpiryDebounced();
+    }
+
+    _logger.debug('Recording resumed', tag: 'coordinator');
+  }
+
   /// Stop recording session replay
   ///
   /// Stops recording and resets the sampling state. After calling this,
@@ -850,6 +955,7 @@ class SessionReplayCoordinator implements WidgetCoordinator {
     _uploadService.stopAutoFlush();
     _idleTimer?.stop();
     _idleExpiry = null;
+    _backgroundPauseExpiry = null;
     _maxSessionExpiry = null;
     _maxSessionTimer?.cancel();
     _maxSessionTimer = null;
@@ -998,6 +1104,11 @@ class SessionReplayCoordinator implements WidgetCoordinator {
   bool _idleWindowExpired() {
     final expiry = _idleExpiry;
     return expiry != null && clock.now().isAfter(expiry);
+  }
+
+  bool _backgroundPauseExpired() {
+    final expiry = _backgroundPauseExpiry;
+    return expiry != null && !clock.now().isBefore(expiry);
   }
 
   /// Check if max session duration has been exceeded.

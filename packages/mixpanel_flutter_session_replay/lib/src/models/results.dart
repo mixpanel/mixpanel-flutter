@@ -11,8 +11,11 @@ import 'session_event.dart' show WireframePayload;
 /// State transitions:
 /// ```
 /// notRecording ──[sampling passes]──► initializing ──[DB done]──► recording
-///      ▲                                                              │
-///      └──────────────────[stopRecording/background]──────────────────┘
+///      ▲                                                              │  ▲
+///      │                                                              │  │
+///      │                                                              ▼  │
+///      │                                                            paused
+///      └──────────────────────────[stopRecording]─────────────────────┘
 ///
 /// notRecording ──[sampling fails]──► notRecording (allows re-roll)
 /// ```
@@ -33,6 +36,13 @@ enum RecordingState {
   ///
   /// Screenshots and interactions are being captured and queued for upload.
   recording,
+
+  /// Recording is temporarily paused
+  ///
+  /// The current replay is retained while the app or page is backgrounded and
+  /// continues with the same replay ID on foreground. Screenshots and
+  /// interactions are not captured while paused.
+  paused,
 }
 
 /// Initialization errors that can occur during SDK setup

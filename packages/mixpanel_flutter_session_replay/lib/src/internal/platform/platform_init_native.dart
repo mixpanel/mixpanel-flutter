@@ -1,6 +1,7 @@
 export 'platform_init_types.dart';
 
 import '../../models/masking_directive.dart';
+import '../../models/configuration.dart';
 import '../logger.dart';
 import '../native_image_compressor.dart';
 import '../screenshot_capturer.dart';
@@ -17,6 +18,8 @@ Future<PlatformInitResult> platformInit({
   required bool mobileWifiOnly,
   required Duration webIdleTimeout,
   required Duration webMaxSessionDuration,
+  required ReplayBackgroundBehavior mobileBackgroundBehavior,
+  required ReplayBackgroundBehavior webBackgroundBehavior,
   WireframeEmitter? wireframeEmitter,
   required bool useAccessibilityLabelFallback,
   required MixpanelLogger logger,
@@ -42,5 +45,6 @@ Future<PlatformInitResult> platformInit({
     queue: queue,
     screenshotCapturer: screenshotCapturer,
     wifiOnly: mobileWifiOnly,
+    backgroundBehavior: mobileBackgroundBehavior,
   );
 }

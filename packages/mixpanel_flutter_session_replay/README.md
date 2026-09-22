@@ -241,8 +241,16 @@ final result = await MixpanelSessionReplay.initialize(
     logLevel: LogLevel.debug,
     flushInterval: Duration(seconds: 10),
     platformOptions: PlatformOptions(
-      mobile: MobileOptions(wifiOnly: true),
-      web: WebOptions(idleTimeout: Duration(minutes: 30)),
+      mobile: MobileOptions(
+        wifiOnly: true,
+        onBackground: ReplayBackgroundBehavior.stop,
+      ),
+      web: WebOptions(
+        idleTimeout: Duration(minutes: 30),
+        onBackground: const ReplayBackgroundBehavior.pause(
+          idleTimeout: Duration(minutes: 30),
+        ),
+      ),
     ),
   ),
 );
@@ -250,7 +258,7 @@ final result = await MixpanelSessionReplay.initialize(
 
 Initialize `mixpanel_flutter` before Session Replay. While recording is active,
 the SDK automatically registers `$mp_replay_id` as a Mixpanel super property
-and removes it when recording stops. On Flutter web this delegates to
+and removes it when recording pauses or stops. On Flutter web this delegates to
 Mixpanel JS through `mixpanel_flutter`; macOS uses the same direct plugin
 channel. If the analytics SDK is not installed or initialized, replay recording
 continues but analytics events cannot be linked to the replay automatically.
@@ -261,9 +269,16 @@ continues but analytics events cannot be linked to the replay automatically.
 |--------|-------------|---------|
 | `mobile` | Mobile-specific options (iOS/Android). See properties below | `MobileOptions()` |
 | `mobile.wifiOnly` | When `true`, replay events will only be flushed when the device has WiFi. When `false`, replay events will be flushed with any network connection including cellular | `true` |
+| `mobile.onBackground` | Whether leaving the foreground pauses or stops the replay. Capture never continues in the background | `ReplayBackgroundBehavior.stop` |
 | `web` | Flutter web-specific options. See properties below | `WebOptions()` |
 | `web.idleTimeout` | Inactivity duration after which a web replay session ends. `Duration.zero` disables it | `30 minutes` |
 | `web.maxSessionDuration` | Maximum duration of one web replay session | `24 hours` |
+| `web.onBackground` | Whether hiding the page pauses or stops the replay. Capture never continues while hidden | `ReplayBackgroundBehavior.pause(idleTimeout: Duration(minutes: 30))` |
+
+`ReplayBackgroundBehavior.pause(idleTimeout: ...)` flushes pending replay data,
+unregisters `$mp_replay_id`, and resumes the same replay when the app or page
+returns before the idle timeout. After that duration, returning starts a newly
+sampled replay. `ReplayBackgroundBehavior.stop` ends the replay immediately.
 
 #### Platform views are not recorded on web
 
@@ -637,7 +652,7 @@ Without any masking directive, auto-masking applies based on `autoMaskedViews` c
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `recordingState` | `RecordingState` | Current recording state (notRecording, initializing, recording) |
+| `recordingState` | `RecordingState` | Current recording state (notRecording, initializing, recording, paused) |
 | `distinctId` | `String` | Current user distinct ID |
 | `replayId` | `String?` | Replay ID of the current recording session, or null if not recording |
 
@@ -710,9 +725,14 @@ Without any masking directive, auto-masking applies based on `autoMaskedViews` c
 
 **PlatformOptions**
 - `mobile` - Mobile-specific options (iOS/Android)
+- `web` - Web-specific options
 
 **MobileOptions**
 - `wifiOnly` (bool, default: true) - Only upload on WiFi/Ethernet
+- `onBackground` (`ReplayBackgroundBehavior`, default: `stop`) - Pause or stop when the app leaves the foreground
+
+**WebOptions**
+- `onBackground` (`ReplayBackgroundBehavior`, default: `pause(idleTimeout: 30 minutes)`) - Pause or stop when the page is hidden
 
 ## Development
 

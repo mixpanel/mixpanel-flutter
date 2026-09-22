@@ -7,6 +7,7 @@ import '../models/config_model.dart';
 import '../models/wireframe_model.dart';
 import '../services/mixpanel_analytics.dart';
 import '../utils/constants.dart';
+import 'background_behavior_screen.dart';
 
 /// Configuration screen for SDK initialization
 class ConfigScreen extends StatefulWidget {
@@ -247,6 +248,44 @@ class _ConfigScreenState extends State<ConfigScreen> {
                     _buildLogLevelDropdown(configVm, _isInitializing),
                     const SizedBox(height: 16),
                     _buildRemoteSettingsModeDropdown(configVm, _isInitializing),
+                    if (_isWebPlatform || _isMobilePlatform) ...[
+                      const SizedBox(height: 16),
+                      Card(
+                        child: ListTile(
+                          title: const Text('Background Recording Behavior'),
+                          subtitle: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                configVm.backgroundBehavior ==
+                                        BackgroundBehaviorSelection.pause
+                                    ? 'Pause and retain for '
+                                          '${configVm.backgroundPauseIdleSeconds}s'
+                                    : 'Stop replay on background',
+                              ),
+                              if (configVm.backgroundPauseIdleError
+                                  case final error?)
+                                Text(
+                                  'Pause idle duration: $error',
+                                  style: TextStyle(
+                                    color: Theme.of(context).colorScheme.error,
+                                  ),
+                                ),
+                            ],
+                          ),
+                          trailing: const Icon(Icons.chevron_right),
+                          enabled: !_isInitializing,
+                          onTap: _isInitializing
+                              ? null
+                              : () => Navigator.of(context).push(
+                                  MaterialPageRoute<void>(
+                                    builder: (_) =>
+                                        const BackgroundBehaviorScreen(),
+                                  ),
+                                ),
+                        ),
+                      ),
+                    ],
                     if (_isWebPlatform) ...[
                       const SizedBox(height: 16),
                       _buildTextField(

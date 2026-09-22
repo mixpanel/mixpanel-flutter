@@ -10,6 +10,9 @@ export 'src/models/configuration.dart'
         AutoMaskedView,
         LogLevel,
         RemoteSettingsMode,
+        ReplayBackgroundBehavior,
+        ReplayBackgroundPauseBehavior,
+        ReplayBackgroundStopBehavior,
         PlatformOptions,
         MobileOptions,
         WebOptions;
