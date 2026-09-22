@@ -253,12 +253,25 @@ class _ConfigScreenState extends State<ConfigScreen> {
                       Card(
                         child: ListTile(
                           title: const Text('Background Recording Behavior'),
-                          subtitle: Text(
-                            configVm.backgroundBehavior ==
-                                    BackgroundBehaviorSelection.pause
-                                ? 'Pause and retain for '
-                                      '${configVm.backgroundPauseIdleSeconds}s'
-                                : 'Stop replay on background',
+                          subtitle: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                configVm.backgroundBehavior ==
+                                        BackgroundBehaviorSelection.pause
+                                    ? 'Pause and retain for '
+                                          '${configVm.backgroundPauseIdleSeconds}s'
+                                    : 'Stop replay on background',
+                              ),
+                              if (configVm.backgroundPauseIdleError
+                                  case final error?)
+                                Text(
+                                  'Pause idle duration: $error',
+                                  style: TextStyle(
+                                    color: Theme.of(context).colorScheme.error,
+                                  ),
+                                ),
+                            ],
                           ),
                           trailing: const Icon(Icons.chevron_right),
                           enabled: !_isInitializing,
