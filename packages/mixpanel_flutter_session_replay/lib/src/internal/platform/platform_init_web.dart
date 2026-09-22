@@ -7,6 +7,7 @@ import '../storage/memory_event_queue.dart';
 import '../logger.dart';
 import '../wireframe/wireframe_emitter.dart';
 import '../../models/masking_directive.dart';
+import '../../models/configuration.dart';
 import '../session/web_session_resume.dart';
 import '../screenshot_capturer.dart';
 import 'gzip_compress.dart';
@@ -23,6 +24,8 @@ Future<PlatformInitResult> platformInit({
   required bool mobileWifiOnly,
   required Duration webIdleTimeout,
   required Duration webMaxSessionDuration,
+  required ReplayBackgroundBehavior mobileBackgroundBehavior,
+  required ReplayBackgroundBehavior webBackgroundBehavior,
   WireframeEmitter? wireframeEmitter,
   required bool useAccessibilityLabelFallback,
   required MixpanelLogger logger,
@@ -138,6 +141,6 @@ Future<PlatformInitResult> platformInit({
     resumableSession: resumeInfo?.session,
     resumableIdleExpiry: resumeInfo?.idleExpiry,
     persistIdleExpiry: persistIdleExpiry,
-    backgroundEndsSession: false,
+    backgroundBehavior: webBackgroundBehavior,
   );
 }

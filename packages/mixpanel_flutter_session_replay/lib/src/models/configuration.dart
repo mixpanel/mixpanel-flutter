@@ -58,11 +58,43 @@ enum LogLevel {
   debug,
 }
 
+/// Controls what happens to an active replay when the app or page leaves the
+/// foreground.
+///
+/// No replay capture occurs while the app or page is in the background.
+sealed class ReplayBackgroundBehavior {
+  const ReplayBackgroundBehavior();
+
+  /// Retain the current replay for up to [idleTimeout].
+  const factory ReplayBackgroundBehavior.pause({
+    required Duration idleTimeout,
+  }) = ReplayBackgroundPauseBehavior;
+
+  /// Stop the current replay when the app or page leaves the foreground.
+  static const stop = ReplayBackgroundStopBehavior();
+}
+
+/// Retains the current replay while the app or page is backgrounded.
+final class ReplayBackgroundPauseBehavior extends ReplayBackgroundBehavior {
+  const ReplayBackgroundPauseBehavior({required this.idleTimeout});
+
+  /// Maximum time the replay can remain paused before a new replay is started.
+  final Duration idleTimeout;
+}
+
+/// Stops the current replay when the app or page is backgrounded.
+final class ReplayBackgroundStopBehavior extends ReplayBackgroundBehavior {
+  const ReplayBackgroundStopBehavior();
+}
+
 /// Mobile-specific configuration options
 ///
 /// These options only apply to iOS and Android platforms.
 class MobileOptions {
-  const MobileOptions({this.wifiOnly = true});
+  const MobileOptions({
+    this.wifiOnly = true,
+    this.onBackground = ReplayBackgroundBehavior.stop,
+  });
 
   /// Only upload on WiFi (default: true)
   ///
@@ -70,6 +102,11 @@ class MobileOptions {
   /// is connected to WiFi or Ethernet. Data is queued locally until a WiFi
   /// connection is available.
   final bool wifiOnly;
+
+  /// Behavior when the app leaves the foreground (default: stop).
+  ///
+  /// The default preserves the SDK's existing native lifecycle behavior.
+  final ReplayBackgroundBehavior onBackground;
 }
 
 /// Web-specific configuration options
@@ -79,6 +116,9 @@ class WebOptions {
   const WebOptions({
     this.idleTimeout = const Duration(minutes: 30),
     this.maxSessionDuration = const Duration(hours: 24),
+    this.onBackground = const ReplayBackgroundBehavior.pause(
+      idleTimeout: Duration(minutes: 30),
+    ),
   });
 
   /// Duration of user inactivity before the session is ended (default: 30 min).
@@ -95,6 +135,13 @@ class WebOptions {
   /// Hard cap regardless of user activity. When exceeded, the current session
   /// ends and a new session starts on the next user interaction.
   final Duration maxSessionDuration;
+
+  /// Behavior when the page leaves the foreground (default: pause with a
+  /// 30-minute idle timeout).
+  ///
+  /// Pausing preserves the replay across tab switches, popups, and other
+  /// temporary visibility changes while still preventing background capture.
+  final ReplayBackgroundBehavior onBackground;
 }
 
 /// Platform-specific configuration options

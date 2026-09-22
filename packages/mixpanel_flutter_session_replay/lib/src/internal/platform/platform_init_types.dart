@@ -1,4 +1,5 @@
 import '../../models/session.dart';
+import '../../models/configuration.dart';
 import '../screenshot_capturer.dart';
 import '../storage/event_queue_interface.dart';
 
@@ -31,18 +32,8 @@ class PlatformInitResult {
   )?
   persistIdleExpiry;
 
-  /// Whether leaving the foreground ends the recording session.
-  ///
-  /// True on native, matching mixpanel-android/ios: backgrounding may precede
-  /// process suspension, so the session is a real boundary and the next
-  /// foreground re-rolls sampling into a new session.
-  ///
-  /// False on web, matching Mixpanel JS: `visibilitychange` fires for a tab
-  /// switch, an OAuth or payment popup, or an alt-tab, none of which are
-  /// session boundaries. The session is staged for resume instead, so the
-  /// same `$mp_replay_id` continues and sampling is not re-rolled. Only the
-  /// idle timeout and max session duration end a web session.
-  final bool backgroundEndsSession;
+  /// Configured behavior when the app or page leaves the foreground.
+  final ReplayBackgroundBehavior backgroundBehavior;
 
   const PlatformInitResult({
     required this.queue,
@@ -53,6 +44,6 @@ class PlatformInitResult {
     this.resumableSession,
     this.resumableIdleExpiry,
     this.persistIdleExpiry,
-    this.backgroundEndsSession = true,
+    required this.backgroundBehavior,
   });
 }

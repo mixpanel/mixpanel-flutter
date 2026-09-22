@@ -451,6 +451,37 @@ void main() {
     });
 
     test(
+      'non-positive background pause idleTimeout prevents initialization',
+      () async {
+        final queue = await createQueue('invalid-background-pause-idle-test');
+        final invalidOptions = SessionReplayOptions(
+          logLevel: LogLevel.none,
+          platformOptions: const PlatformOptions(
+            mobile: MobileOptions(
+              onBackground: ReplayBackgroundBehavior.pause(
+                idleTimeout: Duration.zero,
+              ),
+            ),
+          ),
+        );
+
+        final result = await MixpanelSessionReplay.initializeWithDependencies(
+          token: 'invalid-background-pause-idle-test',
+          distinctId: testDistinctId,
+          options: invalidOptions,
+          eventQueue: queue,
+        );
+
+        expect(result.success, false);
+        expect(result.error, InitializationError.invalidToken);
+        expect(
+          result.errorMessage,
+          contains('background pause idleTimeout must be positive'),
+        );
+      },
+    );
+
+    test(
       'non-positive web maxSessionDuration prevents initialization',
       () async {
         for (final duration in [Duration.zero, const Duration(seconds: -1)]) {

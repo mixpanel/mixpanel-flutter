@@ -720,6 +720,7 @@ void main() {
 
         // THEN
         expect(options.mobile.wifiOnly, expectedWifiOnly);
+        expect(options.mobile.onBackground, ReplayBackgroundBehavior.stop);
       });
 
       test('allows custom mobile options', () {
@@ -727,10 +728,26 @@ void main() {
         final expectedWifiOnly = false;
 
         // WHEN
-        const options = PlatformOptions(mobile: MobileOptions(wifiOnly: false));
+        const options = PlatformOptions(
+          mobile: MobileOptions(
+            wifiOnly: false,
+            onBackground: ReplayBackgroundBehavior.pause(
+              idleTimeout: Duration(minutes: 15),
+            ),
+          ),
+        );
 
         // THEN
         expect(options.mobile.wifiOnly, expectedWifiOnly);
+        expect(
+          options.mobile.onBackground,
+          isA<ReplayBackgroundPauseBehavior>(),
+        );
+        expect(
+          (options.mobile.onBackground as ReplayBackgroundPauseBehavior)
+              .idleTimeout,
+          const Duration(minutes: 15),
+        );
       });
 
       test('has correct web defaults', () {
@@ -744,6 +761,12 @@ void main() {
         // THEN
         expect(options.web.idleTimeout, expectedIdleTimeout);
         expect(options.web.maxSessionDuration, expectedMaxSessionDuration);
+        expect(options.web.onBackground, isA<ReplayBackgroundPauseBehavior>());
+        expect(
+          (options.web.onBackground as ReplayBackgroundPauseBehavior)
+              .idleTimeout,
+          const Duration(minutes: 30),
+        );
       });
 
       test('allows custom web options', () {
@@ -756,12 +779,14 @@ void main() {
           web: WebOptions(
             idleTimeout: Duration(minutes: 15),
             maxSessionDuration: Duration(hours: 8),
+            onBackground: ReplayBackgroundBehavior.stop,
           ),
         );
 
         // THEN
         expect(options.web.idleTimeout, expectedIdleTimeout);
         expect(options.web.maxSessionDuration, expectedMaxSessionDuration);
+        expect(options.web.onBackground, ReplayBackgroundBehavior.stop);
       });
 
       test('allows disabling idle timeout with Duration.zero', () {
@@ -831,6 +856,7 @@ void main() {
           RecordingState.notRecording,
           RecordingState.initializing,
           RecordingState.recording,
+          RecordingState.paused,
         ]),
       );
     });

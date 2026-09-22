@@ -5,6 +5,7 @@ import 'package:meta/meta.dart';
 import 'internal/platform/platform_info.dart';
 import 'internal/platform/platform_init.dart';
 import 'models/debug_overlay_colors.dart';
+import 'models/configuration.dart' show ReplayBackgroundPauseBehavior;
 import 'models/masking_directive.dart';
 import 'models/results.dart';
 import 'session_replay_options.dart';
@@ -151,6 +152,25 @@ class MixpanelSessionReplay {
           throw ArgumentError('web idleTimeout cannot be negative');
         }
 
+        if (options.platformOptions.mobile.onBackground
+            case ReplayBackgroundPauseBehavior(:final idleTimeout)) {
+          if (idleTimeout <= Duration.zero) {
+            throw ArgumentError(
+              'mobile background pause idleTimeout must be positive',
+            );
+          }
+        }
+
+        if (webOptions.onBackground case ReplayBackgroundPauseBehavior(
+          :final idleTimeout,
+        )) {
+          if (idleTimeout <= Duration.zero) {
+            throw ArgumentError(
+              'web background pause idleTimeout must be positive',
+            );
+          }
+        }
+
         if (webOptions.maxSessionDuration <= Duration.zero) {
           throw ArgumentError('web maxSessionDuration must be positive');
         }
@@ -229,6 +249,8 @@ class MixpanelSessionReplay {
         mobileWifiOnly: options.platformOptions.mobile.wifiOnly,
         webIdleTimeout: options.platformOptions.web.idleTimeout,
         webMaxSessionDuration: options.platformOptions.web.maxSessionDuration,
+        mobileBackgroundBehavior: options.platformOptions.mobile.onBackground,
+        webBackgroundBehavior: options.platformOptions.web.onBackground,
         wireframeEmitter: wireframeEmitter,
         useAccessibilityLabelFallback:
             wireframesOptions?.useAccessibilityLabelFallback ?? false,
@@ -318,7 +340,7 @@ class MixpanelSessionReplay {
         debugOptions: options.debugOptions,
         idleTimer: idleTimer,
         maxSessionDuration: platformResult.maxSessionDuration,
-        backgroundEndsSession: platformResult.backgroundEndsSession,
+        backgroundBehavior: platformResult.backgroundBehavior,
         persistIdleExpiry: platformResult.persistIdleExpiry,
       );
 
@@ -395,6 +417,7 @@ class MixpanelSessionReplay {
   /// - [RecordingState.notRecording]: Not recording (initial state or after stop)
   /// - [RecordingState.initializing]: Sampling passed, setting up session
   /// - [RecordingState.recording]: Actively capturing screenshots and interactions
+  /// - [RecordingState.paused]: Replay retained, but capture temporarily stopped
   ///
   /// Example:
   /// ```dart

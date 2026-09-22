@@ -50,6 +50,8 @@ void main() {
       double autoRecordSessionsPercent = 0,
       RemoteSettingsMode remoteSettingsMode = RemoteSettingsMode.disabled,
       DebugOptions? debugOptions,
+      ReplayBackgroundBehavior backgroundBehavior =
+          ReplayBackgroundBehavior.stop,
     }) {
       return SessionReplayCoordinator(
         screenshotCapturer: screenshotCapturer,
@@ -61,6 +63,7 @@ void main() {
         autoRecordSessionsPercent: autoRecordSessionsPercent,
         remoteSettingsMode: remoteSettingsMode,
         debugOptions: debugOptions,
+        backgroundBehavior: backgroundBehavior,
       );
     }
 
@@ -279,6 +282,7 @@ void main() {
           autoRecordSessionsPercent: 0,
           remoteSettingsMode: RemoteSettingsMode.disabled,
           debugOptions: null,
+          backgroundBehavior: ReplayBackgroundBehavior.stop,
         );
 
         // Trigger settings check via foreground
@@ -482,19 +486,55 @@ void main() {
         expect(coordinator.isAppInForeground, false);
       });
 
-      test('stops recording when app goes to background', () async {
+      test('pauses recording when app goes to background', () async {
         // GIVEN
-        final coordinator = createCoordinator();
+        final coordinator = createCoordinator(
+          backgroundBehavior: const ReplayBackgroundBehavior.pause(
+            idleTimeout: Duration(minutes: 30),
+          ),
+        );
         coordinator.startRecording(sessionsPercent: 100.0);
         await pumpEventQueue();
         expect(coordinator.recordingState, RecordingState.recording);
+        coordinator.captureInteraction(2, const Offset(10, 20), DateTime.now());
+        await pumpEventQueue();
+        expect(await eventQueue.fetchOldest(), isNotNull);
 
         // WHEN
         coordinator.onAppBackgrounded();
+        await pumpEventQueue();
 
         // THEN
-        expect(coordinator.recordingState, RecordingState.notRecording);
+        expect(coordinator.recordingState, RecordingState.paused);
+        expect(await eventQueue.fetchOldest(), isNull);
       });
+
+      test(
+        'resumes the same session when metadata finishes while backgrounded',
+        () async {
+          // GIVEN a session whose metadata write has started but has not yet
+          // completed its asynchronous callback.
+          final coordinator = createCoordinator(
+            autoRecordSessionsPercent: 100,
+            backgroundBehavior: const ReplayBackgroundBehavior.pause(
+              idleTimeout: Duration(minutes: 30),
+            ),
+          );
+          coordinator.startRecording(sessionsPercent: 100);
+          final sessionId = sessionManager.getCurrentSession().id;
+          expect(coordinator.recordingState, RecordingState.initializing);
+
+          // WHEN the app backgrounds before the callback, then returns.
+          coordinator.onAppBackgrounded();
+          expect(coordinator.recordingState, RecordingState.paused);
+          coordinator.onAppForegrounded();
+          await pumpEventQueue();
+
+          // THEN the existing session resumes; no metadata latch is required.
+          expect(coordinator.recordingState, RecordingState.recording);
+          expect(sessionManager.getCurrentSession().id, sessionId);
+        },
+      );
 
       test('is safe to call when disposed', () async {
         // GIVEN
@@ -594,6 +634,7 @@ void main() {
             autoRecordSessionsPercent: 100.0,
             remoteSettingsMode: RemoteSettingsMode.disabled,
             debugOptions: null,
+            backgroundBehavior: ReplayBackgroundBehavior.stop,
           );
 
           // WHEN
@@ -716,6 +757,7 @@ void main() {
           autoRecordSessionsPercent: 0,
           remoteSettingsMode: RemoteSettingsMode.disabled,
           debugOptions: null,
+          backgroundBehavior: ReplayBackgroundBehavior.stop,
         );
 
         // WHEN
@@ -750,6 +792,7 @@ void main() {
             autoRecordSessionsPercent: 100.0,
             remoteSettingsMode: RemoteSettingsMode.strict,
             debugOptions: null,
+            backgroundBehavior: ReplayBackgroundBehavior.stop,
           );
 
           // WHEN - foreground triggers settings check which falls back to cache
@@ -787,6 +830,7 @@ void main() {
             autoRecordSessionsPercent: 0,
             remoteSettingsMode: RemoteSettingsMode.disabled,
             debugOptions: null,
+            backgroundBehavior: ReplayBackgroundBehavior.stop,
           );
 
           // Trigger settings check (in-flight)
@@ -876,6 +920,7 @@ void main() {
         autoRecordSessionsPercent: 100.0,
         remoteSettingsMode: remoteSettingsMode,
         debugOptions: null,
+        backgroundBehavior: ReplayBackgroundBehavior.stop,
       );
 
       test('stops wireframe capture when the server disables it', () async {
@@ -1023,6 +1068,7 @@ void main() {
           autoRecordSessionsPercent: 100.0, // local config
           remoteSettingsMode: RemoteSettingsMode.disabled,
           debugOptions: null,
+          backgroundBehavior: ReplayBackgroundBehavior.stop,
         );
 
         // WHEN - foreground triggers settings check
@@ -1060,6 +1106,7 @@ void main() {
           autoRecordSessionsPercent: 100.0, // local config
           remoteSettingsMode: RemoteSettingsMode.fallback,
           debugOptions: null,
+          backgroundBehavior: ReplayBackgroundBehavior.stop,
         );
 
         // WHEN - foreground triggers settings check, then auto-start
@@ -1093,6 +1140,7 @@ void main() {
           autoRecordSessionsPercent: 100.0,
           remoteSettingsMode: RemoteSettingsMode.strict,
           debugOptions: null,
+          backgroundBehavior: ReplayBackgroundBehavior.stop,
         );
 
         // WHEN - foreground triggers settings check
@@ -1130,6 +1178,7 @@ void main() {
             autoRecordSessionsPercent: 0, // no auto-start
             remoteSettingsMode: RemoteSettingsMode.strict,
             debugOptions: null,
+            backgroundBehavior: ReplayBackgroundBehavior.stop,
           );
 
           // Trigger settings check (in-flight, not yet resolved)
@@ -1182,6 +1231,7 @@ void main() {
           autoRecordSessionsPercent: 100.0,
           remoteSettingsMode: RemoteSettingsMode.strict,
           debugOptions: null,
+          backgroundBehavior: ReplayBackgroundBehavior.stop,
         );
 
         // WHEN - foreground triggers settings check + auto-start
@@ -1215,6 +1265,7 @@ void main() {
           autoRecordSessionsPercent: 100.0,
           remoteSettingsMode: RemoteSettingsMode.fallback,
           debugOptions: null,
+          backgroundBehavior: ReplayBackgroundBehavior.stop,
         );
 
         // WHEN - foreground triggers settings check
@@ -1279,6 +1330,31 @@ void main() {
 
         // THEN
         expect(coordinator.replayId, isNull);
+      });
+
+      test('background pause hides and restores the same replay ID', () async {
+        // GIVEN
+        final coordinator = createCoordinator(
+          autoRecordSessionsPercent: 100,
+          backgroundBehavior: const ReplayBackgroundBehavior.pause(
+            idleTimeout: Duration(minutes: 30),
+          ),
+        );
+        coordinator.onAppForegrounded();
+        await pumpEventQueue();
+        final replayId = coordinator.replayId;
+
+        // WHEN
+        coordinator.onAppBackgrounded();
+
+        // THEN
+        expect(coordinator.replayId, isNull);
+
+        // WHEN
+        coordinator.onAppForegrounded();
+
+        // THEN
+        expect(coordinator.replayId, replayId);
       });
 
       test('returns new ID after restart', () async {
@@ -1392,6 +1468,43 @@ void main() {
         expect(unregisterCalls, hasLength(1));
         expect(unregisterCalls[0].arguments, {'key': '\$mp_replay_id'});
       });
+
+      test(
+        'background pause unregisters and foreground re-registers the same replay ID',
+        () async {
+          // GIVEN
+          final coordinator = createCoordinator(
+            autoRecordSessionsPercent: 100,
+            backgroundBehavior: const ReplayBackgroundBehavior.pause(
+              idleTimeout: Duration(minutes: 30),
+            ),
+          );
+          coordinator.onAppForegrounded();
+          await pumpEventQueue();
+          final replayId = sessionManager.getCurrentSession().id;
+          methodCalls.clear();
+
+          // WHEN
+          coordinator.onAppBackgrounded();
+          await pumpEventQueue();
+          coordinator.onAppForegrounded();
+          await pumpEventQueue();
+
+          // THEN
+          expect(
+            methodCalls.where((c) => c.method == 'unregisterSuperProperty'),
+            hasLength(1),
+          );
+          final registerCalls = methodCalls
+              .where((c) => c.method == 'registerSuperProperties')
+              .toList();
+          expect(registerCalls, hasLength(1));
+          expect(
+            (registerCalls.single.arguments as Map)['\$mp_replay_id'],
+            replayId,
+          );
+        },
+      );
     });
 
     group('stopRecording flush error', () {
@@ -1433,9 +1546,14 @@ void main() {
         },
       );
 
-      test('background/foreground cycle creates new session', () async {
+      test('background/foreground cycle resumes the same session', () async {
         // GIVEN - first foreground resolves settings and starts recording
-        final coordinator = createCoordinator(autoRecordSessionsPercent: 100.0);
+        final coordinator = createCoordinator(
+          autoRecordSessionsPercent: 100.0,
+          backgroundBehavior: const ReplayBackgroundBehavior.pause(
+            idleTimeout: Duration(minutes: 30),
+          ),
+        );
         coordinator.onAppForegrounded();
         await pumpEventQueue();
         expect(coordinator.recordingState, RecordingState.recording);
@@ -1446,9 +1564,10 @@ void main() {
         coordinator.onAppForegrounded();
         await pumpEventQueue();
 
-        // THEN - new session created
+        // THEN - existing session resumed
         final secondSession = sessionManager.getCurrentSession();
-        expect(secondSession.id, isNot(equals(firstSession.id)));
+        expect(secondSession.id, firstSession.id);
+        expect(coordinator.recordingState, RecordingState.recording);
       });
     });
 
