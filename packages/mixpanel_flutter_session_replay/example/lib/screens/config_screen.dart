@@ -7,6 +7,7 @@ import '../models/config_model.dart';
 import '../models/wireframe_model.dart';
 import '../services/mixpanel_analytics.dart';
 import '../utils/constants.dart';
+import 'background_behavior_screen.dart';
 
 /// Configuration screen for SDK initialization
 class ConfigScreen extends StatefulWidget {
@@ -26,7 +27,6 @@ class _ConfigScreenState extends State<ConfigScreen> {
   late TextEditingController _storageQuotaController;
   late TextEditingController _webIdleTimeoutController;
   late TextEditingController _webMaxSessionController;
-  late TextEditingController _backgroundPauseIdleController;
 
   bool get _isWebPlatform => kIsWeb;
 
@@ -56,9 +56,6 @@ class _ConfigScreenState extends State<ConfigScreen> {
     _webMaxSessionController = TextEditingController(
       text: configVm.webMaxSessionSeconds,
     );
-    _backgroundPauseIdleController = TextEditingController(
-      text: configVm.backgroundPauseIdleSeconds,
-    );
 
     // Update ViewModel when text changes
     _tokenController.addListener(
@@ -82,11 +79,6 @@ class _ConfigScreenState extends State<ConfigScreen> {
     _webMaxSessionController.addListener(
       () => configVm.setWebMaxSessionSeconds(_webMaxSessionController.text),
     );
-    _backgroundPauseIdleController.addListener(
-      () => configVm.setBackgroundPauseIdleSeconds(
-        _backgroundPauseIdleController.text,
-      ),
-    );
   }
 
   @override
@@ -98,7 +90,6 @@ class _ConfigScreenState extends State<ConfigScreen> {
     _storageQuotaController.dispose();
     _webIdleTimeoutController.dispose();
     _webMaxSessionController.dispose();
-    _backgroundPauseIdleController.dispose();
     super.dispose();
   }
 
@@ -259,31 +250,28 @@ class _ConfigScreenState extends State<ConfigScreen> {
                     _buildRemoteSettingsModeDropdown(configVm, _isInitializing),
                     if (_isWebPlatform || _isMobilePlatform) ...[
                       const SizedBox(height: 16),
-                      _buildBackgroundBehaviorDropdown(
-                        configVm,
-                        _isInitializing,
-                      ),
-                      if (configVm.backgroundBehavior ==
-                          BackgroundBehaviorSelection.pause) ...[
-                        const SizedBox(height: 16),
-                        _buildTextField(
-                          controller: _backgroundPauseIdleController,
-                          label: 'Background Pause Idle (seconds)',
-                          enabled: !_isInitializing,
-                          keyboardType: TextInputType.number,
-                          errorText: configVm.backgroundPauseIdleError,
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Return before this duration to continue the same '
-                          'replay. Returning later starts a new replay.',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontStyle: FontStyle.italic,
-                            color: Colors.grey[600],
+                      Card(
+                        child: ListTile(
+                          title: const Text('Background Recording Behavior'),
+                          subtitle: Text(
+                            configVm.backgroundBehavior ==
+                                    BackgroundBehaviorSelection.pause
+                                ? 'Pause and retain for '
+                                      '${configVm.backgroundPauseIdleSeconds}s'
+                                : 'Stop replay on background',
                           ),
+                          trailing: const Icon(Icons.chevron_right),
+                          enabled: !_isInitializing,
+                          onTap: _isInitializing
+                              ? null
+                              : () => Navigator.of(context).push(
+                                  MaterialPageRoute<void>(
+                                    builder: (_) =>
+                                        const BackgroundBehaviorScreen(),
+                                  ),
+                                ),
                         ),
-                      ],
+                      ),
                     ],
                     if (_isWebPlatform) ...[
                       const SizedBox(height: 16),
@@ -435,35 +423,6 @@ class _ConfigScreenState extends State<ConfigScreen> {
           ? null
           : (value) {
               if (value != null) configVm.setRemoteSettingsMode(value);
-            },
-    );
-  }
-
-  Widget _buildBackgroundBehaviorDropdown(
-    ConfigModel configVm,
-    bool isInitializing,
-  ) {
-    const labels = {
-      BackgroundBehaviorSelection.pause: 'Pause and retain replay',
-      BackgroundBehaviorSelection.stop: 'Stop replay',
-    };
-
-    return DropdownButtonFormField<BackgroundBehaviorSelection>(
-      value: configVm.backgroundBehavior,
-      decoration: const InputDecoration(
-        labelText: 'When App Leaves Foreground',
-        border: OutlineInputBorder(),
-      ),
-      items: BackgroundBehaviorSelection.values.map((behavior) {
-        return DropdownMenuItem(
-          value: behavior,
-          child: Text(labels[behavior]!),
-        );
-      }).toList(),
-      onChanged: isInitializing
-          ? null
-          : (value) {
-              if (value != null) configVm.setBackgroundBehavior(value);
             },
     );
   }
