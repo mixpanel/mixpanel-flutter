@@ -1114,8 +1114,9 @@ class SessionReplayCoordinator implements WidgetCoordinator {
   /// Check if max session duration has been exceeded.
   /// Returns true if expired (and triggers idle-out flow).
   bool _checkMaxSessionExpired() {
-    if (_maxSessionExpiry == null) return false;
-    if (clock.now().isAfter(_maxSessionExpiry!)) {
+    final expiry = _maxSessionExpiry;
+    if (expiry == null) return false;
+    if (!clock.now().isBefore(expiry)) {
       _logger.info(
         'Max session duration exceeded, stopping recording',
         tag: 'coordinator',

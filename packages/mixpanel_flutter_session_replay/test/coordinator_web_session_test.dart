@@ -1,4 +1,5 @@
 import 'package:clock/clock.dart';
+import 'package:fake_async/fake_async.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/session_replay_coordinator.dart';
@@ -505,6 +506,25 @@ void main() {
           );
         },
       );
+
+      test('max duration expires at the exact deadline', () {
+        fakeAsync((async) {
+          // GIVEN a static recording with a one-minute maximum duration
+          final coordinator = createCoordinator(
+            autoRecordSessionsPercent: 100,
+            maxSessionDuration: const Duration(minutes: 1),
+          );
+          coordinator.startRecording(sessionsPercent: 100);
+          async.flushMicrotasks();
+          expect(coordinator.recordingState, RecordingState.recording);
+
+          // WHEN the one-shot timer observes exactly the expiry instant
+          async.elapse(const Duration(minutes: 1));
+
+          // THEN equality counts as expired and the recording is stopped
+          expect(coordinator.recordingState, RecordingState.notRecording);
+        });
+      });
     });
 
     group('background/foreground continuity', () {

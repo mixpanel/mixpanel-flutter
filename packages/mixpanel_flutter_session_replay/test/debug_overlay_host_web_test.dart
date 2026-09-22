@@ -1,15 +1,18 @@
 @TestOn('browser')
 library;
 
-import 'dart:ui' show Color, Offset, Rect, Size;
-
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/platform/debug_overlay_host.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/platform/debug_overlay_host_web.dart'
     as impl;
 import 'package:mixpanel_flutter_session_replay/src/models/debug_overlay_colors.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/masking_directive.dart';
+import 'package:mixpanel_flutter_session_replay/src/models/results.dart';
+import 'package:mixpanel_flutter_session_replay/src/widgets/frame_monitor.dart';
 import 'package:web/web.dart' as web;
+
+import 'helpers/fake_widget_coordinator.dart';
 
 void main() {
   const containerId = 'mp-session-replay-debug-overlay';
@@ -175,5 +178,58 @@ void main() {
 
     // THEN
     expect(container(), isNull);
+  });
+
+  testWidgets('repositions unchanged regions when the boundary moves', (
+    tester,
+  ) async {
+    // GIVEN a rendered-surface capture with one stable mask region
+    final coordinator = FakeWidgetCoordinator(
+      recordingState: RecordingState.recording,
+      capturesRenderedSurface: true,
+    );
+    coordinator.maskRegionsNotifier.value = [
+      MaskRegionInfo(const Rect.fromLTWH(0, 0, 10, 10), MaskSource.auto),
+    ];
+    final frameNotifier = ChangeNotifier();
+    addTearDown(frameNotifier.dispose);
+    var boundaryOffset = 10.0;
+    late StateSetter updateLayout;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: StatefulBuilder(
+          builder: (context, setState) {
+            updateLayout = setState;
+            return Align(
+              alignment: Alignment.topLeft,
+              child: Padding(
+                padding: EdgeInsets.only(left: boundaryOffset),
+                child: FrameMonitor(
+                  frameNotifier: frameNotifier,
+                  coordinator: coordinator,
+                  debugOptions: const DebugOptions(),
+                  child: const SizedBox(width: 100, height: 100),
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+    await tester.pump();
+    final initialLeft = container()!.style.left;
+
+    // WHEN layout moves without changing the mask-region list and a new frame
+    // is rendered
+    updateLayout(() => boundaryOffset = 40);
+    await tester.pump();
+    // ignore: invalid_use_of_protected_member, invalid_use_of_visible_for_testing_member
+    frameNotifier.notifyListeners();
+
+    // THEN the DOM overlay follows the capture boundary
+    expect(container()!.style.left, isNot(initialLeft));
+
+    await tester.pump(const Duration(milliseconds: 501));
   });
 }

@@ -97,6 +97,12 @@ class _FrameMonitorState extends State<FrameMonitor> {
   void _onFrame() {
     if (!mounted) return;
 
+    // The region coordinates are local to the capture boundary. Refresh the
+    // out-of-surface web overlay on every rendered frame so scrolling,
+    // resizing, or moving that boundary cannot leave otherwise-unchanged
+    // regions at stale viewport coordinates.
+    _onMaskRegionsChanged();
+
     // Skip processing if remotely disabled
     if (widget.coordinator.remoteEnablementState ==
         RemoteEnablementState.disabled) {
