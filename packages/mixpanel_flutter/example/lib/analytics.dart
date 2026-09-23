@@ -8,12 +8,12 @@ class MixpanelManager {
       _instance = await Mixpanel.init("YOUR_PROJECT_TOKEN",
           optOutTrackingDefault: false,
           trackAutomaticEvents: true,
+          featureFlags: FeatureFlagsConfig(enabled: true),
           autocaptureOptions: const AutocaptureOptions(
             clickOptions: ClickOptions(),
             rageClickOptions: RageClickOptions(),
             deadClickOptions: DeadClickOptions(),
-          ),
-          featureFlags: FeatureFlagsConfig(enabled: true));
+          ));
       _instance?.setLoggingEnabled(true);
     }
     return _instance!;

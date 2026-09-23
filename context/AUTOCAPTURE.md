@@ -250,3 +250,23 @@ Nested-options validation: all 239 tests pass on Flutter 3.19.0 and 3.44.6.
 Added default/boundary coverage and end-to-end custom rage/dead configuration
 checks with basic click emission disabled. All eight enable combinations retain
 coverage through the nested API. Focused analysis and formatting pass.
+
+
+## Non-architectural review updates (2026-09-23)
+
+Public rage/dead options now expose final `Duration timeWindow` fields instead
+of integer `timeWindowMs` getters. Defaults remain 1 second / 500 milliseconds;
+comparisons and timers preserve microsecond precision within the existing
+1 millisecond–1 minute limits. Threshold/radius have constructor assertions.
+Duration assertions run when consumed because Dart cannot evaluate Duration
+comparisons in const constructor assertions. Internal normalization preserves
+release-mode bounds and the nonfinite-radius fallback. No widget decomposition
+is included. Example ordering follows init; feature changelog additions removed.
+
+Dedicated resolver, snapshot and dead-detector tests exercise privacy/ownership,
+portal fallback and budgets, transforms, unsupported surfaces, editable exclusion,
+Radio state, unknown/changed suppression, candidate replacement and scheduled-frame
+cancellation. These fixtures do not initialize Mixpanel or mock analytics channels.
+
+Validation: all 269 analytics tests pass on Flutter 3.19.0 and 3.44.6;
+focused analysis of lib and test/autocapture reports no issues on both.

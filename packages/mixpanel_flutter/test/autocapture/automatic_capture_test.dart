@@ -724,7 +724,7 @@ void main() {
     await init(const AutocaptureOptions(
       clickOptions: ClickOptions(enabled: false),
       rageClickOptions:
-          RageClickOptions(clickThreshold: 2, timeWindowMs: 100, radius: 8),
+          RageClickOptions(clickThreshold: 2, timeWindow: Duration(milliseconds: 100), radius: 8),
       deadClickOptions: DeadClickOptions(enabled: false),
     ));
     await tester.pumpWidget(host(button()));
@@ -742,7 +742,7 @@ void main() {
     await init(const AutocaptureOptions(
       clickOptions: ClickOptions(enabled: false),
       rageClickOptions: RageClickOptions(enabled: false),
-      deadClickOptions: DeadClickOptions(timeWindowMs: 100),
+      deadClickOptions: DeadClickOptions(timeWindow: Duration(milliseconds: 100)),
     ));
     await tester.pumpWidget(host(button()));
     await tester.tap(find.text('Buy'));

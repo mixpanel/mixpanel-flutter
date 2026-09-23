@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mixpanel_flutter/mixpanel_flutter.dart';
 import 'package:mixpanel_flutter/src/autocapture/rage_click_tracker.dart';
+import 'package:mixpanel_flutter/src/autocapture/detection_limits.dart';
 
 void main() {
   test('nested options preserve defaults and bounded settings', () {
@@ -9,14 +10,10 @@ void main() {
     expect(defaults.rageClickOptions.enabled, isTrue);
     expect(defaults.deadClickOptions.enabled, isTrue);
     expect(defaults.rageClickOptions.clickThreshold, 4);
-    expect(defaults.rageClickOptions.timeWindowMs, 1000);
+    expect(defaults.rageClickOptions.timeWindow, const Duration(seconds: 1));
     expect(defaults.rageClickOptions.radius, 44);
-    expect(defaults.deadClickOptions.timeWindowMs, 500);
-    expect(const RageClickOptions(clickThreshold: 1000).clickThreshold, 100);
-    expect(const RageClickOptions(timeWindowMs: 999999).timeWindowMs, 60000);
-    expect(const RageClickOptions(radius: -1).radius, 0);
-    expect(const RageClickOptions(radius: 999999).radius, 100000);
-    expect(const DeadClickOptions(timeWindowMs: 999999).timeWindowMs, 60000);
+    expect(defaults.deadClickOptions.timeWindow,
+        const Duration(milliseconds: 500));
     expect(
         const AutocaptureOptions(
           clickOptions: ClickOptions(enabled: false),
@@ -57,15 +54,45 @@ void main() {
     tracker.reset();
     expect(tracker.record(0, 0, const Duration(seconds: 1)), false);
   });
-  test('invalid coordinates are ignored and options are bounded', () {
-    const options = RageClickOptions(
-        clickThreshold: -1, timeWindowMs: 0, radius: double.nan);
-    expect(options.clickThreshold, 2);
-    expect(options.timeWindowMs, 1);
-    expect(options.radius, 44);
-    expect(const DeadClickOptions(timeWindowMs: -5).timeWindowMs, 1);
-    final tracker = RageClickTracker(options);
+  test('invalid coordinates are ignored', () {
+    final tracker = RageClickTracker(const RageClickOptions());
     expect(tracker.record(double.infinity, 0, Duration.zero), false);
     expect(tracker.record(0, 0, Duration.zero), false);
+  });
+
+  test('invalid public scalar settings assert during development', () {
+    expect(() => RageClickOptions(clickThreshold: 1), throwsAssertionError);
+    expect(() => RageClickOptions(clickThreshold: 101), throwsAssertionError);
+    expect(() => RageClickOptions(radius: -1), throwsAssertionError);
+    expect(() => RageClickOptions(radius: double.nan), throwsAssertionError);
+    expect(
+        () => RageClickOptions(radius: double.infinity), throwsAssertionError);
+    expect(
+        () =>
+            RageClickTracker(const RageClickOptions(timeWindow: Duration.zero)),
+        throwsAssertionError);
+  });
+
+  test('release normalization retains bounds and nonfinite fallback', () {
+    expect(normalizeClickThreshold(-1), 2);
+    expect(normalizeClickThreshold(101), 100);
+    expect(normalizeRadius(double.nan), 44);
+    expect(normalizeRadius(double.infinity), 44);
+    expect(normalizeRadius(-1), 0);
+    expect(normalizeRadius(100001), 100000);
+    expect(normalizeTimeWindow(Duration.zero), const Duration(milliseconds: 1));
+    expect(normalizeTimeWindow(const Duration(minutes: 2)),
+        const Duration(minutes: 1));
+    expect(normalizeTimeWindow(const Duration(microseconds: 1500)),
+        const Duration(microseconds: 1500));
+  });
+
+  test('rage duration preserves microsecond precision at boundary', () {
+    final tracker = RageClickTracker(const RageClickOptions(
+        clickThreshold: 2, timeWindow: Duration(microseconds: 1500)));
+    expect(tracker.record(0, 0, Duration.zero), false);
+    expect(tracker.record(0, 0, const Duration(microseconds: 1500)), true);
+    expect(tracker.record(0, 0, Duration.zero), false);
+    expect(tracker.record(0, 0, const Duration(microseconds: 1501)), false);
   });
 }

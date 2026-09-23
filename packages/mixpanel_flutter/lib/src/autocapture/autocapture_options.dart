@@ -43,27 +43,22 @@ class ClickOptions {
 class RageClickOptions {
   const RageClickOptions({
     this.enabled = true,
-    int clickThreshold = 4,
-    int timeWindowMs = 1000,
-    double radius = 44,
-  })  : _threshold = clickThreshold,
-        _window = timeWindowMs,
-        _radius = radius;
+    this.clickThreshold = 4,
+    this.timeWindow = const Duration(seconds: 1),
+    this.radius = 44,
+  })  : assert(clickThreshold >= 2 && clickThreshold <= 100),
+        assert(radius >= 0 && radius <= 100000);
 
   final bool enabled;
-  final int _threshold;
-  final int _window;
-  final double _radius;
 
-  /// Number of taps required. Defaults to 4; clamped to 2–100.
-  int get clickThreshold => _threshold.clamp(2, 100);
+  /// Number of taps required, between 2 and 100. Defaults to 4.
+  final int clickThreshold;
 
-  /// Rolling window. Defaults to 1000 ms; clamped to 1–60000 ms.
-  int get timeWindowMs => _window.clamp(1, 60000);
+  /// Rolling window, between 1 ms and 1 minute. Defaults to 1 second.
+  final Duration timeWindow;
 
-  /// Radius in logical pixels. Defaults to 44. Nonfinite values use 44;
-  /// finite values are clamped to 0–100000.
-  double get radius => _radius.isFinite ? _radius.clamp(0, 100000) : 44;
+  /// Finite radius in logical pixels, between 0 and 100000. Defaults to 44.
+  final double radius;
 }
 
 /// Configuration for dead-click detection.
@@ -72,12 +67,13 @@ class RageClickOptions {
 /// properties it captures may change in a future release before general
 /// availability. Pin your SDK version if you build reports on autocaptured events.
 class DeadClickOptions {
-  const DeadClickOptions({this.enabled = true, int timeWindowMs = 500})
-      : _window = timeWindowMs;
+  const DeadClickOptions({
+    this.enabled = true,
+    this.timeWindow = const Duration(milliseconds: 500),
+  });
 
   final bool enabled;
-  final int _window;
 
-  /// Response deadline. Defaults to 500 ms; clamped to 1–60000 ms.
-  int get timeWindowMs => _window.clamp(1, 60000);
+  /// Response deadline, between 1 ms and 1 minute. Defaults to 500 ms.
+  final Duration timeWindow;
 }

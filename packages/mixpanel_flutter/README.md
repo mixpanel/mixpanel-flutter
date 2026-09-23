@@ -173,6 +173,9 @@ Have any questions? Reach out to Mixpanel [Support](https://help.mixpanel.com/hc
 
 The next analytics release requires Flutter 3.19.0 or later (Dart 3.3.0 or
 later). This package requirement applies even when automatic capture is disabled.
+Automatic targeting uses `Semantics.identifier`, available from Flutter 3.19.
+Applications on older Flutter versions must upgrade Flutter or remain on an
+earlier analytics release.
 
 ### Manual frustration signals (Beta)
 
@@ -223,9 +226,9 @@ final mixpanel = await Mixpanel.init(
   autocaptureOptions: const AutocaptureOptions(
     clickOptions: ClickOptions(enabled: true),
     rageClickOptions: RageClickOptions(
-      enabled: true, clickThreshold: 4, timeWindowMs: 1000, radius: 44,
+      enabled: true, clickThreshold: 4, timeWindow: Duration(seconds: 1), radius: 44,
     ),
-    deadClickOptions: DeadClickOptions(enabled: true, timeWindowMs: 500),
+    deadClickOptions: DeadClickOptions(enabled: true, timeWindow: Duration(milliseconds: 500)),
   ),
 );
 final observer = MixpanelAutocaptureNavigatorObserver(instance: mixpanel);
@@ -282,3 +285,10 @@ Target lookup follows hit-test render ancestry. Response checks retain a bounded
 view traversal; exceeding the node/depth budget suppresses affected signals and
 emits one generic diagnostic per process. This protects app responsiveness but
 means exceptionally complex visible views can lack automatic dead-click events.
+
+Autocapture time windows accept `Duration` values from 1 millisecond to 1 minute,
+including microsecond precision within that range. The rage threshold must be
+2–100 and radius must be finite and 0–100000 logical pixels. Debug assertions
+check threshold/radius at construction and durations when detectors consume them
+(the configuration constructors remain `const`). In release builds, detectors
+clamp out-of-range values and use radius 44 for nonfinite values.

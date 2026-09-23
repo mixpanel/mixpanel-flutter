@@ -3,6 +3,7 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter/foundation.dart';
 import 'click_event.dart';
 import 'response_snapshot.dart';
+import 'detection_limits.dart';
 
 /// One pending check. Unsupported snapshots suppress events, never imply dead.
 class DeadClickDetector {
@@ -20,11 +21,12 @@ class DeadClickDetector {
     _baseline = baseline;
   }
 
-  void arm(ClickEvent event, int timeoutMs) {
+  void arm(ClickEvent event, Duration timeout) {
+    assert(validTimeWindow(timeout));
     if (_baseline == null) return;
     _event = event;
     final expected = _generation;
-    _timer = Timer(Duration(milliseconds: timeoutMs), () {
+    _timer = Timer(normalizeTimeWindow(timeout), () {
       if (expected != _generation) return;
       // Let a response already scheduled for this frame finish building first.
       if (SchedulerBinding.instance.hasScheduledFrame) {

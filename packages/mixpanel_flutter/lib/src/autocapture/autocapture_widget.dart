@@ -34,7 +34,7 @@ class MixpanelAutocaptureWidget extends StatefulWidget {
 
 class _CaptureState extends State<MixpanelAutocaptureWidget>
     with WidgetsBindingObserver {
-  // Android CurtainsHelper accepts taps lasting at most 500 ms (inclusive).
+  // Accept taps lasting at most 500 ms (inclusive).
   static const _maxTapDuration = Duration(milliseconds: 500);
   final _resolver = TargetResolver();
   final _pointers = <int>{};
@@ -284,7 +284,7 @@ class _CaptureState extends State<MixpanelAutocaptureWidget>
       _deadGeneration = generation;
       _deadTarget = WeakReference(target.element);
       _dead.begin(baseline);
-      _dead.arm(click, options.deadClickOptions.timeWindowMs);
+      _dead.arm(click, options.deadClickOptions.timeWindow);
     }
   }
 
