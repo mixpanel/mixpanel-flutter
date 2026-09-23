@@ -142,7 +142,7 @@ void main() {
     });
 
     testWidgets(
-      'downscales the raster and masks while retaining logical metadata',
+      'keeps native raster and mask coordinates at logical resolution',
       (tester) async {
         tester.view.devicePixelRatio = 1;
         tester.view.physicalSize = const Size(1920, 1080);
@@ -207,15 +207,15 @@ void main() {
           ),
           (1920, 1080),
         );
-        expect((compressor.width, compressor.height), (1280, 720));
+        expect((compressor.width, compressor.height), (1920, 1080));
         expect(success.maskRegions, isNotEmpty);
         expect(compressor.maskRects, hasLength(success.maskRegions.length));
         final logicalMask = success.maskRegions.first.bounds;
         final rasterMask = compressor.maskRects!.first;
-        expect(rasterMask.left, closeTo(logicalMask.left * 2 / 3, 0.01));
-        expect(rasterMask.top, closeTo(logicalMask.top * 2 / 3, 0.01));
-        expect(rasterMask.width, closeTo(logicalMask.width * 2 / 3, 0.01));
-        expect(rasterMask.height, closeTo(logicalMask.height * 2 / 3, 0.01));
+        expect(rasterMask.left, closeTo(logicalMask.left, 0.01));
+        expect(rasterMask.top, closeTo(logicalMask.top, 0.01));
+        expect(rasterMask.width, closeTo(logicalMask.width, 0.01));
+        expect(rasterMask.height, closeTo(logicalMask.height, 0.01));
       },
     );
 

@@ -164,6 +164,9 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
         working-directory: packages/mixpanel_flutter_session_replay
+      - name: Test analytics web event bridge
+        run: flutter test --platform chrome test/event_bridge_web_test.dart
+        working-directory: packages/mixpanel_flutter
       - name: Run browser tests
         run: >-
           flutter test --platform chrome

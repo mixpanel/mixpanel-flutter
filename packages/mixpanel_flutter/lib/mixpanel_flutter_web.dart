@@ -1,11 +1,13 @@
 import 'dart:async';
 import 'dart:js_interop';
+import 'dart:js_interop_unsafe';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_web_plugins/flutter_web_plugins.dart';
 import 'package:mixpanel_flutter/src/version.dart';
 import 'package:mixpanel_flutter/web/mixpanel_js_bindings.dart';
+import 'package:mixpanel_flutter_common/mixpanel_flutter_common.dart';
 
 /// Safely converts Dart values to JavaScript-compatible types for web interop.
 ///
@@ -67,6 +69,30 @@ JSAny? safeJsify(dynamic value) {
 
 /// A web implementation of the MixpanelFlutter plugin.
 class MixpanelFlutterPlugin {
+  static bool _eventBridgeActive = false;
+
+  // Installed through init config because the web snippet queues init while
+  // the full JS library loads, but does not stub add_hook.
+  static final JSFunction _onTrackHook =
+      ((JSString eventName, JSAny? properties) {
+    if (_eventBridgeActive) {
+      try {
+        final decoded = properties?.dartify();
+        // ignore: invalid_use_of_internal_member
+        MixpanelEventBridge.notifyListeners(
+          eventName: eventName.toDart,
+          properties:
+              decoded is Map ? Map<String, Object?>.from(decoded) : null,
+        );
+      } catch (error) {
+        // An observer must never interrupt Mixpanel's track call.
+        debugPrint('[Mixpanel] Event bridge failed: $error');
+      }
+    }
+    // on_track is a transform hook: return the original event untouched.
+    return <JSAny?>[eventName, properties].toJS;
+  }).toJS;
+
   static final Map<String, String> _mixpanelProperties = {
     '\$lib_version': sdkVersion,
     'mp_lib': 'flutter',
@@ -91,6 +117,12 @@ class MixpanelFlutterPlugin {
     switch (call.method) {
       case 'initialize':
         initialize(call);
+        break;
+      case 'startEventBridge':
+        _eventBridgeActive = true;
+        break;
+      case 'stopEventBridge':
+        _eventBridgeActive = false;
         break;
       case 'setServerURL':
         handleSetServerURL(call);
@@ -251,7 +283,13 @@ class MixpanelFlutterPlugin {
       }
     }
 
-    init(token, safeJsify(initConfig));
+    final jsConfig = safeJsify(initConfig) as JSObject;
+    final hooks = jsConfig.getProperty<JSAny?>('hooks'.toJS);
+    final JSObject jsHooks =
+        hooks is JSObject ? hooks : <String, Object?>{}.jsify() as JSObject;
+    jsHooks.setProperty('on_track'.toJS, _onTrackHook);
+    jsConfig.setProperty('hooks'.toJS, jsHooks);
+    init(token, jsConfig);
   }
 
   void handleSetServerURL(MethodCall call) {

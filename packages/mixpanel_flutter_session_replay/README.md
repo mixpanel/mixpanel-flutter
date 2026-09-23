@@ -46,6 +46,13 @@ The minimum browser versions above are determined by the newest required API.
 Applications should still test the browser versions and devices represented in
 their own audience, particularly at desktop viewport sizes.
 
+Event-triggered recording on web requires a Mixpanel JS build with the
+`on_track` hook. The Flutter web plugin passes tracked events from that hook to
+the replay trigger evaluator. Until the hook is available in the CDN release,
+set `MIXPANEL_CUSTOM_LIB_URL` to a build that includes it before loading the
+Mixpanel Flutter web snippet. Older JS builds can still track events, but
+event-triggered recording will not start from those events.
+
 #### Content Security Policy
 
 The SDK creates its workers from generated `blob:` URLs. A restrictive Content
@@ -73,14 +80,14 @@ unuploaded events and abandoned session metadata after five days. The
 
 ### Capture resolution
 
-To bound capture cost, screenshot rasters are downscaled when the logical
-viewport exceeds the pixel area of 1280×720. Aspect ratio is preserved and the
+On web, screenshot rasters are downscaled when the logical viewport exceeds
+the pixel area of 1280×720. Aspect ratio is preserved and the
 longest raster edge is additionally limited to 1920 pixels. The limiting ratio
 is calculated exactly so the raster retains as much detail as that budget
 allows. Replay metadata, interactions, and wireframes remain in the original
 logical coordinate space, so downscaling does not change replay layout or
-pointer alignment. Typical phone viewports are already below this limit and
-are captured at their native logical size.
+pointer alignment. Native platforms retain their existing 1:1 logical capture
+resolution.
 
 ## Installation
 

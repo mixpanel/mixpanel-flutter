@@ -101,10 +101,11 @@ abstract class ImageCompressor {
 /// Handles mask detection, image capture, and mask painting. Delegates
 /// compression to the injected [ImageCompressor].
 class ScreenshotCapturer {
-  /// Maximum raster area sent through RGBA extraction and image compression.
+  /// Maximum raster area captured from the rendered web surface.
   ///
   /// 1280x720 is comfortably above normal phone viewports while bounding the
-  /// work caused by desktop, tablet, and foldable logical viewports.
+  /// work caused by large browser viewports. Native capture stays at its
+  /// existing 1:1 logical resolution.
   static const int maxRasterPixels = 1280 * 720;
 
   /// Secondary bound for pathological ultra-wide or ultra-tall viewports.
@@ -329,9 +330,12 @@ class ScreenshotCapturer {
       // and the toImage/createImageBitmap call.
       final captureTimestamp = clock.now();
       final logicalSize = boundary.size;
-      final capturePixelRatio = capturePixelRatioFor(
-        logicalSize,
-      ).clamp(0, _compressor.maximumCapturePixelRatio).toDouble();
+      final capturePixelRatio =
+          (_compressor.capturesRenderedSurface
+                  ? capturePixelRatioFor(logicalSize)
+                  : 1.0)
+              .clamp(0, _compressor.maximumCapturePixelRatio)
+              .toDouble();
 
       CaptureFailure? snapshotValidationFailure;
       var snapshotValidated = false;
