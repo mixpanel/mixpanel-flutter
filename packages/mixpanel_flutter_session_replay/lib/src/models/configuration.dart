@@ -126,6 +126,8 @@ class WebOptions {
   /// Reset on every user interaction or screenshot capture.
   /// When the timeout fires, recording stops and a new session starts
   /// on the next user interaction.
+  /// Overridden by a valid remote `record_idle_timeout_ms` when remote
+  /// settings are enabled.
   ///
   /// Set to [Duration.zero] to disable idle timeout.
   final Duration idleTimeout;
@@ -134,6 +136,8 @@ class WebOptions {
   ///
   /// Hard cap regardless of user activity. When exceeded, the current session
   /// ends and a new session starts on the next user interaction.
+  /// Overridden by a valid remote `record_max_ms` when remote settings are
+  /// enabled.
   final Duration maxSessionDuration;
 
   /// Behavior when the page leaves the foreground (default: pause with a

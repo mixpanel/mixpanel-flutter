@@ -282,6 +282,11 @@ continues but analytics events cannot be linked to the replay automatically.
 | `web.maxSessionDuration` | Maximum duration of one web replay session | `24 hours` |
 | `web.onBackground` | Whether hiding the page pauses or stops the replay. Capture never continues while hidden | `ReplayBackgroundBehavior.pause(idleTimeout: Duration(minutes: 30))` |
 
+When `remoteSettingsMode` is `strict` or `fallback`, valid remote
+`record_idle_timeout_ms` and `record_max_ms` values override the corresponding
+`WebOptions` durations. Values are milliseconds. Missing or invalid fields keep
+the app-provided values; native replay durations are unaffected.
+
 `ReplayBackgroundBehavior.pause(idleTimeout: ...)` flushes pending replay data,
 unregisters `$mp_replay_id`, and resumes the same replay when the app or page
 returns before the idle timeout. After that duration, returning starts a newly

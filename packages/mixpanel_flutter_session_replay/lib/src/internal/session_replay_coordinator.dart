@@ -86,10 +86,10 @@ class SessionReplayCoordinator implements WidgetCoordinator {
   // -- Web idle timeout / session resume --
 
   /// Idle timeout timer (web only, null on native)
-  final IdleTimeoutTimer? _idleTimer;
+  IdleTimeoutTimer? _idleTimer;
 
   /// Max session duration (web only, null on native)
-  final Duration? _maxSessionDuration;
+  Duration? _maxSessionDuration;
 
   /// Absolute expiry time for the current session's max duration
   DateTime? _maxSessionExpiry;
@@ -606,6 +606,15 @@ class SessionReplayCoordinator implements WidgetCoordinator {
     final pendingSession = _pendingResumableSession;
     if (pendingSession != null) {
       _pendingResumableSession = null;
+      final maxDuration = _maxSessionDuration;
+      if (maxDuration != null &&
+          !clock.now().isBefore(pendingSession.startTime.add(maxDuration))) {
+        // A fresh remote maximum can be shorter than the limit used when the
+        // web session was persisted. Start a new session instead of reviving it.
+        _pendingResumeIdleExpiry = null;
+        startRecording(sessionsPercent: _autoRecordSessionsPercent);
+        return;
+      }
       resumeSession(pendingSession);
       return;
     }
@@ -680,6 +689,58 @@ class SessionReplayCoordinator implements WidgetCoordinator {
   void _applyRemoteConfigValues(RemoteSettingsResult result) {
     _triggerService.updateTriggers(result.sdkConfig?.recordingEventTriggers);
     _applyRecordSessionsPercent(result);
+    _applyWebRecordingDurations(result.sdkConfig);
+  }
+
+  void _applyWebRecordingDurations(SdkConfig? config) {
+    // Native platform init does not supply a max session duration. Keep these
+    // JS-specific settings confined to web, even when the server returns them
+    // for another platform.
+    if (_maxSessionDuration == null || config == null) return;
+
+    final previousIdleTimeout = _idleTimer?.timeout;
+    final previousIdleExpiry = _idleExpiry;
+    var changed = false;
+
+    if (config.recordMaxMs case final int maxMs) {
+      _maxSessionDuration = Duration(milliseconds: maxMs);
+      changed = true;
+    }
+    if (config.recordIdleTimeoutMs case final int idleMs) {
+      _idleTimer?.dispose();
+      _idleTimer = IdleTimeoutTimer(
+        timeout: Duration(milliseconds: idleMs),
+        onTimeout: handleIdleTimeout,
+      );
+      changed = true;
+    }
+    if (!changed || _recordingState == RecordingState.notRecording) return;
+
+    // A manually started recording may already be active when the first
+    // settings fetch finishes. Rebase its limits on the original session and
+    // last activity rather than granting a new full lifetime.
+    if (config.recordMaxMs != null) {
+      _maxSessionExpiry = _sessionManager.getCurrentSession().startTime.add(
+        _maxSessionDuration!,
+      );
+      if (_checkMaxSessionExpired()) return;
+      _armMaxSessionTimer();
+    }
+    if (config.recordIdleTimeoutMs != null &&
+        _recordingState != RecordingState.initializing) {
+      final lastActivity =
+          previousIdleExpiry != null && previousIdleTimeout != null
+          ? previousIdleExpiry.subtract(previousIdleTimeout)
+          : clock.now();
+      final deadline = lastActivity.add(_idleTimer!.timeout);
+      if (!clock.now().isBefore(deadline)) {
+        handleIdleTimeout();
+        return;
+      }
+      _restartIdleWindow(deadline: deadline);
+    }
+    _lastExpiryWriteTime = null;
+    _persistExpiryDebounced();
   }
 
   void _applyRecordSessionsPercent(RemoteSettingsResult result) {
@@ -765,8 +826,9 @@ class SessionReplayCoordinator implements WidgetCoordinator {
       _recordingState = RecordingState.initializing;
 
       // Set max session expiry (web only)
-      if (_maxSessionDuration != null) {
-        _maxSessionExpiry = clock.now().add(_maxSessionDuration);
+      final maxSessionDuration = _maxSessionDuration;
+      if (maxSessionDuration != null) {
+        _maxSessionExpiry = clock.now().add(maxSessionDuration);
         _armMaxSessionTimer();
       }
 
@@ -1026,8 +1088,9 @@ class SessionReplayCoordinator implements WidgetCoordinator {
     _sessionManager.resumeSession(session);
 
     // Set max session expiry based on original start time
-    if (_maxSessionDuration != null) {
-      _maxSessionExpiry = session.startTime.add(_maxSessionDuration);
+    final maxSessionDuration = _maxSessionDuration;
+    if (maxSessionDuration != null) {
+      _maxSessionExpiry = session.startTime.add(maxSessionDuration);
       _armMaxSessionTimer();
     }
 
@@ -1038,7 +1101,17 @@ class SessionReplayCoordinator implements WidgetCoordinator {
     _uploadService.startAutoFlush();
     // Keep the stored deadline: re-arming for the full timeout would give a
     // reload near the end of the window another complete one.
-    _restartIdleWindow(deadline: resumeIdleExpiry);
+    final timer = _idleTimer;
+    final maximumIdleDeadline = timer == null
+        ? null
+        : clock.now().add(timer.timeout);
+    final idleDeadline =
+        resumeIdleExpiry != null &&
+            maximumIdleDeadline != null &&
+            resumeIdleExpiry.isBefore(maximumIdleDeadline)
+        ? resumeIdleExpiry
+        : maximumIdleDeadline;
+    _restartIdleWindow(deadline: idleDeadline);
   }
 
   /// Stage a persisted web session until remote recording enablement has been
@@ -1130,8 +1203,9 @@ class SessionReplayCoordinator implements WidgetCoordinator {
 
   /// Persist idle expiry to IndexedDB (debounced to avoid excessive writes).
   void _persistExpiryDebounced() {
+    final timer = _idleTimer;
     if (_persistIdleExpiry == null ||
-        _idleTimer == null ||
+        timer == null ||
         _maxSessionExpiry == null) {
       return;
     }
@@ -1144,7 +1218,8 @@ class SessionReplayCoordinator implements WidgetCoordinator {
 
     _lastExpiryWriteTime = now;
     final sessionId = _sessionManager.getCurrentSession().id;
-    final idleExpiresMs = now.add(_idleTimer.timeout).millisecondsSinceEpoch;
+    final idleExpiresMs =
+        (_idleExpiry ?? now.add(timer.timeout)).millisecondsSinceEpoch;
 
     _persistIdleExpiry(
       sessionId,

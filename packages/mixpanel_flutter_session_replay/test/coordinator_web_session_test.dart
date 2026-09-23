@@ -37,6 +37,7 @@ void main() {
 
     SessionReplayCoordinator createCoordinator({
       double autoRecordSessionsPercent = 0,
+      RemoteSettingsMode remoteSettingsMode = RemoteSettingsMode.disabled,
       IdleTimeoutTimer? idleTimer,
       Duration? maxSessionDuration,
       ReplayBackgroundBehavior backgroundBehavior =
@@ -51,7 +52,7 @@ void main() {
         sessionManager: sessionManager,
         logger: logger,
         autoRecordSessionsPercent: autoRecordSessionsPercent,
-        remoteSettingsMode: RemoteSettingsMode.disabled,
+        remoteSettingsMode: remoteSettingsMode,
         debugOptions: null,
         idleTimer: idleTimer,
         maxSessionDuration: maxSessionDuration,
@@ -319,6 +320,225 @@ void main() {
     });
 
     group('idle timer integration', () {
+      test('remote web durations replace local limits', () async {
+        // GIVEN remote values in milliseconds and different local limits
+        settingsService = SettingsService(
+          storageProvider: SettingsStorageProvider(
+            token: 'test-token',
+            logger: logger,
+          ),
+          token: 'test-token',
+          logger: logger,
+          httpClient: createFakeSettingsClient(
+            isEnabled: true,
+            sdkConfig: {
+              'record_max_ms': 60000,
+              'record_idle_timeout_ms': 10000,
+            },
+          ),
+        );
+        final deadlines = <(int, int)>[];
+        final localIdleTimer = IdleTimeoutTimer(
+          timeout: const Duration(minutes: 30),
+          onTimeout: () {},
+        );
+        final coordinator = createCoordinator(
+          autoRecordSessionsPercent: 100,
+          remoteSettingsMode: RemoteSettingsMode.fallback,
+          idleTimer: localIdleTimer,
+          maxSessionDuration: const Duration(hours: 24),
+          persistIdleExpiry: (_, idle, max) async {
+            deadlines.add((idle, max));
+          },
+        );
+        final now = DateTime.utc(2026, 1, 1);
+
+        // WHEN remote settings arrive before recording starts
+        await withClock(Clock.fixed(now), () async {
+          coordinator.onAppForegrounded();
+          await pumpEventQueue();
+        });
+
+        // THEN the persisted web deadlines use the remote values
+        expect(coordinator.recordingState, RecordingState.recording);
+        expect(deadlines.single.$1, now.millisecondsSinceEpoch + 10000);
+        expect(deadlines.single.$2, now.millisecondsSinceEpoch + 60000);
+
+        // A frozen page still uses the remote idle deadline when foregrounded.
+        final firstReplayId = coordinator.replayId;
+        await withClock(
+          Clock.fixed(now.add(const Duration(seconds: 11))),
+          () async {
+            coordinator.onAppForegrounded();
+            await pumpEventQueue();
+          },
+        );
+        expect(coordinator.replayId, isNot(firstReplayId));
+      });
+
+      test(
+        'remote idle timeout works when local idle timeout is disabled',
+        () async {
+          // GIVEN no local idle timer, but a remote timeout
+          settingsService = SettingsService(
+            storageProvider: SettingsStorageProvider(
+              token: 'test-token',
+              logger: logger,
+            ),
+            token: 'test-token',
+            logger: logger,
+            httpClient: createFakeSettingsClient(
+              isEnabled: true,
+              sdkConfig: {'record_idle_timeout_ms': 5000},
+            ),
+          );
+          final deadlines = <(int, int)>[];
+          final coordinator = createCoordinator(
+            autoRecordSessionsPercent: 100,
+            remoteSettingsMode: RemoteSettingsMode.fallback,
+            maxSessionDuration: const Duration(hours: 24),
+            persistIdleExpiry: (_, idle, max) async {
+              deadlines.add((idle, max));
+            },
+          );
+          final now = DateTime.utc(2026, 1, 1);
+
+          // WHEN
+          await withClock(Clock.fixed(now), () async {
+            coordinator.onAppForegrounded();
+            await pumpEventQueue();
+          });
+
+          // THEN remote settings create an active idle timer
+          expect(deadlines.single.$1, now.millisecondsSinceEpoch + 5000);
+        },
+      );
+
+      test('disabled remote mode keeps local web durations', () async {
+        // GIVEN remote limits are present but remote config is disabled
+        settingsService = SettingsService(
+          storageProvider: SettingsStorageProvider(
+            token: 'test-token',
+            logger: logger,
+          ),
+          token: 'test-token',
+          logger: logger,
+          httpClient: createFakeSettingsClient(
+            isEnabled: true,
+            sdkConfig: {
+              'record_max_ms': 60000,
+              'record_idle_timeout_ms': 10000,
+            },
+          ),
+        );
+        final deadlines = <(int, int)>[];
+        final idleTimer = IdleTimeoutTimer(
+          timeout: const Duration(minutes: 30),
+          onTimeout: () {},
+        );
+        final coordinator = createCoordinator(
+          autoRecordSessionsPercent: 100,
+          idleTimer: idleTimer,
+          maxSessionDuration: const Duration(hours: 24),
+          persistIdleExpiry: (_, idle, max) async {
+            deadlines.add((idle, max));
+          },
+        );
+        final now = DateTime.utc(2026, 1, 1);
+
+        // WHEN
+        await withClock(Clock.fixed(now), () async {
+          coordinator.onAppForegrounded();
+          await pumpEventQueue();
+        });
+
+        // THEN the app-provided limits remain in effect
+        expect(
+          deadlines.single.$1,
+          now.millisecondsSinceEpoch +
+              const Duration(minutes: 30).inMilliseconds,
+        );
+        expect(
+          deadlines.single.$2,
+          now.millisecondsSinceEpoch + const Duration(hours: 24).inMilliseconds,
+        );
+      });
+
+      test(
+        'remote web durations do not create native session timers',
+        () async {
+          // GIVEN a native-shaped coordinator with no web duration
+          settingsService = SettingsService(
+            storageProvider: SettingsStorageProvider(
+              token: 'test-token',
+              logger: logger,
+            ),
+            token: 'test-token',
+            logger: logger,
+            httpClient: createFakeSettingsClient(
+              isEnabled: true,
+              sdkConfig: {
+                'record_max_ms': 60000,
+                'record_idle_timeout_ms': 10000,
+              },
+            ),
+          );
+          final coordinator = createCoordinator(
+            autoRecordSessionsPercent: 100,
+            remoteSettingsMode: RemoteSettingsMode.fallback,
+          );
+
+          // WHEN
+          coordinator.onAppForegrounded();
+          await pumpEventQueue();
+
+          // THEN
+          expect(coordinator.recordingState, RecordingState.recording);
+          expect(coordinator.hasMaxSessionTimerForTest, false);
+        },
+      );
+
+      test(
+        'remote max duration rejects a stale persisted web session',
+        () async {
+          // GIVEN a session still valid under the local 24-hour cap
+          settingsService = SettingsService(
+            storageProvider: SettingsStorageProvider(
+              token: 'test-token',
+              logger: logger,
+            ),
+            token: 'test-token',
+            logger: logger,
+            httpClient: createFakeSettingsClient(
+              isEnabled: true,
+              sdkConfig: {'record_max_ms': 600000},
+            ),
+          );
+          final coordinator = createCoordinator(
+            autoRecordSessionsPercent: 100,
+            remoteSettingsMode: RemoteSettingsMode.fallback,
+            maxSessionDuration: const Duration(hours: 24),
+          );
+          final now = DateTime.utc(2026, 1, 1, 12);
+          final stale = Session(
+            id: 'stale-web-session',
+            startTime: now.subtract(const Duration(minutes: 30)),
+            status: SessionStatus.active,
+          );
+
+          // WHEN the remote 10-minute cap arrives before resumption
+          await withClock(Clock.fixed(now), () async {
+            coordinator.prepareSessionResume(stale);
+            coordinator.onAppForegrounded();
+            await pumpEventQueue();
+          });
+
+          // THEN a new replay starts instead of reviving the stale one
+          expect(coordinator.recordingState, RecordingState.recording);
+          expect(coordinator.replayId, isNot('stale-web-session'));
+        },
+      );
+
       test('coordinator accepts idle timer without error', () async {
         // GIVEN
         final idleTimer = IdleTimeoutTimer(
