@@ -270,3 +270,17 @@ cancellation. These fixtures do not initialize Mixpanel or mock analytics channe
 
 Validation: all 269 analytics tests pass on Flutter 3.19.0 and 3.44.6;
 focused analysis of lib and test/autocapture reports no issues on both.
+
+
+## Explicit state and cancellable operations
+
+Replaced controller consent booleans/counters with CaptureStatus, ConsentRequest
+and CaptureSession. Navigation cancels detection sessions without cancelling consent
+reads; newer lifecycle operations and close cancel stale consent requests. Closed
+status is terminal. Requests are consumed once and cross-controller operations are
+rejected. `_PendingTap` groups press state; `_PendingDeadClick` groups the baseline,
+event, timer and callbacks. Candidate identity protects deferred-frame completion.
+The pending candidate owns weak-target/session validity and delivery callbacks;
+view snapshots no longer read the detector's state. Invalidating an old candidate's
+target does not automatically invalidate a new press's independent baseline.
+The broader recognizer/response-tracker extraction remains separate work.

@@ -589,11 +589,11 @@ class Mixpanel {
   /// This method will internally track an opt-in event to your project.
   void optInTracking() {
     final controller = _activeAutocapture;
-    final consentEpoch = controller?.suspend();
+    final request = controller?.suspend();
     _channel.invokeMethod<void>('optInTracking').then<void>((_) async {
       if (controller != null) {
         await controller.refreshConsent(hasOptedOutTracking,
-            consentEpoch: consentEpoch);
+            request: request);
       }
     }).catchError((Object _) {
       developer.log('Autocapture opt-in failed; capture remains suspended.',
@@ -641,17 +641,17 @@ class Mixpanel {
   Future<void> identify(String distinctId) async {
     if (_MixpanelHelper.isValidString(distinctId)) {
       final controller = _activeAutocapture;
-      final consentEpoch = controller?.suspend();
+      final request = controller?.suspend();
       try {
         await _channel.invokeMethod<void>(
             'identify', <String, dynamic>{'distinctId': distinctId});
       } finally {
         // Even a failed native call may have changed native state. Recover only
         // from a fresh consent read; preserve the original exception for callers.
-        // The epoch guard prevents recovery over a newer opt-out/reset/close.
+        // The request guard prevents recovery over a newer opt-out/reset/close.
         if (controller != null) {
           await controller.refreshConsent(hasOptedOutTracking,
-              consentEpoch: consentEpoch);
+              request: request);
         }
       }
     } else {
@@ -930,7 +930,7 @@ class Mixpanel {
   /// Useful for clearing data when a user logs out.
   Future<void> reset() async {
     final controller = _activeAutocapture;
-    final consentEpoch = controller?.suspend();
+    final request = controller?.suspend();
     try {
       await _channel.invokeMethod<void>('reset');
     } finally {
@@ -938,7 +938,7 @@ class Mixpanel {
       // refreshConsent contains read failures, leaving the original error intact.
       if (controller != null) {
         await controller.refreshConsent(hasOptedOutTracking,
-            consentEpoch: consentEpoch);
+            request: request);
       }
     }
   }

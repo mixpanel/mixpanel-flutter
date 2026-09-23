@@ -7,67 +7,77 @@ import 'detection_limits.dart';
 
 /// One pending check. Unsupported snapshots suppress events, never imply dead.
 class DeadClickDetector {
-  DeadClickDetector({required this.capture, required this.onDead});
+  DeadClickDetector({required this.capture, this.onDead});
   final ResponseSnapshot? Function() capture;
-  final void Function(ClickEvent) onDead;
-  ResponseSnapshot? _baseline;
-  ClickEvent? _event;
-  Timer? _timer;
-  int _generation = 0;
-  bool get observing => _baseline != null;
+  final void Function(ClickEvent)? onDead;
+  _PendingDeadClick? _pending;
+  bool get observing => _pending != null;
 
   void begin(ResponseSnapshot? baseline) {
     cancel();
-    _baseline = baseline;
+    if (baseline != null) _pending = _PendingDeadClick(baseline);
   }
 
-  void arm(ClickEvent event, Duration timeout) {
+  void arm(ClickEvent event, Duration timeout,
+      {bool Function()? isValid, void Function(ClickEvent)? onDetected}) {
     assert(validTimeWindow(timeout));
-    if (_baseline == null) return;
-    _event = event;
-    final expected = _generation;
-    _timer = Timer(normalizeTimeWindow(timeout), () {
-      if (expected != _generation) return;
+    final pending = _pending;
+    if (pending == null) return;
+    pending.event = event;
+    pending.isValid = isValid;
+    pending.onDetected = onDetected ?? onDead;
+    pending.timer?.cancel();
+    pending.timer = Timer(normalizeTimeWindow(timeout), () {
+      if (!identical(_pending, pending)) return;
       // Let a response already scheduled for this frame finish building first.
       if (SchedulerBinding.instance.hasScheduledFrame) {
-        SchedulerBinding.instance.addPostFrameCallback((_) {
-          if (expected == _generation) _finish();
-        });
+        SchedulerBinding.instance.addPostFrameCallback((_) => _finish(pending));
       } else {
-        _finish();
+        _finish(pending);
       }
     });
   }
 
   /// Called after produced frames, not by a polling/render loop.
   void sample() {
-    final baseline = _baseline;
-    if (baseline == null) return;
+    if (_pending == null) return;
     sampleSnapshot(capture());
   }
 
   /// Reuse the frame snapshot when the old candidate and a new press overlap.
   void sampleSnapshot(ResponseSnapshot? current) {
-    final baseline = _baseline;
-    if (baseline == null) return;
-    if (current == null || baseline.differsFrom(current)) cancel();
+    final pending = _pending;
+    if (pending == null) return;
+    if (!(pending.isValid?.call() ?? true) ||
+        current == null ||
+        pending.baseline.differsFrom(current)) {
+      cancel();
+    }
   }
 
-  void _finish() {
+  void _finish(_PendingDeadClick pending) {
+    if (!identical(_pending, pending)) return;
     sample();
-    final event = _event;
-    final unchanged = _baseline != null;
+    if (!identical(_pending, pending)) return;
     cancel();
-    if (unchanged && event != null) onDead(event);
+    final event = pending.event;
+    if (event != null) pending.onDetected?.call(event);
   }
 
   void cancel() {
-    _generation++;
-    _timer?.cancel();
-    _timer = null;
-    _baseline = null;
-    _event = null;
+    _pending?.timer?.cancel();
+    _pending = null;
   }
+}
+
+/// Dropping this object cancels the whole candidate, including deferred frames.
+class _PendingDeadClick {
+  _PendingDeadClick(this.baseline);
+  final ResponseSnapshot baseline;
+  ClickEvent? event;
+  Timer? timer;
+  bool Function()? isValid;
+  void Function(ClickEvent)? onDetected;
 }
 
 /// One dispatcher for the binding lifetime, with removable widget listeners.

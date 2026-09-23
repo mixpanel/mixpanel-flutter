@@ -103,4 +103,43 @@ void main() {
     await tester.pump(const Duration(milliseconds: 20));
     expect(() => detector.arm(event, Duration.zero), throwsAssertionError);
   });
+  testWidgets('candidate validity suppresses dead even with unchanged snapshot',
+      (tester) async {
+    var valid = true;
+    var emissions = 0;
+    final detector = DeadClickDetector(capture: () => baseline);
+    detector.begin(baseline);
+    detector.arm(event, const Duration(milliseconds: 10),
+        isValid: () => valid, onDetected: (_) => emissions++);
+    expect(detector.observing, isTrue);
+    valid = false;
+    await tester.pump(const Duration(milliseconds: 10));
+    expect(emissions, 0);
+    detector.begin(baseline);
+    valid = true;
+    detector.arm(event, const Duration(milliseconds: 10),
+        isValid: () => valid, onDetected: (_) => emissions++);
+    await tester.pump(const Duration(milliseconds: 10));
+    expect(emissions, 1);
+  });
+
+  testWidgets('deferred old candidate cannot finish its replacement',
+      (tester) async {
+    final detected = <String>[];
+    final detector = DeadClickDetector(capture: () => baseline);
+    detector.begin(baseline);
+    detector.arm(event, const Duration(milliseconds: 10),
+        onDetected: (_) => detected.add('old'));
+    tester.binding.scheduleFrame();
+    Timer(const Duration(milliseconds: 10), () {
+      detector.begin(baseline);
+      detector.arm(event, const Duration(milliseconds: 20),
+          onDetected: (_) => detected.add('new'));
+    });
+    await tester.pump(const Duration(milliseconds: 10));
+    expect(detected, isEmpty);
+    expect(detector.observing, isTrue);
+    await tester.pump(const Duration(milliseconds: 20));
+    expect(detected, ['new']);
+  });
 }

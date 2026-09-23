@@ -42,22 +42,12 @@ class _CaptureState extends State<MixpanelAutocaptureWidget>
   RageClickTracker? _rage;
   late final DeadClickDetector _dead = DeadClickDetector(
     capture: _snapshot,
-    onDead: (event) =>
-        _controller?.emit(r'$mp_dead_click', event, _deadGeneration),
   );
   int? _viewId;
   bool _ownsView = false;
   bool _monitoring = false;
   bool _foreground = true;
-  CaptureTarget? _pressed;
-  ResponseSnapshot? _pressBaseline;
-  Offset? _origin;
-  Duration? _downTime;
-  int _pressGeneration = 0;
-  int _deadGeneration = 0;
-  WeakReference<Element>? _deadTarget;
-  double _slopSquared = 0;
-  bool _moved = false;
+  _PendingTap? _pendingTap;
 
   bool get _supported =>
       !kIsWeb &&
@@ -130,23 +120,16 @@ class _CaptureState extends State<MixpanelAutocaptureWidget>
   }
 
   void _reset() {
-    _deadTarget = null;
     _pointers.clear();
     _clearPress();
     _dead.cancel();
     _rage?.reset();
   }
 
-  void _clearPress() {
-    _pressed = null;
-    _pressBaseline = null;
-    _origin = null;
-    _downTime = null;
-    _moved = false;
-  }
+  void _clearPress() => _pendingTap = null;
 
   void _response() {
-    _pressBaseline = null;
+    _pendingTap?.baseline = null;
     _dead.cancel();
   }
 
@@ -159,9 +142,7 @@ class _CaptureState extends State<MixpanelAutocaptureWidget>
   }
 
   ResponseSnapshot? _snapshot() {
-    if (!mounted ||
-        !_allowed ||
-        (_dead.observing && !(_deadTarget?.target?.mounted ?? false))) {
+    if (!mounted || !_allowed) {
       return null;
     }
     final view = View.of(context);
@@ -170,16 +151,16 @@ class _CaptureState extends State<MixpanelAutocaptureWidget>
   }
 
   bool _isObserving() =>
-      _allowed && (_dead.observing || _pressBaseline != null);
+      _allowed && (_dead.observing || _pendingTap?.baseline != null);
 
   void _frame() {
     if (!_isObserving()) return;
     final current = _snapshot();
     _dead.sampleSnapshot(current);
-    final baseline = _pressBaseline;
+    final baseline = _pendingTap?.baseline;
     if (baseline != null &&
         (current == null || baseline.differsFrom(current))) {
-      _pressBaseline = null;
+      _pendingTap?.baseline = null;
     }
   }
 
@@ -201,30 +182,36 @@ class _CaptureState extends State<MixpanelAutocaptureWidget>
     final controller = _controller;
     if (controller == null) return;
     try {
-      _pressed = _resolver.resolve(context as Element, event);
-      _origin = event.position;
-      _downTime = event.timeStamp;
-      _pressGeneration = controller.generation;
+      final target = _resolver.resolve(context as Element, event);
+      if (target == null) {
+        _clearPress();
+        return;
+      }
       final slop = computeHitSlop(
           event.kind, MediaQuery.maybeOf(context)?.gestureSettings);
-      _slopSquared = slop * slop;
-      _moved = false;
       // Normal tap handlers run after this baseline. Custom raw pointer handlers
       // can run earlier, so their response coverage is intentionally unsupported.
-      if (controller.options.deadClickOptions.enabled &&
-          (_pressed?.deadEligible ?? false)) {
-        _pressBaseline = _snapshot();
-      }
+      _pendingTap = _PendingTap(
+          target: target,
+          origin: event.position,
+          downTime: event.timeStamp,
+          session: controller.session,
+          slopSquared: slop * slop,
+          baseline:
+              controller.options.deadClickOptions.enabled && target.deadEligible
+                  ? _snapshot()
+                  : null);
     } catch (_) {
       _clearPress();
     }
   }
 
   void _move(PointerMoveEvent event) {
-    if (_origin == null || !_pointers.contains(event.pointer)) return;
-    if ((event.position - _origin!).distanceSquared > _slopSquared) {
-      _moved = true;
-      _pressBaseline = null;
+    final tap = _pendingTap;
+    if (tap == null || !_pointers.contains(event.pointer)) return;
+    if ((event.position - tap.origin).distanceSquared > tap.slopSquared) {
+      tap.moved = true;
+      tap.baseline = null;
     }
   }
 
@@ -237,29 +224,22 @@ class _CaptureState extends State<MixpanelAutocaptureWidget>
     final wasSingle =
         _pointers.length == 1 && _pointers.contains(event.pointer);
     _pointers.remove(event.pointer);
-    final target = _pressed;
-    final baseline = _pressBaseline;
-    final down = _downTime;
-    final generation = _pressGeneration;
-    final valid = wasSingle &&
-        !_moved &&
-        target != null &&
-        target.element.mounted &&
-        down != null &&
-        event.timeStamp >= down &&
-        event.timeStamp - down <= _maxTapDuration &&
-        _origin != null &&
-        (event.position - _origin!).distanceSquared <= _slopSquared;
+    final tap = _pendingTap;
     _clearPress();
     final controller = _controller;
     final rage = _rage;
-    if (!valid ||
+    if (!wasSingle ||
+        tap == null ||
+        !tap.accepts(event, _maxTapDuration) ||
         !_allowed ||
         controller == null ||
         rage == null ||
-        generation != controller.generation) {
+        !tap.session.isActive) {
       return;
     }
+    final target = tap.target;
+    final baseline = tap.baseline;
+    final session = tap.session;
     final old = target.event;
     final click = ClickEvent(
         x: event.position.dx,
@@ -272,19 +252,22 @@ class _CaptureState extends State<MixpanelAutocaptureWidget>
     // Android parity: even an ineligible new tap cancels the previous check.
     _dead.cancel();
     if (options.clickOptions.enabled) {
-      controller.emit(r'$mp_click', click, generation);
+      controller.emit(r'$mp_click', click, session);
     }
     if (options.rageClickOptions.enabled &&
         rage.record(click.x, click.y, event.timeStamp)) {
-      controller.emit(r'$mp_rage_click', click, generation);
+      controller.emit(r'$mp_rage_click', click, session);
     }
     if (options.deadClickOptions.enabled &&
         target.deadEligible &&
         baseline != null) {
-      _deadGeneration = generation;
-      _deadTarget = WeakReference(target.element);
+      final targetReference = WeakReference(target.element);
       _dead.begin(baseline);
-      _dead.arm(click, options.deadClickOptions.timeWindow);
+      _dead.arm(click, options.deadClickOptions.timeWindow,
+          isValid: () =>
+              session.isActive && (targetReference.target?.mounted ?? false),
+          onDetected: (event) =>
+              controller.emit(r'$mp_dead_click', event, session));
     }
   }
 
@@ -312,6 +295,31 @@ class _CaptureState extends State<MixpanelAutocaptureWidget>
     _detach();
     super.dispose();
   }
+}
+
+/// State belonging to one press; cancellation drops it as a unit.
+class _PendingTap {
+  _PendingTap(
+      {required this.target,
+      required this.origin,
+      required this.downTime,
+      required this.session,
+      required this.slopSquared,
+      this.baseline});
+  final CaptureTarget target;
+  final Offset origin;
+  final Duration downTime;
+  final CaptureSession session;
+  final double slopSquared;
+  ResponseSnapshot? baseline;
+  bool moved = false;
+
+  bool accepts(PointerUpEvent event, Duration maxDuration) =>
+      !moved &&
+      target.element.mounted &&
+      event.timeStamp >= downTime &&
+      event.timeStamp - downTime <= maxDuration &&
+      (event.position - origin).distanceSquared <= slopSquared;
 }
 
 /// Cancels pending signals on navigation without collecting route metadata.

@@ -30,13 +30,13 @@ Source links below are relative to this document.
 | --- | --- | --- |
 | [Mixpanel / Autocapture](../packages/mixpanel_flutter/lib/mixpanel_flutter.dart) | Initialize the capture adapter, coordinate consent/identity lifecycle, expose manual APIs, serialize events into the existing `track` channel | Active controller, initialization generation; existing analytics/native transport |
 | [AutocaptureBinding](../packages/mixpanel_flutter/lib/src/autocapture/autocapture_binding.dart) | Associate an SDK instance with its internal controller | Static `Expando` with weak instance keys |
-| [AutocaptureController](../packages/mixpanel_flutter/lib/src/autocapture/autocapture_controller.dart) | Gate automatic delivery, invalidate pending work, arbitrate view ownership | Options, event-sink callback, consent state/counters, view-owner map; no MethodChannel or widget-tree inspection |
-| [MixpanelAutocaptureWidget / _CaptureState](../packages/mixpanel_flutter/lib/src/autocapture/autocapture_widget.dart) | Attach observation, recognize pointer taps, coordinate targets and responses, dispatch signals | Controller, detectors, active pointers, press baseline/target, weak pending-dead target, subscriptions |
+| [AutocaptureController](../packages/mixpanel_flutter/lib/src/autocapture/autocapture_controller.dart) | Gate automatic delivery, invalidate pending work, arbitrate view ownership | Options, event-sink callback, explicit capture status, consent request, capture session, view-owner map; no MethodChannel or widget-tree inspection |
+| [MixpanelAutocaptureWidget / _CaptureState](../packages/mixpanel_flutter/lib/src/autocapture/autocapture_widget.dart) | Attach observation, recognize pointer taps, coordinate targets and responses, dispatch signals | Controller, detectors, active pointers, one pending-tap object, subscriptions |
 | MixpanelAutocaptureNavigatorObserver | Cancel pending detection on push/pop/remove/replace without collecting route metadata | SDK instance and internal controller lookup |
 | [TargetResolver](../packages/mixpanel_flutter/lib/src/autocapture/target_resolver.dart) | Map a hit-tested pointer to a public widget owner and privacy-constrained event metadata | Flutter element/render trees; bounded traversal |
 | [ResponseSnapshot](../packages/mixpanel_flutter/lib/src/autocapture/response_snapshot.dart) | Summarize observable meaningful UI state for comparison | Ephemeral hash; transform cache exists only during each capture |
 | [RageClickTracker](../packages/mixpanel_flutter/lib/src/autocapture/rage_click_tracker.dart) | Count nearby recent accepted taps | Coordinates and pointer timestamps, bounded history; no tree or transport |
-| [DeadClickDetector](../packages/mixpanel_flutter/lib/src/autocapture/dead_click_detector.dart) | Time one candidate, cancel on changed/unknown response, emit when unchanged | Baseline, event, timer, cancellation generation; injected snapshot and emission callbacks |
+| [DeadClickDetector](../packages/mixpanel_flutter/lib/src/autocapture/dead_click_detector.dart) | Time one candidate, cancel on changed/unknown response, emit when unchanged | One pending candidate containing baseline, event, timer and validity/delivery callbacks |
 | CaptureFrameObserver | Dispatch produced-frame sampling only to active observers | Binding installation registry and removable callback registrations |
 | [ClickEvent](../packages/mixpanel_flutter/lib/src/autocapture/click_event.dart) | Carry event metadata across the detector/analytics boundary | Coordinates and string metadata; no element/render references or response digest |
 
@@ -54,13 +54,15 @@ flowchart TD
     Wrapper --> Dead[DeadClickDetector]
     Frames[CaptureFrameObserver] --> Wrapper
     Dead -->|snapshot callback| Wrapper
-    Wrapper -->|signal and generation| Controller
+    Wrapper -->|signal and capture session| Controller
     Controller -->|event sink| Facade[Autocapture serialization]
     Manual[Manual signal API] --> Facade
     Facade --> Channel[Existing analytics track channel]
 ```
 
-The callback from the dead detector into widget state is intentional in the current implementation, but creates coupling discussed below. The diagram is a runtime interaction map, not a claim that all dependencies are one-way.
+The dead detector requests snapshots through an injected callback. Snapshot capture
+no longer reads detector state: each candidate owns its validity predicate and
+delivery callback, keeping target lifetime separate from view observation.
 
 ## SDK/widget association and ownership
 
@@ -79,17 +81,22 @@ Lifecycle operations through an older Dart SDK handle still suspend the active c
 
 ## Consent and cancellation state
 
-Three controller values serve different purposes:
+The controller uses one explicit authorization state and two named operations:
 
-| Value | Meaning | Why it is separate |
+| Value | Meaning | Cancellation boundary |
 | --- | --- | --- |
-| `allowed` | Capture has confirmed consent, enabled options, and an open controller | Unknown/failed consent reads must not permit collection |
-| `generation` | Version of the current detection context | Pending taps/events from an older route or lifecycle context must be discarded |
-| `_consentEpoch` | Version of the current asynchronous consent operation | An older read/native completion must not override a newer consent action |
+| `CaptureStatus` | Suspended, enabled, or permanently closed | Unknown/failed consent remains suspended; closed cannot be reopened |
+| `ConsentRequest` | One native lifecycle operation or asynchronous consent read | Replaced/cancelled by newer consent operations, opt-out, or close; unaffected by navigation |
+| `CaptureSession` | Shared validity of pending detections | Cancelled by navigation, suspension, or close; old signals cannot emit into a newer session |
 
-`invalidate()` increments the detection generation and notifies widgets, which reset pending presses, rage history, and dead checks. It does not change the consent epoch. Navigation therefore cancels detection without invalidating an unrelated in-flight consent decision.
-
-`suspend()` additionally disables capture and advances the consent epoch. `refreshConsent()` suspends while it reads persisted/native consent, then enables capture only if the read explicitly returns `false` for opted-out and its epoch is still current. Errors, null results, newer operations, or closure cannot enable it.
+`invalidate()` cancels the current capture session, creates a replacement and
+notifies widgets to clear pending detection. `suspend()` also changes status and
+replaces the consent request. The request returned before a native lifecycle call
+must still be current when that call completes. `refreshConsent()` consumes that
+request once, replacing it with a read request; only the current read can enable
+capture, and only when native consent explicitly reports opted-out as false.
+Completed requests cannot be reused. Identity checks also reject requests/sessions
+from another controller.
 
 | Trigger | Current behavior |
 | --- | --- |
@@ -97,19 +104,25 @@ Three controller values serve different purposes:
 | Opt-out | Suspend immediately, then invoke native opt-out; a native failure does not resume capture |
 | Opt-in | Suspend immediately; refresh consent after native success; remain suspended on failure |
 | Identify/reset | Suspend before native call; refresh consent in `finally`, including on failure; preserve the native exception for the caller |
-| Navigation | Invalidate detections without changing consent state/epoch |
+| Navigation | Invalidate detections without changing consent status/request |
 | App backgrounding | Widget clears pending work and blocks input while not resumed; no new consent read is implied |
 | Focus, scroll, metrics response | Cancel response baselines/dead candidates; do not treat this as a consent transition |
 | Widget detach/dispose | Clear work, unsubscribe, and release view ownership |
 
-For example, if opt-out occurs while an identify recovery read is pending, the newer epoch wins. If navigation occurs during that read, only the detection generation changes, allowing the consent read to finish. Using one counter for both would incorrectly strand capture after navigation.
+For example, opt-out cancels a pending identify recovery request, so its eventual
+result is ignored. Navigation cancels only the capture session, allowing the
+consent read to finish. Closing the controller cancels both and sets terminal
+status before notifying listeners.
 
-The controller checks consent and detection generation again when emitting. It invokes the sink immediately rather than adding another deferred queue before analytics, reducing the opportunity for a later identity change to relabel a pending automatic event. Actual delivery remains the responsibility of existing analytics transport.
+The controller checks authorization and the signal's active capture session
+again when emitting. It invokes the sink immediately rather than adding another
+deferred queue before analytics. Actual delivery remains the responsibility of
+existing analytics transport.
 
 ## From pointer input to signals
 
 1. On pointer down, the widget checks platform, foreground state, consent, view ownership and view ID. It accepts touch or mouse with the primary button. Multiple pointers invalidate the press.
-2. The resolver selects the target. The widget records position, timestamp, detection generation and Flutter's device-appropriate hit slop. For an eligible dead-click target it captures a response baseline before ordinary tap handlers run.
+2. The resolver selects the target. The widget records position, timestamp, capture session and Flutter's device-appropriate hit slop in one `_PendingTap` object. For an eligible dead-click target it captures a response baseline before ordinary tap handlers run.
 3. Moves beyond slop invalidate tap acceptance even if the pointer returns. Pointer cancellation clears the press. Produced frames can invalidate the response baseline before pointer up, preserving transient responses.
 4. Pointer up requires a single tracked pointer, a mounted target, nonnegative duration at most 500 ms inclusive, no excessive movement, and a still-current capture context.
 5. Every accepted tap cancels the previous dead candidate before checking the new target's dead eligibility. Click and rage processing run independently of dead eligibility.
@@ -149,9 +162,18 @@ There are three conceptual comparison outcomes, although the current API represe
 | Known changed | Non-null snapshot differing from baseline | Cancel candidate permanently |
 | Unknown | Null snapshot, including unsupported coverage, failure or exhausted budget | Suppress/cancel; never infer a dead click |
 
-Only one dead candidate exists per widget. The detector owns the baseline/event/timer and a cancellation generation. At the deadline, it samples again; if a frame is already scheduled it defers completion to that frame's post-frame callback. Generation checks prevent cancelled callbacks from emitting. A response after emission does not retract an event.
+Only one dead candidate exists per widget. `_PendingDeadClick` groups its baseline,
+event, timer and callbacks. Cancelling drops that object; timer and deferred-frame
+callbacks check object identity so a cancelled candidate cannot finish a replacement.
+At the deadline the detector samples again, deferring until after rendering when a
+frame is already scheduled. A response after emission does not retract an event.
 
-The widget owns a weak reference to the pending target and the controller generation associated with that candidate. `_snapshot()` reads `_dead.observing` and the target's mounted state; the detector calls `_snapshot()` through its injected callback. This is the current responsibility cycle. A future split must preserve target-disposal suppression without strongly retaining a discarded element.
+The candidate's validity callback captures a weak target reference and capture
+session; its delivery callback carries that same session to the controller. The
+widget no longer stores separate pending-dead target/session fields. `_snapshot()`
+only observes the current view and does not inspect detector state. When an old
+target is detached, that candidate is invalidated independently of a new press's
+response baseline.
 
 `CaptureFrameObserver` installs one persistent callback per binding and retains removable widget listeners. It does not schedule frames. While idle it checks whether anyone is observing, but does not allocate the listener copy or queue sampling callbacks. While a prior dead candidate and a new press overlap, the widget shares one frame snapshot between them. Once a change is observed, returning to the original UI does not restore the cancelled baseline.
 
@@ -173,11 +195,19 @@ Target/snapshot tests still require Flutter trees and a test binding, but need n
 
 ## Follow-up status and proposed discussion with Tyler
 
-1. **Agree on the state and ownership model.** Keep consent authorization separate from detection cancellation; document or rename the counters and decide whether the implicit binding is an acceptable internal bridge.
+1. **Agree on the state and ownership model.** Keep consent authorization separate from detection cancellation; review the explicit status and request/session objects and decide whether the implicit binding is an acceptable internal bridge.
 2. **Add focused tests before broad restructuring (initial coverage implemented).** Exercise resolver ID precedence/privacy/budgets/portal ownership; snapshot geometry, meaningful changes and unknown coverage; detector deadlines, cancellation generations and post-frame deferral directly. Retain integration tests for wiring and lifecycle behavior.
-3. **Extract pointer recognition.** A `TapRecognizer` could own pointer count, button/kind acceptance, movement and duration, returning an accepted/rejected interaction. Keep target mounting, view ownership and controller generations in orchestration rather than introducing SDK dependencies into the recognizer.
+3. **Extract pointer recognition.** A `TapRecognizer` could own pointer count, button/kind acceptance, movement and duration, returning an accepted/rejected interaction. Keep target mounting, view ownership and capture-session validity in orchestration rather than introducing SDK dependencies into the recognizer.
 4. **Separate response tracking from orchestration.** A `UiResponseTracker` could own response baselines, focus/scroll/metrics inputs and frame sampling, returning explicit changed/unchanged/unknown outcomes. Decide whether candidate target lifetime belongs in the detector or an injected validity callback. Preserve overlapping-press shared sampling and transient-response cancellation.
 5. **Use Dart-native public configuration (implemented in the non-architectural follow-up).** Use `Duration` for time windows and final fields with debug assertions. Preserve a deliberate release-mode policy for invalid inputs; assertions alone do not replace today's normalization. Session Replay itself documents runtime resolution for its flush interval, so public assertions and internal normalization need not conflict.
 6. **Confirm compatibility and release scope.** Review the package-wide minimum Flutter impact, Beta documentation and remaining validation separately from architectural cleanup. Optional package extraction remains possible but requires explicit lifecycle integration and public API/release setup changes, not merely moving files.
 
 The recommended first step is agreement on this description and the desired boundaries. The non-architectural follow-up adds configuration updates and focused tests; widget decomposition remains proposed. Preserve the agreed signal behavior through that decomposition.
+
+
+## State-model follow-up
+
+The explicit consent status, consent requests, capture sessions, grouped pending
+press and grouped dead candidate are implemented. Full `TapRecognizer` and
+`UiResponseTracker` extraction remains future work; this change simplifies state
+ownership without introducing a state-machine framework or changing the public API.
