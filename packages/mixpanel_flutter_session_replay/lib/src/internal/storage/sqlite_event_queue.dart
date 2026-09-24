@@ -260,10 +260,12 @@ class SqliteEventQueue implements EventQueue {
     // This allows us to use a single query for both cases
     final effectiveBoundary = boundaryId ?? (1 << 62); // Large boundary value
 
-    final rows = await _db!.rawQuery(
+    // Choose the batch from sizes alone so payloads beyond the byte budget
+    // never cross the platform channel. The first event is always included,
+    // so a single oversized event cannot block the queue.
+    final sizes = await _db!.rawQuery(
       '''
-      SELECT id, session_id, distinct_id, timestamp, type,
-             payload_metadata, payload_binary, data_size
+      SELECT id, data_size
       FROM events
       WHERE session_id = ?
         AND id < ?
@@ -273,15 +275,27 @@ class SqliteEventQueue implements EventQueue {
       [sessionId, effectiveBoundary, maxCount],
     );
 
-    final batch = <Map<String, Object?>>[];
+    var lastId = -1;
     var totalBytes = 0;
-    for (final row in rows) {
+    for (final row in sizes) {
       final dataSize = row['data_size'] as int;
-      if (batch.isNotEmpty && totalBytes + dataSize > maxBytes) break;
-      batch.add(row);
+      if (lastId != -1 && totalBytes + dataSize > maxBytes) break;
+      lastId = row['id'] as int;
       totalBytes += dataSize;
     }
-    return batch;
+    if (lastId == -1) return const [];
+
+    return await _db!.rawQuery(
+      '''
+      SELECT id, session_id, distinct_id, timestamp, type,
+             payload_metadata, payload_binary, data_size
+      FROM events
+      WHERE session_id = ?
+        AND id <= ?
+      ORDER BY id ASC
+      ''',
+      [sessionId, lastId],
+    );
   }
 
   @override
