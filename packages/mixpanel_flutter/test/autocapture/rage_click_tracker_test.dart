@@ -22,7 +22,7 @@ void main() {
         ).isEnabled,
         isFalse);
   });
-  test('Android parity emits only at taps four and eight', () {
+  test('emits only at taps four and eight', () {
     final tracker = RageClickTracker(const RageClickOptions());
     expect(
         List.generate(

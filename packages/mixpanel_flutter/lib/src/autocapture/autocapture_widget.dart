@@ -77,7 +77,7 @@ class _CaptureState extends State<MixpanelAutocaptureWidget>
     _baseline = null;
   }
 
-  /// Early cancellation hints, matching Android's layout/scroll/focus signals.
+  /// Early cancellation hints: scroll, focus and window-metrics changes.
   void _onResponse() {
     _baseline = null;
     _dead.cancel();
@@ -156,7 +156,7 @@ class _CaptureState extends State<MixpanelAutocaptureWidget>
     // synchronously, so a later identify cannot relabel this event.
     void emit(String name, ClickEvent e) =>
         unawaited(instance.autocapture._trackClickEvent(name, e, null));
-    // Android parity: even an ineligible new tap cancels the previous check.
+    // Every accepted tap cancels the previous check, even an ineligible one.
     _dead.cancel();
     if (options.clickOptions.enabled) emit(r'$mp_click', click);
     final rage = _rage ??= RageClickTracker(options.rageClickOptions);

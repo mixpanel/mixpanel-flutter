@@ -4,8 +4,8 @@ import 'click_event.dart';
 import 'response_snapshot.dart';
 import 'detection_limits.dart';
 
-/// One pending check, matching Android: compare the baseline once at the
-/// deadline. Unsupported snapshots suppress events, never imply dead.
+/// One pending check: compare the baseline once at the deadline.
+/// Unsupported snapshots suppress events, never imply dead.
 class DeadClickDetector {
   DeadClickDetector({required this.capture});
   final ResponseSnapshot? Function() capture;

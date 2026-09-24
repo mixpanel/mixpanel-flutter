@@ -81,7 +81,7 @@ void main() {
     expect(named(r'$mp_dead_click'), isEmpty);
   });
 
-  // Android parity: only the deadline state is compared, so a response that
+  // Only the deadline state is compared, so a response that
   // fully reverts before the deadline is not observed.
   testWidgets('response reverted before the deadline is not observed',
       (tester) async {
@@ -117,8 +117,7 @@ void main() {
   });
 
   for (var mask = 0; mask < 8; mask++) {
-    testWidgets('independent flags $mask and Android burst reset',
-        (tester) async {
+    testWidgets('independent flags $mask and burst reset', (tester) async {
       await init(AutocaptureOptions(
           clickOptions: ClickOptions(enabled: mask & 1 != 0),
           rageClickOptions: RageClickOptions(enabled: mask & 2 != 0),
@@ -300,7 +299,7 @@ void main() {
         'GestureDetector');
   });
 
-  testWidgets('exactly 500 ms is a tap matching Android', (tester) async {
+  testWidgets('exactly 500 ms is a tap', (tester) async {
     await init();
     await tester.pumpWidget(host(button()));
     final gesture =

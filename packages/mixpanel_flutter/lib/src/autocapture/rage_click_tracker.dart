@@ -1,7 +1,7 @@
 import 'autocapture_options.dart';
 import 'detection_limits.dart';
 
-/// Android-compatible rolling spatial window. Internal to automatic capture.
+/// Rolling spatial window of recent taps. Internal to automatic capture.
 class RageClickTracker {
   RageClickTracker(RageClickOptions options)
       : _window = normalizeTimeWindow(options.timeWindow),

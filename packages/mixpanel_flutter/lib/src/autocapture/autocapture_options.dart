@@ -1,7 +1,7 @@
 /// Options for automatic clicks and frustration signals.
 ///
 /// Omit from Mixpanel.init to disable automatic capture. Each signal defaults
-/// to enabled when options are supplied, matching the native SDK structure.
+/// to enabled when options are supplied.
 ///
 /// **Experimental (beta).** Autocapture may contain issues, and its API and the
 /// properties it captures may change in a future release before general

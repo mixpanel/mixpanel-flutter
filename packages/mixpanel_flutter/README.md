@@ -244,8 +244,9 @@ capture changes.
 A rage click means four accepted taps within a rolling 1,000 ms window and
 44 logical pixels of the latest tap. Emitting clears the burst history. A dead
 click means an eligible control's screen showed no meaningful change 500 ms
-after the tap; like Android, only the state at the deadline is compared, and
-scroll, focus and window-size changes cancel the check early. Thresholds are configurable through `AutocaptureOptions`. Any new
+after the tap. Only the state at the deadline is compared; scroll, focus and
+window-size changes cancel the check early. Thresholds are configurable through
+`AutocaptureOptions`. Any new
 accepted tap cancels the previous pending dead check, even a noninteractive tap.
 Manual signal APIs remain independent of these detectors.
 
@@ -273,7 +274,7 @@ web, desktop, keyboard activation, and assistive-technology activation.
 
 
 Automatic pointer capture accepts primary touch/mouse taps lasting at most
-500 ms, matching Android (including exactly 500 ms). Stylus and inverted-stylus
+500 ms (including exactly 500 ms). Stylus and inverted-stylus
 input are not captured in this Beta. iPad trackpad clicks delivered by Flutter
 as mouse/touch events follow the same rules.
 
