@@ -60,6 +60,9 @@ class _CaptureState extends State<MixpanelAutocaptureWidget>
   @override
   void dispose() {
     _reset();
+    if (Mixpanel._cancelPendingAutocapture == _dead.cancel) {
+      Mixpanel._cancelPendingAutocapture = null;
+    }
     WidgetsBinding.instance.removeObserver(this);
     FocusManager.instance.removeListener(_onResponse);
     super.dispose();
@@ -172,6 +175,7 @@ class _CaptureState extends State<MixpanelAutocaptureWidget>
           event: click,
           timeout: options.deadClickOptions.timeWindow,
           onDetected: (e) => emit(r'$mp_dead_click', e));
+      Mixpanel._cancelPendingAutocapture = _dead.cancel;
     }
   }
 

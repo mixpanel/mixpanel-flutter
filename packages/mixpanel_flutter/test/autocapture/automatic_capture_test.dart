@@ -143,6 +143,27 @@ void main() {
     expect(events, isEmpty);
   });
 
+  for (final operation in ['identify', 'reset']) {
+    testWidgets('$operation cancels a pending dead check', (tester) async {
+      await init();
+      await tester.pumpWidget(host(button()));
+      await tester.tap(find.text('Buy'));
+      // A separate handle shares the same native identity.
+      final other = Mixpanel('test');
+      await (operation == 'identify' ? other.identify('user') : other.reset());
+      await tester.pump(const Duration(milliseconds: 501));
+      await tester.pump();
+      expect(named(r'$mp_click'), hasLength(1));
+      expect(named(r'$mp_dead_click'), isEmpty);
+
+      // Detection continues for later taps.
+      await tester.tap(find.text('Buy'));
+      await tester.pump(const Duration(milliseconds: 501));
+      await tester.pump();
+      expect(named(r'$mp_dead_click'), hasLength(1));
+    });
+  }
+
   testWidgets('long press, cancelled and swipe-return gestures are rejected',
       (tester) async {
     await init();

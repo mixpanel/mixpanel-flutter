@@ -458,6 +458,9 @@ class Mixpanel {
   Autocapture? _autocapture;
   // Set by init when automatic capture is enabled; read by the capture widget.
   AutocaptureOptions? _autocaptureOptions;
+  // Cancels a pending automatic dead-click check. Static because every Dart
+  // handle shares one native identity; set by the capture widget.
+  static VoidCallback? _cancelPendingAutocapture;
 
   Mixpanel(String token)
       : _token = token,
@@ -619,6 +622,8 @@ class Mixpanel {
   /// value is globally unique for each individual user you intend to track.
   Future<void> identify(String distinctId) async {
     if (_MixpanelHelper.isValidString(distinctId)) {
+      // A pending check must not emit under the new identity.
+      _cancelPendingAutocapture?.call();
       await _channel.invokeMethod<void>(
           'identify', <String, dynamic>{'distinctId': distinctId});
     } else {
@@ -896,6 +901,7 @@ class Mixpanel {
   /// Clear super properties and generates a new random distinctId for this instance.
   /// Useful for clearing data when a user logs out.
   Future<void> reset() async {
+    _cancelPendingAutocapture?.call();
     await _channel.invokeMethod<void>('reset');
   }
 
