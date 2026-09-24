@@ -22,6 +22,14 @@ void main() {
         ).isEnabled,
         isFalse);
   });
+  test('disabled tracker never emits', () {
+    final tracker = RageClickTracker(
+        const RageClickOptions(enabled: false, clickThreshold: 2));
+    expect(
+        List.generate(
+            4, (i) => tracker.record(0, 0, Duration(milliseconds: i))),
+        everyElement(isFalse));
+  });
   test('emits only at taps four and eight', () {
     final tracker = RageClickTracker(const RageClickOptions());
     expect(

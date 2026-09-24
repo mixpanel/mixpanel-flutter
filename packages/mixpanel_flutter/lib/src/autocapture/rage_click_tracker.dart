@@ -4,19 +4,21 @@ import 'detection_limits.dart';
 /// Rolling spatial window of recent taps. Internal to automatic capture.
 class RageClickTracker {
   RageClickTracker(RageClickOptions options)
-      : _window = normalizeTimeWindow(options.timeWindow),
+      : _enabled = options.enabled,
+        _window = normalizeTimeWindow(options.timeWindow),
         _threshold = normalizeClickThreshold(options.clickThreshold),
         _radiusSquared =
             normalizeRadius(options.radius) * normalizeRadius(options.radius) {
     assert(validTimeWindow(options.timeWindow));
   }
+  final bool _enabled;
   final Duration _window;
   final int _threshold;
   final double _radiusSquared;
   final List<_Tap> _taps = [];
 
   bool record(double x, double y, Duration time) {
-    if (!x.isFinite || !y.isFinite) return false;
+    if (!_enabled || !x.isFinite || !y.isFinite) return false;
     final cutoff = time - _window;
     _taps.removeWhere((tap) => tap.time < cutoff);
     // A backwards timestamp invalidates a sequence instead of extending it.

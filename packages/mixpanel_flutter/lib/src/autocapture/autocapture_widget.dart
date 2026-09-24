@@ -26,53 +26,59 @@ class _CaptureState extends State<MixpanelAutocaptureWidget>
     with WidgetsBindingObserver {
   final _resolver = TargetResolver();
   final _taps = PointerTapTracker();
-  late final _dead = DeadClickDetector(capture: _snapshot);
-  RageClickTracker? _rage;
-  // An outer capture widget already observes this subtree.
-  late final bool _nested =
-      context.findAncestorStateOfType<_CaptureState>() != null;
+  // Non-null only while automatic capture is enabled. When null, nothing is
+  // registered and pointer events pass straight through.
+  _Detectors? _detectors;
   CaptureTarget? _pendingTap;
   ResponseSnapshot? _baseline;
-
-  AutocaptureOptions? get _options => !_nested &&
-          !kIsWeb &&
-          (defaultTargetPlatform == TargetPlatform.android ||
-              defaultTargetPlatform == TargetPlatform.iOS)
-      ? widget.instance?._autocaptureOptions
-      : null;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
-    FocusManager.instance.addListener(_onResponse);
+    assert(context.findAncestorStateOfType<_CaptureState>() == null,
+        'Place a single MixpanelAutocaptureWidget above the app.');
+    _configure();
   }
 
   @override
   void didUpdateWidget(MixpanelAutocaptureWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (!identical(oldWidget.instance, widget.instance)) {
-      _reset();
-      _rage = null;
-    }
+    if (!identical(oldWidget.instance, widget.instance)) _configure();
   }
 
   @override
   void dispose() {
+    _disable();
+    super.dispose();
+  }
+
+  void _configure() {
+    _disable();
+    final instance = widget.instance;
+    final options = instance?._autocaptureOptions;
+    final supported = !kIsWeb &&
+        (defaultTargetPlatform == TargetPlatform.android ||
+            defaultTargetPlatform == TargetPlatform.iOS);
+    if (instance == null || options == null || !supported) return;
+    _detectors = _Detectors(instance, options, _snapshot);
+    WidgetsBinding.instance.addObserver(this);
+    FocusManager.instance.addListener(_onResponse);
+  }
+
+  void _disable() {
+    final detectors = _detectors;
+    if (detectors == null) return;
     _reset();
-    if (Mixpanel._cancelPendingAutocapture == _dead.cancel) {
-      Mixpanel._cancelPendingAutocapture = null;
-    }
+    detectors.dispose();
+    _detectors = null;
     WidgetsBinding.instance.removeObserver(this);
     FocusManager.instance.removeListener(_onResponse);
-    super.dispose();
   }
 
   void _reset() {
     _taps.reset();
     _clearPress();
-    _dead.cancel();
-    _rage?.reset();
+    _detectors?.reset();
   }
 
   void _clearPress() {
@@ -83,7 +89,7 @@ class _CaptureState extends State<MixpanelAutocaptureWidget>
   /// Early cancellation hints: scroll, focus and window-metrics changes.
   void _onResponse() {
     _baseline = null;
-    _dead.cancel();
+    _detectors?.dead.cancel();
   }
 
   bool _onScroll(ScrollNotification notification) {
@@ -108,8 +114,8 @@ class _CaptureState extends State<MixpanelAutocaptureWidget>
   }
 
   void _down(PointerDownEvent event) {
-    final options = _options;
-    if (options == null) return;
+    final detectors = _detectors;
+    if (detectors == null) return;
     _clearPress();
     final slop = computeHitSlop(
         event.kind, MediaQuery.maybeOf(context)?.gestureSettings);
@@ -118,9 +124,7 @@ class _CaptureState extends State<MixpanelAutocaptureWidget>
     if (target == null) return;
     _pendingTap = target;
     // Capture before ordinary tap handlers; raw pointer handlers may run earlier.
-    if (options.deadClickOptions.enabled && target.deadEligible) {
-      _baseline = _snapshot();
-    }
+    _baseline = detectors.dead.baselineFor(target);
   }
 
   void _move(PointerMoveEvent event) {
@@ -138,57 +142,78 @@ class _CaptureState extends State<MixpanelAutocaptureWidget>
     final target = _pendingTap;
     final baseline = _baseline;
     _clearPress();
-    final options = _options;
-    final instance = widget.instance;
+    final detectors = _detectors;
     if (!accepted ||
         target == null ||
-        options == null ||
-        instance == null ||
+        detectors == null ||
         !target.element.mounted) {
       return;
     }
     final old = target.event;
-    final click = ClickEvent(
-        x: event.position.dx,
-        y: event.position.dy,
-        elementId: old.elementId,
-        tagName: old.tagName,
-        role: old.role,
-        elements: old.elements);
-    // _trackClickEvent contains its own errors and invokes the channel
-    // synchronously, so a later identify cannot relabel this event.
-    void emit(String name, ClickEvent e) =>
-        unawaited(instance.autocapture._trackClickEvent(name, e, null));
-    // Every accepted tap cancels the previous check, even an ineligible one.
-    _dead.cancel();
-    if (options.clickOptions.enabled) emit(r'$mp_click', click);
-    final rage = _rage ??= RageClickTracker(options.rageClickOptions);
-    if (options.rageClickOptions.enabled &&
-        rage.record(click.x, click.y, event.timeStamp)) {
-      emit(r'$mp_rage_click', click);
-    }
-    if (options.deadClickOptions.enabled &&
-        target.deadEligible &&
-        baseline != null) {
-      _dead.start(
-          baseline: baseline,
-          event: click,
-          timeout: options.deadClickOptions.timeWindow,
-          onDetected: (e) => emit(r'$mp_dead_click', e));
-      Mixpanel._cancelPendingAutocapture = _dead.cancel;
-    }
+    detectors.onTap(
+        ClickEvent(
+            x: event.position.dx,
+            y: event.position.dy,
+            elementId: old.elementId,
+            tagName: old.tagName,
+            role: old.role,
+            elements: old.elements),
+        event.timeStamp,
+        baseline);
   }
 
+  // The tree shape never changes, so enabling capture after asynchronous
+  // initialization does not remount [child]; only the callbacks are toggled.
   @override
-  Widget build(BuildContext context) =>
-      NotificationListener<ScrollNotification>(
-        onNotification: _onScroll,
-        child: Listener(
-            behavior: HitTestBehavior.translucent,
-            onPointerDown: _down,
-            onPointerMove: _move,
-            onPointerUp: _up,
-            onPointerCancel: _cancel,
-            child: widget.child),
-      );
+  Widget build(BuildContext context) {
+    final enabled = _detectors != null;
+    return NotificationListener<ScrollNotification>(
+      onNotification: enabled ? _onScroll : null,
+      child: Listener(
+          behavior: HitTestBehavior.translucent,
+          onPointerDown: enabled ? _down : null,
+          onPointerMove: enabled ? _move : null,
+          onPointerUp: enabled ? _up : null,
+          onPointerCancel: enabled ? _cancel : null,
+          child: widget.child),
+    );
+  }
+}
+
+/// Detectors for one enabled instance; each detector applies its own options.
+class _Detectors {
+  _Detectors(Mixpanel instance, AutocaptureOptions options,
+      ResponseSnapshot? Function() capture)
+      : _autocapture = instance.autocapture,
+        _clickEnabled = options.clickOptions.enabled,
+        rage = RageClickTracker(options.rageClickOptions),
+        dead = DeadClickDetector(options.deadClickOptions, capture: capture);
+  final Autocapture _autocapture;
+  final bool _clickEnabled;
+  final RageClickTracker rage;
+  final DeadClickDetector dead;
+
+  // _trackClickEvent contains its own errors and invokes the channel
+  // synchronously, so a later identify cannot relabel this event.
+  void _emit(String name, ClickEvent event) =>
+      unawaited(_autocapture._trackClickEvent(name, event, null));
+
+  void onTap(ClickEvent click, Duration time, ResponseSnapshot? baseline) {
+    if (_clickEnabled) _emit(r'$mp_click', click);
+    if (rage.record(click.x, click.y, time)) _emit(r'$mp_rage_click', click);
+    dead.start(baseline, click, (e) => _emit(r'$mp_dead_click', e));
+    // identify() and reset() cancel a check that is still pending.
+    Mixpanel._cancelPendingAutocapture = dead.cancel;
+  }
+
+  void reset() {
+    dead.cancel();
+    rage.reset();
+  }
+
+  void dispose() {
+    if (Mixpanel._cancelPendingAutocapture == dead.cancel) {
+      Mixpanel._cancelPendingAutocapture = null;
+    }
+  }
 }

@@ -1,12 +1,21 @@
 import 'dart:async';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mixpanel_flutter/src/autocapture/autocapture_options.dart';
 import 'package:mixpanel_flutter/src/autocapture/click_event.dart';
 import 'package:mixpanel_flutter/src/autocapture/dead_click_detector.dart';
 import 'package:mixpanel_flutter/src/autocapture/response_snapshot.dart';
+import 'package:mixpanel_flutter/src/autocapture/target_resolver.dart';
 
 void main() {
   const event = ClickEvent(x: 1, y: 2, elementId: 'target');
   const baseline = ResponseSnapshot(1);
+  DeadClickDetector detector(ResponseSnapshot? Function() capture,
+          {Duration timeout = const Duration(milliseconds: 10),
+          bool enabled = true}) =>
+      DeadClickDetector(DeadClickOptions(enabled: enabled, timeWindow: timeout),
+          capture: capture);
+
   for (final response in <ResponseSnapshot?>[
     baseline,
     const ResponseSnapshot(2),
@@ -16,13 +25,10 @@ void main() {
         'deadline outcome for snapshot ${response == null ? 'unknown' : response.differsFrom(baseline) ? 'changed' : 'unchanged'}',
         (tester) async {
       var count = 0;
-      final detector = DeadClickDetector(capture: () => response);
+      final dead =
+          detector(() => response, timeout: const Duration(microseconds: 1500));
 
-      detector.start(
-          baseline: baseline,
-          event: event,
-          timeout: const Duration(microseconds: 1500),
-          onDetected: (_) => count++);
+      dead.start(baseline, event, (_) => count++);
       await tester.pump(const Duration(microseconds: 1499));
       expect(count, 0);
       await tester.pump(const Duration(microseconds: 1));
@@ -32,46 +38,44 @@ void main() {
   testWidgets('replacement discards old deadline and emits replacement once',
       (tester) async {
     final events = <ClickEvent>[];
-    final detector = DeadClickDetector(capture: () => baseline);
+    final dead = detector(() => baseline);
 
-    detector.start(
-        baseline: baseline,
-        event: event,
-        timeout: const Duration(milliseconds: 10),
-        onDetected: events.add);
+    dead.start(baseline, event, events.add);
     await tester.pump(const Duration(milliseconds: 5));
     const replacement = ClickEvent(x: 3, y: 4, elementId: 'replacement');
 
-    detector.start(
-        baseline: baseline,
-        event: replacement,
-        timeout: const Duration(milliseconds: 20),
-        onDetected: events.add);
+    dead.start(baseline, replacement, events.add);
     await tester.pump(const Duration(milliseconds: 5));
     expect(events, isEmpty);
-    await tester.pump(const Duration(milliseconds: 15));
+    await tester.pump(const Duration(milliseconds: 5));
     expect(events, [replacement]);
+  });
+  testWidgets('a tap without a baseline still cancels the pending check',
+      (tester) async {
+    var emissions = 0;
+    final dead = detector(() => baseline);
+
+    dead.start(baseline, event, (_) => emissions++);
+    dead.start(null, event, (_) => emissions++);
+    await tester.pump(const Duration(milliseconds: 20));
+    expect(emissions, 0);
   });
   testWidgets(
       'scheduled frame defers capture and cancelled callback stays stale',
       (tester) async {
     var captures = 0;
     var emissions = 0;
-    final detector = DeadClickDetector(capture: () {
+    final dead = detector(() {
       captures++;
       return baseline;
     });
 
-    detector.start(
-        baseline: baseline,
-        event: event,
-        timeout: const Duration(milliseconds: 10),
-        onDetected: (_) => emissions++);
+    dead.start(baseline, event, (_) => emissions++);
     tester.binding.scheduleFrame();
     int? capturesBeforeFrame;
     Timer(const Duration(milliseconds: 10), () {
       capturesBeforeFrame = captures;
-      detector.cancel();
+      dead.cancel();
     });
     await tester.pump(const Duration(milliseconds: 10));
     await tester.pump();
@@ -82,63 +86,52 @@ void main() {
   testWidgets('scheduled frame completes unchanged candidate after rendering',
       (tester) async {
     var emissions = 0;
-    final detector = DeadClickDetector(capture: () => baseline);
+    final dead = detector(() => baseline);
 
-    detector.start(
-        baseline: baseline,
-        event: event,
-        timeout: const Duration(milliseconds: 10),
-        onDetected: (_) => emissions++);
+    dead.start(baseline, event, (_) => emissions++);
     tester.binding.scheduleFrame();
     await tester.pump(const Duration(milliseconds: 10));
     expect(emissions, 1);
   });
-  testWidgets('invalid duration asserts', (tester) async {
-    final detector = DeadClickDetector(capture: () => baseline);
-    expect(
-        () => detector.start(
-            baseline: baseline,
-            event: event,
-            timeout: Duration.zero,
-            onDetected: (_) => fail('unexpected emission')),
+  test('invalid duration asserts', () {
+    expect(() => detector(() => baseline, timeout: Duration.zero),
         throwsAssertionError);
   });
   testWidgets('cancel before the deadline suppresses emission', (tester) async {
     var emissions = 0;
-    final detector = DeadClickDetector(capture: () => baseline);
+    final dead = detector(() => baseline);
 
-    detector.start(
-        baseline: baseline,
-        event: event,
-        timeout: const Duration(milliseconds: 10),
-        onDetected: (_) => emissions++);
+    dead.start(baseline, event, (_) => emissions++);
     await tester.pump(const Duration(milliseconds: 5));
-    detector.cancel();
+    dead.cancel();
     await tester.pump(const Duration(milliseconds: 10));
     expect(emissions, 0);
   });
-
   testWidgets('deferred old candidate cannot finish its replacement',
       (tester) async {
     final detected = <String>[];
-    final detector = DeadClickDetector(capture: () => baseline);
+    final dead = detector(() => baseline);
 
-    detector.start(
-        baseline: baseline,
-        event: event,
-        timeout: const Duration(milliseconds: 10),
-        onDetected: (_) => detected.add('old'));
+    dead.start(baseline, event, (_) => detected.add('old'));
     tester.binding.scheduleFrame();
     Timer(const Duration(milliseconds: 10), () {
-      detector.start(
-          baseline: baseline,
-          event: event,
-          timeout: const Duration(milliseconds: 20),
-          onDetected: (_) => detected.add('new'));
+      dead.start(baseline, event, (_) => detected.add('new'));
     });
     await tester.pump(const Duration(milliseconds: 10));
     expect(detected, isEmpty);
-    await tester.pump(const Duration(milliseconds: 20));
+    await tester.pump(const Duration(milliseconds: 10));
     expect(detected, ['new']);
+  });
+  testWidgets('baseline requires detection enabled and an eligible target',
+      (tester) async {
+    await tester.pumpWidget(const SizedBox());
+    final element = tester.element(find.byType(SizedBox));
+    CaptureTarget target(bool eligible) => CaptureTarget(
+        element, const ClickEvent(x: 0, y: 0, elementId: 'id'), eligible);
+
+    expect(detector(() => baseline).baselineFor(target(true)), same(baseline));
+    expect(detector(() => baseline).baselineFor(target(false)), isNull);
+    expect(detector(() => baseline, enabled: false).baselineFor(target(true)),
+        isNull);
   });
 }

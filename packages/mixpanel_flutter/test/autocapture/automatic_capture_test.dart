@@ -194,15 +194,34 @@ void main() {
     expect(events, isEmpty);
   });
 
-  testWidgets('nested wrappers do not double capture', (tester) async {
+  testWidgets('nested wrappers are rejected in debug', (tester) async {
     await init();
     await tester.pumpWidget(
         host(MixpanelAutocaptureWidget(instance: instance, child: button())));
+    expect(tester.takeException(), isAssertionError);
+  });
+
+  testWidgets('enabling capture after init keeps child state', (tester) async {
+    await init();
+    final key = GlobalKey();
+    Widget app(Mixpanel? value) => MixpanelAutocaptureWidget(
+        instance: value,
+        child: MaterialApp(
+            home: Scaffold(
+                body: Center(
+                    child: StatefulBuilder(
+                        key: key, builder: (_, __) => button())))));
+    await tester.pumpWidget(app(null));
+    final state = key.currentState;
     await tester.tap(find.text('Buy'));
     await tester.pump(const Duration(seconds: 1));
+    expect(events, isEmpty);
+
+    await tester.pumpWidget(app(instance));
+    expect(key.currentState, same(state));
+    await tester.tap(find.text('Buy'));
     await tester.pump();
     expect(named(r'$mp_click'), hasLength(1));
-    expect(named(r'$mp_dead_click'), hasLength(1));
   });
 
   testWidgets('unsupported custom paint anywhere suppresses dead only',
