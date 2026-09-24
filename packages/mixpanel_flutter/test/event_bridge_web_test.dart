@@ -3,6 +3,7 @@
 
 @TestOn('browser')
 
+import 'dart:async';
 import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
 
@@ -21,13 +22,16 @@ class _JSDate {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  const channel = MethodChannel('mixpanel_flutter');
   late MixpanelFlutterPlugin plugin;
   late JSAny? previousMixpanel;
+  late List<String> channelCalls;
   JSObject? capturedConfig;
 
   setUp(() {
     plugin = MixpanelFlutterPlugin();
     capturedConfig = null;
+    channelCalls = [];
     previousMixpanel = globalContext.getProperty<JSAny?>('mixpanel'.toJS);
     final jsMixpanel = <String, Object?>{}.jsify() as JSObject;
     jsMixpanel.setProperty(
@@ -37,34 +41,50 @@ void main() {
       }).toJS,
     );
     globalContext.setProperty('mixpanel'.toJS, jsMixpanel);
+    // The mock channel hands every call to the real web plugin, so the
+    // public API drives the same plugin code an app would reach.
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (MethodCall call) {
+      channelCalls.add(call.method);
+      return plugin.handleMethodCall(call);
+    });
   });
 
   tearDown(() async {
     await plugin.handleMethodCall(const MethodCall('stopEventBridge'));
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(
-            const MethodChannel('mixpanel_flutter'), null);
+        .setMockMethodCallHandler(channel, null);
     globalContext.setProperty('mixpanel'.toJS, previousMixpanel);
   });
 
-  JSFunction installedHook() {
-    plugin.initialize(const MethodCall('initialize', <String, Object?>{
-      'token': 'test-token',
-      'config': <String, Object?>{
-        'hooks': <String, Object?>{'another_hook': 'keep-me'},
+  /// Initializes through the public API and returns the installed hook.
+  Future<JSFunction> initWithHook() async {
+    await Mixpanel.init(
+      'test-token',
+      trackAutomaticEvents: false,
+      config: <String, dynamic>{
+        'hooks': <String, dynamic>{'another_hook': 'keep-me'},
       },
-    }));
+    );
     final hooks = capturedConfig!.getProperty<JSObject>('hooks'.toJS);
     expect(hooks.getProperty<JSString>('another_hook'.toJS).toDart, 'keep-me');
     return hooks.getProperty<JSFunction>('on_track'.toJS);
   }
 
+  /// Subscribes through the public API, which starts the bridge.
+  Future<StreamSubscription<MixpanelEvent>> subscribe(
+    List<MixpanelEvent> received,
+  ) async {
+    final sub = MixpanelEventBridge.events.listen(received.add);
+    await Future<void>.delayed(Duration.zero);
+    return sub;
+  }
+
   test('on_track forwards decorated properties without changing the event',
       () async {
-    final hook = installedHook();
+    final hook = await initWithHook();
     final received = <MixpanelEvent>[];
-    final sub = MixpanelEventBridge.events.listen(received.add);
-    await plugin.handleMethodCall(const MethodCall('startEventBridge'));
+    final sub = await subscribe(received);
 
     final properties = <String, Object?>{
       'plan': 'pro',
@@ -88,10 +108,9 @@ void main() {
   });
 
   test('on_track forwards JS dates without dropping the event', () async {
-    final hook = installedHook();
+    final hook = await initWithHook();
     final received = <MixpanelEvent>[];
-    final sub = MixpanelEventBridge.events.listen(received.add);
-    await plugin.handleMethodCall(const MethodCall('startEventBridge'));
+    final sub = await subscribe(received);
 
     final date = _JSDate('2024-03-10T04:30:00-05:00');
     final properties = <String, Object?>{
@@ -117,50 +136,28 @@ void main() {
     await sub.cancel();
   });
 
-  test('start and stop gate forwarding while leaving tracking intact',
+  test('subscribing starts and cancelling stops the bridge over the channel',
       () async {
-    final hook = installedHook();
-    final received = <MixpanelEvent>[];
-    final sub = MixpanelEventBridge.events.listen(received.add);
+    final hook = await initWithHook();
     final properties = <String, Object?>{'count': 1}.jsify() as JSObject;
 
+    // Tracked before anyone listens: not buffered for a later subscriber.
     hook.callAsFunction(null, 'Before'.toJS, properties);
-    await plugin.handleMethodCall(const MethodCall('startEventBridge'));
+    final received = <MixpanelEvent>[];
+    final sub = await subscribe(received);
     hook.callAsFunction(null, 'During'.toJS, properties);
-    await plugin.handleMethodCall(const MethodCall('stopEventBridge'));
-    hook.callAsFunction(null, 'After'.toJS, properties);
     await Future<void>.delayed(Duration.zero);
+    await sub.cancel();
+    await Future<void>.delayed(Duration.zero);
+    // Tracking still works while the bridge is stopped.
+    final after =
+        hook.callAsFunction(null, 'After'.toJS, properties) as JSArray<JSAny?>;
 
     expect(received.map((event) => event.eventName), ['During']);
-    await sub.cancel();
-  });
-
-  test('Mixpanel init activates the JS bridge for a Dart listener', () async {
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(
-      const MethodChannel('mixpanel_flutter'),
-      plugin.handleMethodCall,
+    expect(
+      channelCalls.where((method) => method.endsWith('EventBridge')),
+      ['startEventBridge', 'stopEventBridge'],
     );
-    await Mixpanel.init('test-token', trackAutomaticEvents: false);
-    final hook = capturedConfig!
-        .getProperty<JSObject>('hooks'.toJS)
-        .getProperty<JSFunction>('on_track'.toJS);
-    final received = <MixpanelEvent>[];
-    final sub = MixpanelEventBridge.events.listen(received.add);
-    await Future<void>.delayed(Duration.zero);
-
-    hook.callAsFunction(
-      null,
-      'Subscribed'.toJS,
-      <String, Object?>{'plan': 'team'}.jsify() as JSObject,
-    );
-    await Future<void>.delayed(Duration.zero);
-    expect(received.single.eventName, 'Subscribed');
-
-    await sub.cancel();
-    await Future<void>.delayed(Duration.zero);
-    hook.callAsFunction(null, 'Unsubscribed'.toJS, null);
-    await Future<void>.delayed(Duration.zero);
-    expect(received, hasLength(1));
+    expect((after.toDart[0] as JSString).toDart, 'After');
   });
 }
