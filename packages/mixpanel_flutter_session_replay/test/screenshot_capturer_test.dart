@@ -141,6 +141,50 @@ void main() {
       );
     });
 
+    testWidgets('native capture does not re-walk masks after toImage', (
+      tester,
+    ) async {
+      // GIVEN a native (render tree) capture of masked text
+      final key = GlobalKey();
+      await tester.pumpWidget(
+        Directionality(
+          textDirection: TextDirection.ltr,
+          child: RepaintBoundary(
+            key: key,
+            child: const ColoredBox(
+              color: Colors.white,
+              child: Text('Sensitive account details'),
+            ),
+          ),
+        ),
+      );
+      final element = key.currentContext! as Element;
+      final boundary = element.findRenderObject()! as RenderRepaintBoundary;
+      final capturer = ScreenshotCapturer(
+        directive: MaskingDirective(autoMaskTypes: const {AutoMaskedView.text}),
+        logger: MixpanelLogger(LogLevel.none),
+        debugOverlayEnabled: false,
+        compressor: _RecordingCompressor(),
+      );
+
+      // WHEN the frame is captured
+      final pending = tester.runAsync(
+        () => capturer.capture(
+          boundary,
+          boundaryElement: element,
+          getCurrentSession: SessionManager().getCurrentSession,
+          getDistinctId: () => 'screenshot-capturer-test-distinct-id',
+        ),
+      );
+      await tester.pump();
+      final result = await pending;
+
+      // THEN it succeeds without a post-snapshot validation walk, because
+      // toImage() snapshots the same frame the mask walk observed
+      expect(result, isA<CaptureSuccess>());
+      expect(capturer.lastPostSnapshotMaskValidationTime, isNull);
+    });
+
     testWidgets(
       'keeps native raster and mask coordinates at logical resolution',
       (tester) async {

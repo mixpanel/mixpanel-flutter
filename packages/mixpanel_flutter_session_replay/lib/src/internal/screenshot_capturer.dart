@@ -349,9 +349,8 @@ class ScreenshotCapturer {
         // the common static-screen path. Animated, scrolling, or rebuilt
         // screens advance the timestamp and still take the full fail-closed
         // comparison below.
-        if (_compressor.capturesRenderedSurface &&
-            SchedulerBinding.instance.currentSystemFrameTimeStamp ==
-                detectedFrameTimeStamp) {
+        if (SchedulerBinding.instance.currentSystemFrameTimeStamp ==
+            detectedFrameTimeStamp) {
           lastPostSnapshotMaskValidationTime = Duration.zero;
           return true;
         }
@@ -478,10 +477,10 @@ class ScreenshotCapturer {
         '${rawImage.width}x${rawImage.height} raster)',
       );
 
-      if (!validateSnapshot()) {
-        rawImage.dispose();
-        return snapshotValidationFailure!;
-      }
+      // No post-snapshot validation here: toImage() builds its scene from the
+      // layer tree synchronously when called, so the image is the frame the
+      // mask walk observed. A second walk after the await would only see
+      // later frames and discard valid captures during scrolls and animations.
 
       // Mask detection, wireframes, and interactions use logical coordinates.
       // Convert only the rectangles painted into the downscaled raster.
