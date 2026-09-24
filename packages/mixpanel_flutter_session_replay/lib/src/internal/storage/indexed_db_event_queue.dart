@@ -604,8 +604,14 @@ class IndexedDbEventQueue
       }
 
       final metadata = (result.dartify()! as Map).cast<String, dynamic>();
-      metadata['last_sequence_number'] = sequenceNumber;
-      metadataStore.put(metadata.jsify()!);
+      // The upload lease can expire while a frozen tab's request is in
+      // flight, letting another tab upload and advance the sequence. Never
+      // move it backwards, or the next batch would reuse a sent number.
+      final previous = _asNullableInt(metadata['last_sequence_number']) ?? -1;
+      if (sequenceNumber > previous) {
+        metadata['last_sequence_number'] = sequenceNumber;
+        metadataStore.put(metadata.jsify()!);
+      }
     }.toJS;
 
     _deleteEventsAndUpdateSizeInTransaction(

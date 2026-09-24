@@ -475,6 +475,45 @@ void main() {
       },
     );
 
+    test('a stale commit never moves the sequence number backwards', () async {
+      // GIVEN a session another tab already advanced to sequence 5
+      const sessionId = 'stale-commit-session';
+      await storage.createSessionMetadata(
+        Session(
+          id: sessionId,
+          startTime: DateTime.utc(2025),
+          status: SessionStatus.active,
+        ),
+      );
+      await storage.add(
+        SessionReplayEvent(
+          sessionId: sessionId,
+          distinctId: 'user-1',
+          timestamp: DateTime.utc(2025),
+          type: EventType.interaction,
+          payload: InteractionPayload(interactionType: 1, x: 10, y: 20),
+        ),
+      );
+      final batch = await storage.fetchBatch(
+        sessionId: sessionId,
+        distinctId: 'user-1',
+        maxBytes: 1024,
+        maxCount: 10,
+      );
+      await storage.updateSequenceNumber(sessionId, 5);
+
+      // WHEN a tab whose lease expired commits an older sequence number
+      await storage.commitUploadedBatch(
+        events: batch,
+        sessionId: sessionId,
+        sequenceNumber: 4,
+      );
+
+      // THEN the batch is removed but the newer sequence number is kept
+      expect(await storage.fetchOldest(), isNull);
+      expect(await storage.getLastSequenceNumber(sessionId), 5);
+    });
+
     test(
       'rolls back batch deletion when session metadata is missing',
       () async {
