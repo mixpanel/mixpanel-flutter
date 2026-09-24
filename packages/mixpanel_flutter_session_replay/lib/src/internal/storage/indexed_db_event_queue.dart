@@ -47,6 +47,12 @@ class IndexedDbEventQueue
   final int quotaMB;
   web.IDBDatabase? _db;
   bool _disposed = false;
+  bool _initialized = false;
+  Future<void>? _reopening;
+  DateTime? _reopenRetryAfter;
+
+  static const _schemaVersion = 5;
+  static const _reopenRetryInterval = Duration(seconds: 30);
 
   /// In-memory byte counter for quota enforcement.
   /// Initialized from IndexedDB on startup, updated on add/remove/removeAll.
@@ -66,8 +72,18 @@ class IndexedDbEventQueue
 
   @override
   Future<void> initialize() async {
-    final completer = Completer<void>();
-    final request = web.window.indexedDB.open(_dbName, 5);
+    _attach(await _openDatabase());
+
+    // Synchronize a transactional size record used by every open tab. A
+    // process-local counter alone can allow concurrent tabs to exceed quota.
+    _currentSizeBytes = await _synchronizeTotalSize();
+    _initialized = true;
+  }
+
+  /// Opens the database, creating or upgrading its schema as needed.
+  Future<web.IDBDatabase> _openDatabase() async {
+    final completer = Completer<web.IDBDatabase>();
+    final request = web.window.indexedDB.open(_dbName, _schemaVersion);
     Timer? blockedTimer;
 
     request.onupgradeneeded = (web.IDBVersionChangeEvent event) {
@@ -132,14 +148,8 @@ class IndexedDbEventQueue
         openedDb.close();
         return;
       }
-      _db = openedDb;
-      _db!.onversionchange = (web.Event event) {
-        _logger.info('IndexedDB version changed; closing stale connection');
-        _db?.close();
-        _db = null;
-      }.toJS;
       _logger.debug('IndexedDB opened: $_dbName');
-      if (!completer.isCompleted) completer.complete();
+      completer.complete(openedDb);
     }.toJS;
 
     request.onerror = (web.Event event) {
@@ -166,22 +176,98 @@ class IndexedDbEventQueue
       });
     }.toJS;
 
-    await completer.future;
+    return completer.future;
+  }
 
-    // Synchronize a transactional size record used by every open tab. A
-    // process-local counter alone can allow concurrent tabs to exceed quota.
-    _currentSizeBytes = await _synchronizeTotalSize();
+  /// Adopts [db] as the live connection and watches for it being closed.
+  void _attach(web.IDBDatabase db) {
+    _db = db;
+    // Another tab is upgrading or deleting the database. Close so that tab
+    // is not blocked; the next operation reopens the connection.
+    db.onversionchange = (web.Event event) {
+      _logger.info('IndexedDB version changed; closing stale connection');
+      _dropConnection(db);
+    }.toJS;
+    // The browser closed the connection abnormally, for example after the
+    // storage was cleared or the backing store failed.
+    db.onclose = (web.Event event) {
+      _logger.warning('IndexedDB connection closed by the browser');
+      _dropConnection(db);
+    }.toJS;
+  }
+
+  void _dropConnection(web.IDBDatabase db) {
+    if (!identical(_db, db)) return;
+    _db = null;
+    try {
+      db.close();
+    } catch (_) {}
+  }
+
+  /// Makes sure a live connection exists before an operation starts.
+  ///
+  /// Like mixpanel-js, a closed connection is reopened lazily by the next
+  /// operation instead of leaving the queue unusable until the page reloads.
+  /// Failed reopens are retried at most every [_reopenRetryInterval]: once a
+  /// newer schema is installed by another tab, opening this version fails
+  /// until the page reloads with the newer SDK.
+  Future<void> _ensureOpen() async {
+    _checkState();
+    if (_db != null) return;
+    final retryAfter = _reopenRetryAfter;
+    if (retryAfter != null && DateTime.now().isBefore(retryAfter)) {
+      throw StateError('IndexedDB connection is closed: $_dbName');
+    }
+    await (_reopening ??= _reopen().whenComplete(() => _reopening = null));
+    if (_disposed) throw StateError('EventQueue has been disposed');
+  }
+
+  Future<void> _reopen() async {
+    try {
+      final db = await _openDatabase();
+      if (_disposed) {
+        db.close();
+        return;
+      }
+      _attach(db);
+      _currentSizeBytes = await _synchronizeTotalSize();
+      _reopenRetryAfter = null;
+      _logger.info('IndexedDB connection reopened: $_dbName');
+    } catch (error) {
+      _reopenRetryAfter = DateTime.now().add(_reopenRetryInterval);
+      _logger.warning('Failed to reopen IndexedDB: $error');
+      rethrow;
+    }
+  }
+
+  /// Starts a transaction on the live connection.
+  ///
+  /// The browser can close a connection without an event reaching Dart
+  /// first. A failure here drops the connection so the next operation
+  /// reopens it, matching mixpanel-js's retry on `InvalidStateError`.
+  web.IDBTransaction _transaction(JSAny storeNames, String mode) {
+    // A versionchange or close event can land between _ensureOpen() and here.
+    final db = _db;
+    if (db == null) {
+      throw StateError('IndexedDB connection is closed: $_dbName');
+    }
+    try {
+      return db.transaction(storeNames, mode);
+    } catch (_) {
+      _dropConnection(db);
+      rethrow;
+    }
   }
 
   @override
   Future<void> add(SessionReplayEvent event) async {
-    _checkState();
+    await _ensureOpen();
 
     final row = event.toDbRow();
     final eventSize = row['data_size'] as int;
 
     final quotaBytes = quotaMB * 1024 * 1024;
-    final txn = _db!.transaction(
+    final txn = _transaction(
       [
         _eventsStore,
         _coordinationStore,
@@ -221,9 +307,9 @@ class IndexedDbEventQueue
 
   @override
   Future<PersistedSessionReplayEvent?> fetchOldest() async {
-    _checkState();
+    await _ensureOpen();
 
-    final txn = _db!.transaction(_eventsStore.toJS, 'readonly');
+    final txn = _transaction(_eventsStore.toJS, 'readonly');
     final store = txn.objectStore(_eventsStore);
     final request = store.openCursor();
 
@@ -248,9 +334,9 @@ class IndexedDbEventQueue
 
   @override
   Future<PersistedSessionReplayEvent?> fetchNewest() async {
-    _checkState();
+    await _ensureOpen();
 
-    final txn = _db!.transaction(_eventsStore.toJS, 'readonly');
+    final txn = _transaction(_eventsStore.toJS, 'readonly');
     final store = txn.objectStore(_eventsStore);
     final request = store.openCursor(null, 'prev');
 
@@ -280,9 +366,9 @@ class IndexedDbEventQueue
   Future<QueuedEventHeader?> fetchNewestHeader() => _fetchHeader('prev');
 
   Future<QueuedEventHeader?> _fetchHeader(String direction) async {
-    _checkState();
+    await _ensureOpen();
 
-    final txn = _db!.transaction(_eventsStore.toJS, 'readonly');
+    final txn = _transaction(_eventsStore.toJS, 'readonly');
     final index = txn.objectStore(_eventsStore).index(_eventHeaderIndex);
     final request = index.openKeyCursor(null, direction);
     final completer = Completer<QueuedEventHeader?>();
@@ -322,9 +408,9 @@ class IndexedDbEventQueue
     required int maxBytes,
     required int maxCount,
   }) async {
-    _checkState();
+    await _ensureOpen();
 
-    final txn = _db!.transaction(_eventsStore.toJS, 'readonly');
+    final txn = _transaction(_eventsStore.toJS, 'readonly');
     final store = txn.objectStore(_eventsStore);
     final index = store.index(_sessionIndex);
     final request = index.openCursor(sessionId.toJS);
@@ -377,9 +463,9 @@ class IndexedDbEventQueue
 
   @override
   Future<void> createSessionMetadata(Session session) async {
-    _checkState();
+    await _ensureOpen();
 
-    final txn = _db!.transaction(_metadataStore.toJS, 'readwrite');
+    final txn = _transaction(_metadataStore.toJS, 'readwrite');
     final store = txn.objectStore(_metadataStore);
     final getRequest = store.get(session.id.toJS);
 
@@ -404,9 +490,9 @@ class IndexedDbEventQueue
 
   @override
   Future<Session?> getSessionMetadata(String sessionId) async {
-    _checkState();
+    await _ensureOpen();
 
-    final txn = _db!.transaction(_metadataStore.toJS, 'readonly');
+    final txn = _transaction(_metadataStore.toJS, 'readonly');
     final store = txn.objectStore(_metadataStore);
     final request = store.get(sessionId.toJS);
 
@@ -426,10 +512,10 @@ class IndexedDbEventQueue
 
   @override
   Future<void> remove(List<PersistedSessionReplayEvent> events) async {
-    _checkState();
+    await _ensureOpen();
     if (events.isEmpty) return;
 
-    final txn = _db!.transaction(
+    final txn = _transaction(
       [
         _eventsStore,
         _coordinationStore,
@@ -450,9 +536,9 @@ class IndexedDbEventQueue
 
   @override
   Future<void> removeAll() async {
-    _checkState();
+    await _ensureOpen();
 
-    final txn = _db!.transaction(
+    final txn = _transaction(
       [
         _eventsStore,
         _metadataStore,
@@ -470,9 +556,9 @@ class IndexedDbEventQueue
 
   @override
   Future<int> getLastSequenceNumber(String sessionId) async {
-    _checkState();
+    await _ensureOpen();
 
-    final txn = _db!.transaction(_metadataStore.toJS, 'readonly');
+    final txn = _transaction(_metadataStore.toJS, 'readonly');
     final store = txn.objectStore(_metadataStore);
     final request = store.get(sessionId.toJS);
 
@@ -488,9 +574,9 @@ class IndexedDbEventQueue
     String sessionId,
     int sequenceNumber,
   ) async {
-    _checkState();
+    await _ensureOpen();
 
-    final txn = _db!.transaction(_metadataStore.toJS, 'readwrite');
+    final txn = _transaction(_metadataStore.toJS, 'readwrite');
     final store = txn.objectStore(_metadataStore);
     final getRequest = store.get(sessionId.toJS);
 
@@ -520,9 +606,9 @@ class IndexedDbEventQueue
     required String ownerId,
     required Duration ttl,
   }) async {
-    _checkState();
+    await _ensureOpen();
 
-    final txn = _db!.transaction(_coordinationStore.toJS, 'readwrite');
+    final txn = _transaction(_coordinationStore.toJS, 'readwrite');
     final store = txn.objectStore(_coordinationStore);
     final request = store.get(_uploadLeaseKey.toJS);
     final nowMs = DateTime.now().millisecondsSinceEpoch;
@@ -555,9 +641,9 @@ class IndexedDbEventQueue
 
   @override
   Future<void> releaseUploadLease({required String ownerId}) async {
-    _checkState();
+    await _ensureOpen();
 
-    final txn = _db!.transaction(_coordinationStore.toJS, 'readwrite');
+    final txn = _transaction(_coordinationStore.toJS, 'readwrite');
     final store = txn.objectStore(_coordinationStore);
     final request = store.get(_uploadLeaseKey.toJS);
 
@@ -579,10 +665,10 @@ class IndexedDbEventQueue
     required String sessionId,
     required int sequenceNumber,
   }) async {
-    _checkState();
+    await _ensureOpen();
     if (events.isEmpty) return;
 
-    final txn = _db!.transaction(
+    final txn = _transaction(
       [
         _eventsStore,
         _metadataStore,
@@ -639,9 +725,9 @@ class IndexedDbEventQueue
   /// Event deletion, metadata cleanup, and quota reconstruction share one
   /// transaction. A key-only timestamp cursor avoids loading expired JPEGs.
   Future<RetentionCleanupResult> pruneExpiredData(DateTime cutoff) async {
-    _checkState();
+    await _ensureOpen();
 
-    final txn = _db!.transaction(
+    final txn = _transaction(
       [
         _eventsStore,
         _metadataStore,
@@ -703,9 +789,9 @@ class IndexedDbEventQueue
     required int idleExpiresMs,
     required int maxExpiresMs,
   }) async {
-    _checkState();
+    await _ensureOpen();
 
-    final txn = _db!.transaction(_metadataStore.toJS, 'readwrite');
+    final txn = _transaction(_metadataStore.toJS, 'readwrite');
     final store = txn.objectStore(_metadataStore);
     final getRequest = store.get(sessionId.toJS);
 
@@ -736,9 +822,9 @@ class IndexedDbEventQueue
     String? ownedBy,
     bool includeUnowned = true,
   }) async {
-    _checkState();
+    await _ensureOpen();
 
-    final txn = _db!.transaction(_metadataStore.toJS, 'readonly');
+    final txn = _transaction(_metadataStore.toJS, 'readonly');
     final store = txn.objectStore(_metadataStore);
     final request = store.index(_metadataStartIndex).openCursor(null, 'prev');
 
@@ -784,8 +870,8 @@ class IndexedDbEventQueue
   /// Atomically adopts legacy unowned metadata, or confirms ownership of a
   /// session already associated with this browser tab.
   Future<bool> claimSessionOwnership(String sessionId) async {
-    _checkState();
-    final txn = _db!.transaction(_metadataStore.toJS, 'readwrite');
+    await _ensureOpen();
+    final txn = _transaction(_metadataStore.toJS, 'readwrite');
     final store = txn.objectStore(_metadataStore);
     final request = store.get(sessionId.toJS);
     var claimed = false;
@@ -809,14 +895,14 @@ class IndexedDbEventQueue
 
   void _checkState() {
     if (_disposed) throw StateError('EventQueue has been disposed');
-    if (_db == null) throw StateError('EventQueue not initialized');
+    if (!_initialized) throw StateError('EventQueue not initialized');
   }
 
   /// Rebuild the shared size record while holding a transaction over both the
   /// event and coordination stores. This also migrates databases created
   /// before the size record existed without a schema-version change.
   Future<int> _synchronizeTotalSize() async {
-    final txn = _db!.transaction(
+    final txn = _transaction(
       [
         _eventsStore,
         _coordinationStore,

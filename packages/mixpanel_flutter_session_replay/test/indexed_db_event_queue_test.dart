@@ -619,4 +619,61 @@ void main() {
       return quotaStorage;
     });
   });
+
+  group('Connection recovery', () {
+    const token = 'connection-recovery';
+    late IndexedDbEventQueue storage;
+
+    SessionReplayEvent interaction(int timestampMs) => SessionReplayEvent(
+      sessionId: 'session-1',
+      distinctId: 'user-1',
+      timestamp: DateTime.fromMillisecondsSinceEpoch(timestampMs, isUtc: true),
+      type: EventType.interaction,
+      payload: InteractionPayload(interactionType: 1, x: 0, y: 0),
+    );
+
+    setUp(() async {
+      await _deleteDatabase(_dbNameForToken(token));
+      storage = IndexedDbEventQueue(
+        token: token,
+        logger: MixpanelLogger(LogLevel.none),
+      );
+      await storage.initialize();
+    });
+
+    tearDown(() async {
+      await storage.dispose();
+      await _deleteDatabase(_dbNameForToken(token));
+    });
+
+    test('reopens after another tab deletes the database', () async {
+      // GIVEN a queue whose database another tab deletes, which closes this
+      // tab's connection through versionchange
+      await storage.add(interaction(100));
+      await _deleteDatabase(_dbNameForToken(token));
+
+      // WHEN the next event is queued
+      await storage.add(interaction(200));
+
+      // THEN the connection is reopened on a fresh database and keeps working
+      final oldest = await storage.fetchOldest();
+      expect(oldest?.timestamp.millisecondsSinceEpoch, 200);
+    });
+
+    test('fails operations while a newer schema is installed', () async {
+      // GIVEN another tab upgrades the database past this SDK's schema
+      final upgraded = Completer<void>();
+      final request = web.window.indexedDB.open(_dbNameForToken(token), 99);
+      request.onsuccess = (web.Event event) {
+        ((event.target as web.IDBRequest).result as web.IDBDatabase).close();
+        upgraded.complete();
+      }.toJS;
+      await upgraded.future;
+
+      // WHEN events are queued, THEN each fails with a StateError rather
+      // than a null-connection crash, so the recorder can drop them
+      await expectLater(storage.add(interaction(100)), throwsStateError);
+      await expectLater(storage.add(interaction(200)), throwsStateError);
+    });
+  });
 }
