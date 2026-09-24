@@ -148,6 +148,48 @@ void main() {
         },
       );
 
+      test('a manual start before settings arrive supersedes a staged '
+          'session', () async {
+        // GIVEN a staged session waiting on the first settings fetch
+        final persisted = <(String, int, int)>[];
+        settingsService = SettingsService(
+          storageProvider: SettingsStorageProvider(
+            token: 'test-token',
+            logger: logger,
+          ),
+          token: 'test-token',
+          logger: logger,
+          httpClient: createFakeSettingsClient(isEnabled: true),
+        );
+        final coordinator = createCoordinator(
+          autoRecordSessionsPercent: 100,
+          maxSessionDuration: const Duration(hours: 24),
+          persistIdleExpiry: (id, idle, max) async {
+            persisted.add((id, idle, max));
+          },
+        );
+        coordinator.prepareSessionResume(
+          Session(
+            id: 'staged-session',
+            startTime: DateTime.now().toUtc(),
+            status: SessionStatus.active,
+          ),
+        );
+        coordinator.onAppForegrounded();
+
+        // WHEN the app starts recording before the settings verdict lands
+        coordinator.startRecording(sessionsPercent: 100);
+        final manualReplayId = coordinator.replayId;
+        await pumpEventQueue();
+
+        // THEN the verdict does not swap the staged session in, and the
+        // staged session is expired so a reload cannot resume it either
+        expect(manualReplayId, isNot('staged-session'));
+        expect(coordinator.replayId, manualReplayId);
+        expect(coordinator.recordingState, RecordingState.recording);
+        expect(persisted.map((call) => call.$1), contains('staged-session'));
+      });
+
       test('explicit stop cancels a staged session', () async {
         final session = Session(
           id: 'cancelled-session',

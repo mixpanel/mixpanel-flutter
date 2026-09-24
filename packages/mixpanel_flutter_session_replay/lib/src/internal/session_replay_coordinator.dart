@@ -818,6 +818,19 @@ class SessionReplayCoordinator implements WidgetCoordinator {
         'Session replay recording started! Sampling rate: $sessionsPercent%',
       );
 
+      // A new session supersedes one still waiting for remote settings to
+      // resume, so the settings verdict cannot swap it in mid-recording.
+      // Matches mixpanel-js, which skips resuming while a recording is active.
+      if (_pendingResumableSession case final pending?) {
+        _logger.debug(
+          'Discarding staged session ${pending.id} for a new recording',
+          tag: 'coordinator',
+        );
+        _pendingResumableSession = null;
+        _pendingResumeIdleExpiry = null;
+        _expirePersistedSession(pending.id);
+      }
+
       // Create a new session (matches iOS/Android behavior)
       // This generates a new session ID for each foreground
       final session = _sessionManager.startNewSession();
