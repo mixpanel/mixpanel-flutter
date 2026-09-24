@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:developer' as developer;
 import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
 
@@ -86,7 +87,7 @@ class MixpanelFlutterPlugin {
         );
       } catch (error) {
         // An observer must never interrupt Mixpanel's track call.
-        debugPrint('[Mixpanel] Event bridge failed: $error');
+        developer.log('Event bridge failed: $error', name: 'Mixpanel');
       }
     }
     // on_track is a transform hook: return the original event untouched.
