@@ -10,11 +10,8 @@ import 'package:mixpanel_flutter/codec/mixpanel_message_codec.dart';
 import 'package:mixpanel_flutter/src/version.dart';
 import 'package:mixpanel_flutter/src/autocapture/click_event.dart';
 import 'package:mixpanel_flutter/src/autocapture/autocapture_options.dart';
-import 'src/autocapture/dead_click_detector.dart';
-import 'src/autocapture/rage_click_tracker.dart';
+import 'src/autocapture/capture_session.dart';
 import 'src/autocapture/response_snapshot.dart';
-import 'src/autocapture/target_resolver.dart';
-import 'src/autocapture/pointer_tap_tracker.dart';
 
 import 'package:mixpanel_flutter_common/mixpanel_flutter_common.dart';
 
