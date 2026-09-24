@@ -13,6 +13,7 @@ import 'payload_serializer.dart';
 import '../settings/settings_service.dart';
 import '../logger.dart';
 import '../../models/results.dart';
+import '../../models/session.dart';
 
 /// Result of an upload attempt
 enum UploadResult {
@@ -414,14 +415,26 @@ class UploadService {
       );
 
       // Get Session object for this sessionId (may be old session!)
-      // Session metadata is created when startRecording() is called, so this should always exist
-      final session = await eventQueue.getSessionMetadata(sessionId);
-
+      // Session metadata is created when startRecording() is called, so this
+      // normally exists. It can be missing when that write failed while later
+      // event writes succeeded. Retrying cannot fix that, and on web the
+      // backlog persists across launches, so the oldest event would block the
+      // shared queue. Rebuild it instead: nothing can have been uploaded
+      // without metadata, so the replay starts at sequence 0 from its oldest
+      // queued event. Like mixpanel-js with orphaned batches, a rare duplicate
+      // send is preferred over data that can never upload.
+      var session = await eventQueue.getSessionMetadata(sessionId);
       if (session == null) {
-        _logger.error(
-          'No session metadata found for session $sessionId - this should not happen!',
+        _logger.warning(
+          'No session metadata found for session $sessionId; rebuilding it '
+          'from the oldest queued event',
         );
-        return UploadResult.networkError;
+        session = Session(
+          id: sessionId,
+          startTime: events.first.timestamp,
+          status: SessionStatus.ended,
+        );
+        await eventQueue.createSessionMetadata(session);
       }
 
       // Get sequence number for THIS session being uploaded (per-session, not global)
