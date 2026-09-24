@@ -209,7 +209,7 @@ These methods emit one event each. They do not observe gestures or automatically
 detect rage/dead clicks. Automatic capture is still under development for SDK-30.
 The example app's **Manual Frustration Signals** page provides test fixtures.
 
-### Automatic frustration signals (Beta, Android/iOS)
+### Automatic frustration signals (Beta, Android/iOS/web)
 
 > **Autocapture is in beta.** Autocapture — `$mp_click`, `$mp_rage_click` and
 > `$mp_dead_click`, and the `mixpanel.autocapture` API — may contain issues, and
@@ -270,7 +270,7 @@ this experimental observer is not a general pixel-difference detector.
 Autocaptured events use the analytics opt-out handling: nothing is sent while
 tracking is opted out. Navigation changes the screen and so cancels a pending
 dead check; backgrounding and disposal also cancel it. Automatic capture currently does nothing on
-web, desktop, keyboard activation, and assistive-technology activation.
+desktop, and does not observe keyboard or assistive-technology activation.
 
 
 Automatic pointer capture accepts primary touch/mouse taps lasting at most

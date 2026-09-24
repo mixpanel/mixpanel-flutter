@@ -477,7 +477,7 @@ class Mixpanel {
   ///  include app sessions, first app opens, app updated, etc.
   ///  * [superProperties] Optional super properties to register
   ///  * [config] Optional A dictionary of config options to override (WEB ONLY)
-  ///  * [autocaptureOptions] Opt into **experimental (beta)** pointer signals on Android/iOS.
+  ///  * [autocaptureOptions] Opt into **experimental (beta)** pointer signals on Android, iOS and web.
   ///    Also wrap the app in MixpanelAutocaptureWidget. Omit to disable.
   ///    See [AutocaptureOptions] for the Beta notice: APIs and captured properties
   ///    may change before general availability.

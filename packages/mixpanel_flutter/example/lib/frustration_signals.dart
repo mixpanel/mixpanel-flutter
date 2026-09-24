@@ -403,7 +403,7 @@ class _FrustrationSignalsScreenState extends State<FrustrationSignalsScreen> {
                 return const Center(child: CircularProgressIndicator());
               }
               return ListView(padding: const EdgeInsets.all(16), children: [
-                const Text('Automatic QA • Android / iOS\n'
+                const Text('Automatic QA • Android / iOS / web\n'
                     'Use the configured project’s events or SDK logs to compare actual '
                     'payloads against expectations. Section selectors also generate '
                     'events; identify fixtures using the IDs below. Let transitions settle before tapping.'),
