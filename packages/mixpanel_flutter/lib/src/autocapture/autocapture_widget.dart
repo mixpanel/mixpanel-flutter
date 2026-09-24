@@ -8,6 +8,8 @@ import 'dead_click_detector.dart';
 import 'rage_click_tracker.dart';
 import 'response_snapshot.dart';
 import 'target_resolver.dart';
+import 'pointer_tap_tracker.dart';
+import 'ui_response_tracker.dart';
 
 /// Observes pointer clicks within [child] on Android and iOS.
 ///
@@ -34,15 +36,19 @@ class MixpanelAutocaptureWidget extends StatefulWidget {
 
 class _CaptureState extends State<MixpanelAutocaptureWidget>
     with WidgetsBindingObserver {
-  // Accept taps lasting at most 500 ms (inclusive).
-  static const _maxTapDuration = Duration(milliseconds: 500);
   final _resolver = TargetResolver();
-  final _pointers = <int>{};
+  final _taps = PointerTapTracker();
   AutocaptureController? _controller;
   RageClickTracker? _rage;
   late final DeadClickDetector _dead = DeadClickDetector(
     capture: _snapshot,
   );
+  late final _responses = UiResponseTracker(
+      capture: _snapshot,
+      canObserve: () => _allowed,
+      hasCandidate: () => _dead.observing,
+      onSnapshot: _dead.sampleSnapshot,
+      onResponse: _dead.cancel);
   int? _viewId;
   bool _ownsView = false;
   bool _monitoring = false;
@@ -90,29 +96,32 @@ class _CaptureState extends State<MixpanelAutocaptureWidget>
   void _sync() {
     _reset();
     final observe = _supported && _ownsView && (_controller?.allowed ?? false);
-    if (observe == _monitoring) return;
-    _monitoring = observe;
     if (observe) {
-      final lifecycle = WidgetsBinding.instance.lifecycleState;
-      _foreground = lifecycle == null || lifecycle == AppLifecycleState.resumed;
-      WidgetsBinding.instance.addObserver(this);
-      FocusManager.instance.addListener(_response);
-      CaptureFrameObserver.add(_frame, _isObserving);
+      _startMonitoring();
     } else {
-      WidgetsBinding.instance.removeObserver(this);
-      FocusManager.instance.removeListener(_response);
-      CaptureFrameObserver.remove(_frame);
+      _stopMonitoring();
     }
+  }
+
+  void _startMonitoring() {
+    if (_monitoring) return;
+    _monitoring = true;
+    final lifecycle = WidgetsBinding.instance.lifecycleState;
+    _foreground = lifecycle == null || lifecycle == AppLifecycleState.resumed;
+    WidgetsBinding.instance.addObserver(this);
+    _responses.start();
+  }
+
+  void _stopMonitoring() {
+    if (!_monitoring) return;
+    _monitoring = false;
+    WidgetsBinding.instance.removeObserver(this);
+    _responses.stop();
   }
 
   void _detach() {
     _reset();
-    if (_monitoring) {
-      WidgetsBinding.instance.removeObserver(this);
-      FocusManager.instance.removeListener(_response);
-      CaptureFrameObserver.remove(_frame);
-      _monitoring = false;
-    }
+    _stopMonitoring();
     _controller?.removeListener(_sync);
     if (_viewId != null) _controller?.release(_viewId!, this);
     _controller = null;
@@ -120,21 +129,17 @@ class _CaptureState extends State<MixpanelAutocaptureWidget>
   }
 
   void _reset() {
-    _pointers.clear();
+    _taps.reset();
     _clearPress();
     _dead.cancel();
     _rage?.reset();
   }
 
-  void _clearPress() => _pendingTap = null;
-
-  void _response() {
-    _pendingTap?.baseline = null;
-    _dead.cancel();
+  void _clearPress() {
+    _pendingTap = null;
+    _responses.cancelPress();
   }
 
-  @override
-  void didChangeMetrics() => _response();
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     _foreground = state == AppLifecycleState.resumed;
@@ -150,33 +155,12 @@ class _CaptureState extends State<MixpanelAutocaptureWidget>
         Offset.zero & (view.physicalSize / view.devicePixelRatio));
   }
 
-  bool _isObserving() =>
-      _allowed && (_dead.observing || _pendingTap?.baseline != null);
-
-  void _frame() {
-    if (!_isObserving()) return;
-    final current = _snapshot();
-    _dead.sampleSnapshot(current);
-    final baseline = _pendingTap?.baseline;
-    if (baseline != null &&
-        (current == null || baseline.differsFrom(current))) {
-      _pendingTap?.baseline = null;
-    }
-  }
-
   void _down(PointerDownEvent event) {
     if (!_allowed || event.viewId != _viewId) return;
-    if (event.kind != PointerDeviceKind.touch &&
-        event.kind != PointerDeviceKind.mouse) {
-      return;
-    }
-    _pointers.add(event.pointer);
-    if (_pointers.length != 1) {
-      _clearPress();
-      return;
-    }
-    if (event.buttons != kPrimaryButton) {
-      _clearPress();
+    final slop = computeHitSlop(
+        event.kind, MediaQuery.maybeOf(context)?.gestureSettings);
+    if (!_taps.down(event, slop)) {
+      if (!_taps.hasPress) _clearPress();
       return;
     }
     final controller = _controller;
@@ -187,50 +171,36 @@ class _CaptureState extends State<MixpanelAutocaptureWidget>
         _clearPress();
         return;
       }
-      final slop = computeHitSlop(
-          event.kind, MediaQuery.maybeOf(context)?.gestureSettings);
-      // Normal tap handlers run after this baseline. Custom raw pointer handlers
-      // can run earlier, so their response coverage is intentionally unsupported.
-      _pendingTap = _PendingTap(
-          target: target,
-          origin: event.position,
-          downTime: event.timeStamp,
-          session: controller.session,
-          slopSquared: slop * slop,
-          baseline:
-              controller.options.deadClickOptions.enabled && target.deadEligible
-                  ? _snapshot()
-                  : null);
+      // Capture before ordinary tap handlers; raw pointer handlers may run earlier.
+      _pendingTap = _PendingTap(target, controller.session);
+      if (controller.options.deadClickOptions.enabled && target.deadEligible) {
+        _responses.beginPress();
+      }
     } catch (_) {
       _clearPress();
     }
   }
 
   void _move(PointerMoveEvent event) {
-    final tap = _pendingTap;
-    if (tap == null || !_pointers.contains(event.pointer)) return;
-    if ((event.position - tap.origin).distanceSquared > tap.slopSquared) {
-      tap.moved = true;
-      tap.baseline = null;
-    }
+    _taps.move(event);
+    if (!_taps.hasPress) _clearPress();
   }
 
   void _cancel(PointerCancelEvent event) {
-    _pointers.remove(event.pointer);
+    _taps.cancel(event);
     _clearPress();
   }
 
   void _up(PointerUpEvent event) {
-    final wasSingle =
-        _pointers.length == 1 && _pointers.contains(event.pointer);
-    _pointers.remove(event.pointer);
+    final accepted = _taps.up(event);
     final tap = _pendingTap;
+    final baseline = _responses.takeBaseline();
     _clearPress();
     final controller = _controller;
     final rage = _rage;
-    if (!wasSingle ||
+    if (!accepted ||
         tap == null ||
-        !tap.accepts(event, _maxTapDuration) ||
+        !tap.target.element.mounted ||
         !_allowed ||
         controller == null ||
         rage == null ||
@@ -238,7 +208,6 @@ class _CaptureState extends State<MixpanelAutocaptureWidget>
       return;
     }
     final target = tap.target;
-    final baseline = tap.baseline;
     final session = tap.session;
     final old = target.event;
     final click = ClickEvent(
@@ -262,8 +231,10 @@ class _CaptureState extends State<MixpanelAutocaptureWidget>
         target.deadEligible &&
         baseline != null) {
       final targetReference = WeakReference(target.element);
-      _dead.begin(baseline);
-      _dead.arm(click, options.deadClickOptions.timeWindow,
+      _dead.start(
+          baseline: baseline,
+          event: click,
+          timeout: options.deadClickOptions.timeWindow,
           isValid: () =>
               session.isActive && (targetReference.target?.mounted ?? false),
           onDetected: (event) =>
@@ -274,13 +245,7 @@ class _CaptureState extends State<MixpanelAutocaptureWidget>
   @override
   Widget build(BuildContext context) =>
       NotificationListener<ScrollNotification>(
-        onNotification: (notification) {
-          if (notification is ScrollUpdateNotification ||
-              notification is OverscrollNotification) {
-            _response();
-          }
-          return false;
-        },
+        onNotification: _responses.onScroll,
         child: Listener(
             behavior: HitTestBehavior.translucent,
             onPointerDown: _down,
@@ -299,27 +264,9 @@ class _CaptureState extends State<MixpanelAutocaptureWidget>
 
 /// State belonging to one press; cancellation drops it as a unit.
 class _PendingTap {
-  _PendingTap(
-      {required this.target,
-      required this.origin,
-      required this.downTime,
-      required this.session,
-      required this.slopSquared,
-      this.baseline});
+  _PendingTap(this.target, this.session);
   final CaptureTarget target;
-  final Offset origin;
-  final Duration downTime;
-  final CaptureSession session;
-  final double slopSquared;
-  ResponseSnapshot? baseline;
-  bool moved = false;
-
-  bool accepts(PointerUpEvent event, Duration maxDuration) =>
-      !moved &&
-      target.element.mounted &&
-      event.timeStamp >= downTime &&
-      event.timeStamp - downTime <= maxDuration &&
-      (event.position - origin).distanceSquared <= slopSquared;
+  final DetectionSession session;
 }
 
 /// Cancels pending signals on navigation without collecting route metadata.

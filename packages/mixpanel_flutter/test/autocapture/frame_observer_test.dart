@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/scheduler.dart';
-import 'package:mixpanel_flutter/src/autocapture/dead_click_detector.dart';
+import 'package:mixpanel_flutter/src/autocapture/capture_frame_observer.dart';
 
 void main() {
   testWidgets('idle and removed observers receive no frame work',

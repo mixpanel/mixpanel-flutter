@@ -16,10 +16,13 @@ void main() {
         'deadline outcome for snapshot ${response == null ? 'unknown' : response.differsFrom(baseline) ? 'changed' : 'unchanged'}',
         (tester) async {
       var count = 0;
-      final detector =
-          DeadClickDetector(capture: () => response, onDead: (_) => count++);
-      detector.begin(baseline);
-      detector.arm(event, const Duration(microseconds: 1500));
+      final detector = DeadClickDetector(capture: () => response);
+
+      detector.start(
+          baseline: baseline,
+          event: event,
+          timeout: const Duration(microseconds: 1500),
+          onDetected: (_) => count++);
       expect(detector.observing, isTrue);
       await tester.pump(const Duration(microseconds: 1499));
       expect(count, 0);
@@ -31,10 +34,13 @@ void main() {
   testWidgets('transient response cancellation cannot rearm itself',
       (tester) async {
     var count = 0;
-    final detector =
-        DeadClickDetector(capture: () => baseline, onDead: (_) => count++);
-    detector.begin(baseline);
-    detector.arm(event, const Duration(milliseconds: 10));
+    final detector = DeadClickDetector(capture: () => baseline);
+
+    detector.start(
+        baseline: baseline,
+        event: event,
+        timeout: const Duration(milliseconds: 10),
+        onDetected: (_) => count++);
     expect(detector.observing, isTrue);
     detector.sampleSnapshot(const ResponseSnapshot(2));
     detector.sampleSnapshot(baseline);
@@ -44,14 +50,21 @@ void main() {
   testWidgets('replacement discards old deadline and emits replacement once',
       (tester) async {
     final events = <ClickEvent>[];
-    final detector =
-        DeadClickDetector(capture: () => baseline, onDead: events.add);
-    detector.begin(baseline);
-    detector.arm(event, const Duration(milliseconds: 10));
+    final detector = DeadClickDetector(capture: () => baseline);
+
+    detector.start(
+        baseline: baseline,
+        event: event,
+        timeout: const Duration(milliseconds: 10),
+        onDetected: events.add);
     await tester.pump(const Duration(milliseconds: 5));
     const replacement = ClickEvent(x: 3, y: 4, elementId: 'replacement');
-    detector.begin(baseline);
-    detector.arm(replacement, const Duration(milliseconds: 20));
+
+    detector.start(
+        baseline: baseline,
+        event: replacement,
+        timeout: const Duration(milliseconds: 20),
+        onDetected: events.add);
     await tester.pump(const Duration(milliseconds: 5));
     expect(events, isEmpty);
     await tester.pump(const Duration(milliseconds: 15));
@@ -62,14 +75,16 @@ void main() {
       (tester) async {
     var captures = 0;
     var emissions = 0;
-    final detector = DeadClickDetector(
-        capture: () {
-          captures++;
-          return baseline;
-        },
-        onDead: (_) => emissions++);
-    detector.begin(baseline);
-    detector.arm(event, const Duration(milliseconds: 10));
+    final detector = DeadClickDetector(capture: () {
+      captures++;
+      return baseline;
+    });
+
+    detector.start(
+        baseline: baseline,
+        event: event,
+        timeout: const Duration(milliseconds: 10),
+        onDetected: (_) => emissions++);
     tester.binding.scheduleFrame();
     int? capturesBeforeFrame;
     Timer(const Duration(milliseconds: 10), () {
@@ -85,40 +100,60 @@ void main() {
   testWidgets('scheduled frame completes unchanged candidate after rendering',
       (tester) async {
     var emissions = 0;
-    final detector =
-        DeadClickDetector(capture: () => baseline, onDead: (_) => emissions++);
-    detector.begin(baseline);
-    detector.arm(event, const Duration(milliseconds: 10));
+    final detector = DeadClickDetector(capture: () => baseline);
+
+    detector.start(
+        baseline: baseline,
+        event: event,
+        timeout: const Duration(milliseconds: 10),
+        onDetected: (_) => emissions++);
     tester.binding.scheduleFrame();
     await tester.pump(const Duration(milliseconds: 10));
     expect(emissions, 1);
   });
   testWidgets('unknown baseline never arms and invalid duration asserts',
       (tester) async {
-    final detector = DeadClickDetector(
-        capture: () => baseline, onDead: (_) => fail('unexpected emission'));
-    detector.begin(null);
-    detector.arm(event, const Duration(milliseconds: 10));
+    final detector = DeadClickDetector(capture: () => baseline);
+
+    detector.start(
+        baseline: null,
+        event: event,
+        timeout: const Duration(milliseconds: 10),
+        onDetected: (_) => fail('unexpected emission'));
     expect(detector.observing, isFalse);
     await tester.pump(const Duration(milliseconds: 20));
-    expect(() => detector.arm(event, Duration.zero), throwsAssertionError);
+    expect(
+        () => detector.start(
+            baseline: null,
+            event: event,
+            timeout: Duration.zero,
+            onDetected: (_) => fail('unexpected emission')),
+        throwsAssertionError);
   });
   testWidgets('candidate validity suppresses dead even with unchanged snapshot',
       (tester) async {
     var valid = true;
     var emissions = 0;
     final detector = DeadClickDetector(capture: () => baseline);
-    detector.begin(baseline);
-    detector.arm(event, const Duration(milliseconds: 10),
-        isValid: () => valid, onDetected: (_) => emissions++);
+
+    detector.start(
+        baseline: baseline,
+        event: event,
+        timeout: const Duration(milliseconds: 10),
+        isValid: () => valid,
+        onDetected: (_) => emissions++);
     expect(detector.observing, isTrue);
     valid = false;
     await tester.pump(const Duration(milliseconds: 10));
     expect(emissions, 0);
-    detector.begin(baseline);
+
     valid = true;
-    detector.arm(event, const Duration(milliseconds: 10),
-        isValid: () => valid, onDetected: (_) => emissions++);
+    detector.start(
+        baseline: baseline,
+        event: event,
+        timeout: const Duration(milliseconds: 10),
+        isValid: () => valid,
+        onDetected: (_) => emissions++);
     await tester.pump(const Duration(milliseconds: 10));
     expect(emissions, 1);
   });
@@ -127,13 +162,18 @@ void main() {
       (tester) async {
     final detected = <String>[];
     final detector = DeadClickDetector(capture: () => baseline);
-    detector.begin(baseline);
-    detector.arm(event, const Duration(milliseconds: 10),
+
+    detector.start(
+        baseline: baseline,
+        event: event,
+        timeout: const Duration(milliseconds: 10),
         onDetected: (_) => detected.add('old'));
     tester.binding.scheduleFrame();
     Timer(const Duration(milliseconds: 10), () {
-      detector.begin(baseline);
-      detector.arm(event, const Duration(milliseconds: 20),
+      detector.start(
+          baseline: baseline,
+          event: event,
+          timeout: const Duration(milliseconds: 20),
           onDetected: (_) => detected.add('new'));
     });
     await tester.pump(const Duration(milliseconds: 10));

@@ -589,7 +589,7 @@ class Mixpanel {
   /// This method will internally track an opt-in event to your project.
   void optInTracking() {
     final controller = _activeAutocapture;
-    final request = controller?.suspend();
+    final request = controller?.beginConsentOperation();
     _channel.invokeMethod<void>('optInTracking').then<void>((_) async {
       if (controller != null) {
         await controller.refreshConsent(hasOptedOutTracking,
@@ -641,7 +641,7 @@ class Mixpanel {
   Future<void> identify(String distinctId) async {
     if (_MixpanelHelper.isValidString(distinctId)) {
       final controller = _activeAutocapture;
-      final request = controller?.suspend();
+      final request = controller?.beginConsentOperation();
       try {
         await _channel.invokeMethod<void>(
             'identify', <String, dynamic>{'distinctId': distinctId});
@@ -930,7 +930,7 @@ class Mixpanel {
   /// Useful for clearing data when a user logs out.
   Future<void> reset() async {
     final controller = _activeAutocapture;
-    final request = controller?.suspend();
+    final request = controller?.beginConsentOperation();
     try {
       await _channel.invokeMethod<void>('reset');
     } finally {

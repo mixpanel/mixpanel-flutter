@@ -10,12 +10,11 @@ enum CaptureStatus { suspended, enabled, closed }
 /// One consent operation, spanning a native lifecycle call and its recovery read.
 class ConsentRequest {
   ConsentRequest._();
-  bool _cancelled = false;
 }
 
 /// Pending signals retain this session; invalidation cancels them as a group.
-class CaptureSession {
-  CaptureSession._();
+class DetectionSession {
+  DetectionSession._();
   bool _active = true;
   bool get isActive => _active;
 }
@@ -28,12 +27,12 @@ class AutocaptureController extends ChangeNotifier {
   final Future<void> Function(String name, ClickEvent event) _emit;
   CaptureStatus _status = CaptureStatus.suspended;
   ConsentRequest? _pendingConsent;
-  CaptureSession _session = CaptureSession._();
+  DetectionSession _session = DetectionSession._();
   final Map<int, Object> _owners = {};
 
   CaptureStatus get status => _status;
   bool get allowed => _status == CaptureStatus.enabled && options.isEnabled;
-  CaptureSession get session => _session;
+  DetectionSession get session => _session;
 
   // One observer per native Flutter view for this analytics instance.
   bool claim(int viewId, Object owner) {
@@ -48,16 +47,20 @@ class AutocaptureController extends ChangeNotifier {
     if (identical(_owners[viewId], owner)) _owners.remove(viewId);
   }
 
-  ConsentRequest suspend() {
-    _cancelConsent();
-    final request = ConsentRequest._();
-    if (_status == CaptureStatus.closed) {
-      request._cancelled = true;
-      return request;
-    }
-    _pendingConsent = request;
+  void suspend() {
+    _pendingConsent = null;
+    if (_status == CaptureStatus.closed) return;
     _status = CaptureStatus.suspended;
     invalidate();
+  }
+
+  ConsentRequest beginConsentOperation() {
+    final request = ConsentRequest._();
+    _pendingConsent = request;
+    if (_status != CaptureStatus.closed) {
+      _status = CaptureStatus.suspended;
+      invalidate();
+    }
     return request;
   }
 
@@ -65,17 +68,14 @@ class AutocaptureController extends ChangeNotifier {
   void invalidate() {
     if (_status == CaptureStatus.closed) return;
     _session._active = false;
-    _session = CaptureSession._();
+    _session = DetectionSession._();
     notifyListeners();
   }
 
   bool _isCurrent(ConsentRequest request) =>
-      _status != CaptureStatus.closed &&
-      !request._cancelled &&
-      identical(_pendingConsent, request);
+      _status != CaptureStatus.closed && identical(_pendingConsent, request);
 
   void _cancelConsent() {
-    _pendingConsent?._cancelled = true;
     _pendingConsent = null;
   }
 
@@ -86,7 +86,7 @@ class AutocaptureController extends ChangeNotifier {
       return;
     }
     // Replace the lifecycle request with a read request, consuming it once.
-    final reading = suspend();
+    final reading = beginConsentOperation();
     if (!_isCurrent(reading)) return;
     bool? optedOut;
     try {
@@ -104,7 +104,7 @@ class AutocaptureController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void emit(String name, ClickEvent event, CaptureSession session) {
+  void emit(String name, ClickEvent event, DetectionSession session) {
     if (!allowed || !session.isActive || !identical(session, _session)) return;
     // Invoke immediately so a later identify cannot relabel a deferred event.
     try {

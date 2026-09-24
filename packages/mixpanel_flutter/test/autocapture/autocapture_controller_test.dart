@@ -10,7 +10,7 @@ void main() {
       AutocaptureController(const AutocaptureOptions(), (_, __) async {}));
   test('navigation during native operation does not invalidate consent request',
       () async {
-    final request = controller.suspend();
+    final request = controller.beginConsentOperation();
     controller.invalidate();
     await controller.refreshConsent(() async => false, request: request);
     expect(controller.allowed, isTrue);
@@ -33,7 +33,7 @@ void main() {
     expect(controller.allowed, isFalse);
   });
   test('stale native completion never starts a consent read', () async {
-    final request = controller.suspend();
+    final request = controller.beginConsentOperation();
     controller.suspend();
     var reads = 0;
     await controller.refreshConsent(() async {
@@ -59,7 +59,7 @@ void main() {
     controller.suspend();
     expect(controller.status, CaptureStatus.suspended);
     controller.close();
-    final request = controller.suspend();
+    final request = controller.beginConsentOperation();
     var reads = 0;
     await controller.refreshConsent(() async {
       reads++;
@@ -71,7 +71,7 @@ void main() {
   });
 
   test('consent request is consumed once and cannot be reused', () async {
-    final request = controller.suspend();
+    final request = controller.beginConsentOperation();
     var reads = 0;
     Future<bool?> read() async {
       reads++;

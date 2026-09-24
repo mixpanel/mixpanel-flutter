@@ -1,32 +1,27 @@
 import 'dart:async';
 import 'package:flutter/scheduler.dart';
-import 'package:flutter/foundation.dart';
 import 'click_event.dart';
 import 'response_snapshot.dart';
 import 'detection_limits.dart';
 
 /// One pending check. Unsupported snapshots suppress events, never imply dead.
 class DeadClickDetector {
-  DeadClickDetector({required this.capture, this.onDead});
+  DeadClickDetector({required this.capture});
   final ResponseSnapshot? Function() capture;
-  final void Function(ClickEvent)? onDead;
   _PendingDeadClick? _pending;
   bool get observing => _pending != null;
 
-  void begin(ResponseSnapshot? baseline) {
-    cancel();
-    if (baseline != null) _pending = _PendingDeadClick(baseline);
-  }
-
-  void arm(ClickEvent event, Duration timeout,
-      {bool Function()? isValid, void Function(ClickEvent)? onDetected}) {
+  void start(
+      {required ResponseSnapshot? baseline,
+      required ClickEvent event,
+      required Duration timeout,
+      required void Function(ClickEvent) onDetected,
+      bool Function()? isValid}) {
     assert(validTimeWindow(timeout));
-    final pending = _pending;
-    if (pending == null) return;
-    pending.event = event;
-    pending.isValid = isValid;
-    pending.onDetected = onDetected ?? onDead;
-    pending.timer?.cancel();
+    cancel();
+    if (baseline == null) return;
+    final pending = _PendingDeadClick(baseline, event, onDetected, isValid);
+    _pending = pending;
     pending.timer = Timer(normalizeTimeWindow(timeout), () {
       if (!identical(_pending, pending)) return;
       // Let a response already scheduled for this frame finish building first.
@@ -49,8 +44,7 @@ class DeadClickDetector {
     final pending = _pending;
     if (pending == null) return;
     if (!(pending.isValid?.call() ?? true) ||
-        current == null ||
-        pending.baseline.differsFrom(current)) {
+        pending.baseline.compare(current) != ResponseChange.unchanged) {
       cancel();
     }
   }
@@ -60,8 +54,7 @@ class DeadClickDetector {
     sample();
     if (!identical(_pending, pending)) return;
     cancel();
-    final event = pending.event;
-    if (event != null) pending.onDetected?.call(event);
+    pending.onDetected(pending.event);
   }
 
   void cancel() {
@@ -72,48 +65,10 @@ class DeadClickDetector {
 
 /// Dropping this object cancels the whole candidate, including deferred frames.
 class _PendingDeadClick {
-  _PendingDeadClick(this.baseline);
+  _PendingDeadClick(this.baseline, this.event, this.onDetected, this.isValid);
   final ResponseSnapshot baseline;
-  ClickEvent? event;
+  final ClickEvent event;
   Timer? timer;
-  bool Function()? isValid;
-  void Function(ClickEvent)? onDetected;
-}
-
-/// One dispatcher for the binding lifetime, with removable widget listeners.
-/// It never retains disposed widget callbacks and never schedules new frames.
-class CaptureFrameObserver {
-  static final Map<void Function(), bool Function()> _listeners = {};
-  static SchedulerBinding? _binding;
-  // Weak keys avoid retaining replaced test bindings. A -> B -> A must not
-  // install a second persistent callback on A.
-  static final Expando<bool> _installed =
-      Expando<bool>('capture frame observer');
-  static void add(void Function() callback, bool Function() isObserving) {
-    _listeners[callback] = isObserving;
-    installForBinding(SchedulerBinding.instance);
-  }
-
-  @visibleForTesting
-  static void installForBinding(SchedulerBinding binding) {
-    _binding = binding;
-    if (_installed[binding] == true) return;
-    _installed[binding] = true;
-    binding.addPersistentFrameCallback((_) {
-      if (!identical(_binding, binding) ||
-          !_listeners.values.any((isObserving) => isObserving())) {
-        return;
-      }
-      binding.addPostFrameCallback((_) {
-        if (!identical(_binding, binding)) return;
-        // A copy permits listeners to detach during delivery. No copy or
-        // post-frame callback is allocated when every listener is idle.
-        for (final listener in List<void Function()>.of(_listeners.keys)) {
-          if (_listeners[listener]?.call() ?? false) listener();
-        }
-      });
-    });
-  }
-
-  static void remove(void Function() callback) => _listeners.remove(callback);
+  final bool Function()? isValid;
+  final void Function(ClickEvent) onDetected;
 }

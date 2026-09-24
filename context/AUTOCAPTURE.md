@@ -284,3 +284,24 @@ The pending candidate owns weak-target/session validity and delivery callbacks;
 view snapshots no longer read the detector's state. Invalidating an old candidate's
 target does not automatically invalidate a new press's independent baseline.
 The broader recognizer/response-tracker extraction remains separate work.
+
+
+## Focused component extraction (2026-09-24)
+
+DeadClickDetector.start atomically replaces a fully configured candidate. Its one
+required callback is candidate-owned. PointerTapTracker owns passive pointer rules;
+UiResponseTracker owns press response comparison and idempotent response subscription
+start/stop. ResponseChange distinguishes unchanged, changed and unknown; observations
+retain transient responses. Frame snapshots remain shared between press and candidate.
+CaptureFrameObserver is a separate module. Shared widget classification and traversal
+policy no longer live in TargetResolver. Resolver uses named attribution stages;
+a per-capture snapshot builder owns geometry/digest/budget and named coverage/content
+methods. Traversal behavior and privacy boundaries are preserved.
+DetectionSession replaces the ambiguous CaptureSession name. Consent requests use
+identity without a redundant cancelled flag; suspend creates no request, whereas
+beginConsentOperation returns a guarded lifecycle request. Rage detector settings
+are normalized once. No public API changes or new dependencies.
+Validation: all 303 tests pass on Flutter 3.19.0 and 3.44.6 in separate clean package
+copies. New focused tests cover pointer boundaries, response outcomes, shared sampling,
+subscription cleanup and classification. Existing lifecycle/privacy/portal regressions
+remain in the full suite.
