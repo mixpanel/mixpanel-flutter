@@ -120,9 +120,7 @@ class _SnapshotBuilder {
         w is Texture ||
         (w is CustomPaint &&
             materialChild == null &&
-            ((w.painter != null && w.painter is! BannerPainter) ||
-                (w.foregroundPainter != null &&
-                    w.foregroundPainter is! BannerPainter)))) {
+            (_isAppPainter(w.painter) || _isAppPainter(w.foregroundPainter)))) {
       // Platform-view widgets can be Stateful/StatelessElements, so their
       // render object is not necessarily the current Element's own object.
       final surface = render ?? element.findRenderObject();
@@ -139,6 +137,13 @@ class _SnapshotBuilder {
       // Keep visiting: Element descendants may render elsewhere via a portal.
     }
   }
+
+  // Framework painters that never show an app response: the debug banner and
+  // scrollbars (scrolling already cancels a pending check).
+  static bool _isAppPainter(CustomPainter? painter) =>
+      painter != null &&
+      painter is! BannerPainter &&
+      painter is! ScrollbarPainter;
 
   void addControlState(Element element, Widget w) {
     add(typeName(w));

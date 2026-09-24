@@ -237,6 +237,25 @@ void main() {
     expect(named(r'$mp_dead_click'), isEmpty);
   });
 
+  testWidgets('visible scrollbar does not suppress dead detection',
+      (tester) async {
+    await init();
+    final controller = ScrollController();
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(host(Scrollbar(
+        controller: controller,
+        thumbVisibility: true,
+        child: ListView(controller: controller, children: [
+          button(),
+          for (var i = 0; i < 30; i++) const SizedBox(height: 40),
+        ]))));
+    await tester.tap(find.text('Buy'));
+    await tester.pump(const Duration(milliseconds: 501));
+    await tester.pump();
+    expect(named(r'$mp_click'), hasLength(1));
+    expect(named(r'$mp_dead_click'), hasLength(1));
+  });
+
   testWidgets('disabled button has no dead event', (tester) async {
     await init();
     await tester.pumpWidget(
