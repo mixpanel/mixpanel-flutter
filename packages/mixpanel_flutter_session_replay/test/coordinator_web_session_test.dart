@@ -1085,5 +1085,168 @@ void main() {
         expect(coordinator.recordingState, RecordingState.notRecording);
       });
     });
+
+    group('stopRecording persisted expiry', () {
+      test('stop expires the recorded session in storage', () async {
+        // GIVEN an active web recording
+        final persisted = <(String, int, int)>[];
+        final idleTimer = IdleTimeoutTimer(
+          timeout: const Duration(minutes: 30),
+          onTimeout: () {},
+        );
+        final coordinator = createCoordinator(
+          idleTimer: idleTimer,
+          maxSessionDuration: const Duration(hours: 24),
+          persistIdleExpiry: (id, idle, max) async {
+            persisted.add((id, idle, max));
+          },
+        );
+        final now = DateTime.utc(2026, 1, 1);
+        await withClock(Clock.fixed(now), () async {
+          coordinator.startRecording(sessionsPercent: 100);
+          await pumpEventQueue();
+        });
+        final sessionId = coordinator.replayId!;
+
+        // WHEN the app stops recording
+        withClock(Clock.fixed(now), coordinator.stopRecording);
+
+        // THEN both persisted deadlines are already in the past, so a reload
+        // cannot resume the stopped session
+        final expiredMs = now.millisecondsSinceEpoch - 1;
+        expect(persisted.last, (sessionId, expiredMs, expiredMs));
+
+        idleTimer.dispose();
+      });
+
+      test('stop expires a staged resumable session', () async {
+        // GIVEN a persisted session waiting for remote settings
+        final persisted = <(String, int, int)>[];
+        final coordinator = createCoordinator(
+          maxSessionDuration: const Duration(hours: 24),
+          persistIdleExpiry: (id, idle, max) async {
+            persisted.add((id, idle, max));
+          },
+        );
+        coordinator.prepareSessionResume(
+          Session(
+            id: 'staged-session',
+            startTime: DateTime.now().toUtc(),
+            status: SessionStatus.active,
+          ),
+        );
+        final now = DateTime.utc(2026, 1, 1);
+
+        // WHEN the app stops recording before the session resumes
+        withClock(Clock.fixed(now), coordinator.stopRecording);
+
+        // THEN the staged session is expired in storage
+        final expiredMs = now.millisecondsSinceEpoch - 1;
+        expect(persisted, [('staged-session', expiredMs, expiredMs)]);
+      });
+
+      test('stop during initialization expires the session once its '
+          'metadata exists', () async {
+        // GIVEN a recording whose metadata has not been persisted yet
+        final persisted = <(String, int, int)>[];
+        final coordinator = createCoordinator(
+          maxSessionDuration: const Duration(hours: 24),
+          persistIdleExpiry: (id, idle, max) async {
+            persisted.add((id, idle, max));
+          },
+        );
+        final now = DateTime.utc(2026, 1, 1);
+
+        // WHEN it is stopped before the metadata write completes
+        late final String sessionId;
+        await withClock(Clock.fixed(now), () async {
+          coordinator.startRecording(sessionsPercent: 100);
+          sessionId = coordinator.replayId!;
+          coordinator.stopRecording();
+          await pumpEventQueue();
+        });
+
+        // THEN the last write for that session expires it
+        final expiredMs = now.millisecondsSinceEpoch - 1;
+        expect(persisted.last, (sessionId, expiredMs, expiredMs));
+        expect(coordinator.recordingState, RecordingState.notRecording);
+      });
+
+      test('background stop behavior expires the session', () async {
+        // GIVEN an active recording configured to stop in the background
+        final persisted = <(String, int, int)>[];
+        final idleTimer = IdleTimeoutTimer(
+          timeout: const Duration(minutes: 30),
+          onTimeout: () {},
+        );
+        final coordinator = createCoordinator(
+          idleTimer: idleTimer,
+          maxSessionDuration: const Duration(hours: 24),
+          persistIdleExpiry: (id, idle, max) async {
+            persisted.add((id, idle, max));
+          },
+        );
+        final now = DateTime.utc(2026, 1, 1);
+        await withClock(Clock.fixed(now), () async {
+          coordinator.startRecording(sessionsPercent: 100);
+          await pumpEventQueue();
+        });
+        final sessionId = coordinator.replayId!;
+
+        // WHEN the page is hidden
+        withClock(Clock.fixed(now), coordinator.onAppBackgrounded);
+
+        // THEN the session cannot be resumed by a later page load
+        final expiredMs = now.millisecondsSinceEpoch - 1;
+        expect(persisted.last, (sessionId, expiredMs, expiredMs));
+
+        idleTimer.dispose();
+      });
+    });
+
+    group('recording duration limits', () {
+      test('remote durations above 24 hours are capped', () async {
+        // GIVEN remote limits beyond mixpanel-js's 24-hour maximum
+        const twoDaysMs = 2 * 24 * 60 * 60 * 1000;
+        settingsService = SettingsService(
+          storageProvider: SettingsStorageProvider(
+            token: 'test-token',
+            logger: logger,
+          ),
+          token: 'test-token',
+          logger: logger,
+          httpClient: createFakeSettingsClient(
+            isEnabled: true,
+            sdkConfig: {
+              'record_max_ms': twoDaysMs,
+              'record_idle_timeout_ms': twoDaysMs,
+            },
+          ),
+        );
+        final deadlines = <(int, int)>[];
+        final coordinator = createCoordinator(
+          autoRecordSessionsPercent: 100,
+          remoteSettingsMode: RemoteSettingsMode.fallback,
+          maxSessionDuration: const Duration(hours: 24),
+          persistIdleExpiry: (_, idle, max) async {
+            deadlines.add((idle, max));
+          },
+        );
+        final now = DateTime.utc(2026, 1, 1);
+
+        // WHEN remote settings arrive and recording starts
+        await withClock(Clock.fixed(now), () async {
+          coordinator.onAppForegrounded();
+          await pumpEventQueue();
+        });
+
+        // THEN both deadlines are 24 hours out
+        const dayMs = 24 * 60 * 60 * 1000;
+        expect(deadlines.single, (
+          now.millisecondsSinceEpoch + dayMs,
+          now.millisecondsSinceEpoch + dayMs,
+        ));
+      });
+    });
   });
 }

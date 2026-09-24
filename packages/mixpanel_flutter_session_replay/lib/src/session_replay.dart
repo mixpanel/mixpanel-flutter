@@ -5,7 +5,8 @@ import 'package:meta/meta.dart';
 import 'internal/platform/platform_info.dart';
 import 'internal/platform/platform_init.dart';
 import 'models/debug_overlay_colors.dart';
-import 'models/configuration.dart' show ReplayBackgroundPauseBehavior;
+import 'models/configuration.dart'
+    show ReplayBackgroundBehavior, ReplayBackgroundPauseBehavior;
 import 'models/masking_directive.dart';
 import 'models/results.dart';
 import 'session_replay_options.dart';
@@ -13,6 +14,7 @@ import 'internal/endpoints.dart';
 import 'internal/event_recorder.dart';
 import 'internal/storage/event_queue_interface.dart';
 import 'internal/session/idle_timeout_timer.dart';
+import 'internal/session/recording_limits.dart';
 import 'internal/session/session_manager.dart';
 import 'internal/upload/upload_service.dart';
 import 'internal/upload/payload_serializer.dart';
@@ -94,6 +96,23 @@ class MixpanelSessionReplay {
       'is captured.',
     );
   }
+
+  static ReplayBackgroundBehavior _capBackgroundBehavior(
+    ReplayBackgroundBehavior behavior, {
+    required String name,
+    required MixpanelLogger logger,
+  }) => switch (behavior) {
+    ReplayBackgroundPauseBehavior(:final idleTimeout)
+        when idleTimeout > maxRecordingDuration =>
+      ReplayBackgroundBehavior.pause(
+        idleTimeout: capRecordingDuration(
+          idleTimeout,
+          name: name,
+          logger: logger,
+        ),
+      ),
+    _ => behavior,
+  };
 
   /// Internal initialization with dependency injection for testing
   ///
@@ -247,10 +266,26 @@ class MixpanelSessionReplay {
         directive: MaskingDirective(autoMaskTypes: options.autoMaskedViews),
         debugOverlayEnabled: options.debugOptions?.overlayColors != null,
         mobileWifiOnly: options.platformOptions.mobile.wifiOnly,
-        webIdleTimeout: options.platformOptions.web.idleTimeout,
-        webMaxSessionDuration: options.platformOptions.web.maxSessionDuration,
-        mobileBackgroundBehavior: options.platformOptions.mobile.onBackground,
-        webBackgroundBehavior: options.platformOptions.web.onBackground,
+        webIdleTimeout: capRecordingDuration(
+          options.platformOptions.web.idleTimeout,
+          name: 'web idleTimeout',
+          logger: logger,
+        ),
+        webMaxSessionDuration: capRecordingDuration(
+          options.platformOptions.web.maxSessionDuration,
+          name: 'web maxSessionDuration',
+          logger: logger,
+        ),
+        mobileBackgroundBehavior: _capBackgroundBehavior(
+          options.platformOptions.mobile.onBackground,
+          name: 'mobile background pause idleTimeout',
+          logger: logger,
+        ),
+        webBackgroundBehavior: _capBackgroundBehavior(
+          options.platformOptions.web.onBackground,
+          name: 'web background pause idleTimeout',
+          logger: logger,
+        ),
         wireframeEmitter: wireframeEmitter,
         useAccessibilityLabelFallback:
             wireframesOptions?.useAccessibilityLabelFallback ?? false,

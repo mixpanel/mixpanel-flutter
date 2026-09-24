@@ -19,6 +19,7 @@ import 'upload/upload_service.dart';
 import 'settings/settings_service.dart';
 import 'session/session_manager.dart';
 import 'session/idle_timeout_timer.dart';
+import 'session/recording_limits.dart';
 import 'widget_coordinator.dart';
 import 'session_replay_sender.dart';
 import 'logger.dart';
@@ -703,13 +704,21 @@ class SessionReplayCoordinator implements WidgetCoordinator {
     var changed = false;
 
     if (config.recordMaxMs case final int maxMs) {
-      _maxSessionDuration = Duration(milliseconds: maxMs);
+      _maxSessionDuration = capRecordingDuration(
+        Duration(milliseconds: maxMs),
+        name: 'record_max_ms',
+        logger: _logger,
+      );
       changed = true;
     }
     if (config.recordIdleTimeoutMs case final int idleMs) {
       _idleTimer?.dispose();
       _idleTimer = IdleTimeoutTimer(
-        timeout: Duration(milliseconds: idleMs),
+        timeout: capRecordingDuration(
+          Duration(milliseconds: idleMs),
+          name: 'record_idle_timeout_ms',
+          logger: _logger,
+        ),
         onTimeout: handleIdleTimeout,
       );
       changed = true;
@@ -852,6 +861,12 @@ class SessionReplayCoordinator implements WidgetCoordinator {
             'or session changed, not transitioning to recording',
             tag: 'coordinator',
           );
+          // A stop that ran before the metadata existed had nothing to
+          // expire. Expire it now so a reload cannot resume this session.
+          if (_recordingState == RecordingState.notRecording ||
+              _sessionManager.getCurrentSession().id != sessionId) {
+            _expirePersistedSession(sessionId);
+          }
           return;
         }
         _recordingState = RecordingState.recording;
@@ -1000,7 +1015,15 @@ class SessionReplayCoordinator implements WidgetCoordinator {
 
     _logger.debug('stopRecording called', tag: 'coordinator');
 
+    // A stopped replay must not come back on the next page load, so its
+    // persisted deadlines are expired along with the in-memory ones below.
+    if (_recordingState != RecordingState.notRecording) {
+      _expirePersistedSession(_sessionManager.getCurrentSession().id);
+    }
     if (cancelPendingResume) {
+      if (_pendingResumableSession case final pending?) {
+        _expirePersistedSession(pending.id);
+      }
       _pendingResumableSession = null;
     }
 
@@ -1199,6 +1222,28 @@ class SessionReplayCoordinator implements WidgetCoordinator {
       return true;
     }
     return false;
+  }
+
+  /// Mark a persisted session as expired so a page reload cannot resume it.
+  ///
+  /// Not debounced: a stop must reach storage even if an activity write just
+  /// happened. IndexedDB runs readwrite transactions on the same store in
+  /// creation order, so an earlier in-flight activity write cannot land after
+  /// this one and revive the session.
+  void _expirePersistedSession(String sessionId) {
+    final persist = _persistIdleExpiry;
+    if (persist == null) return;
+
+    _lastExpiryWriteTime = null;
+    final expiredMs = clock.now().millisecondsSinceEpoch - 1;
+    persist(sessionId, expiredMs, expiredMs).catchError((e) {
+      _logger.error(
+        'Failed to expire persisted session: $e',
+        null,
+        null,
+        'coordinator',
+      );
+    });
   }
 
   /// Persist idle expiry to IndexedDB (debounced to avoid excessive writes).
