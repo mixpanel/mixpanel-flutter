@@ -4,19 +4,12 @@ import 'package:flutter/rendering.dart';
 import 'widget_classification.dart';
 import 'traversal_limits.dart';
 
-enum ResponseChange { unchanged, changed, unknown }
-
 /// Ephemeral comparison state. Never serialize, log, persist, or attach this
 /// hash to ClickEvent. Unknown coverage is null, not an empty snapshot.
 class ResponseSnapshot {
   const ResponseSnapshot(this._hash);
   final int _hash;
   bool differsFrom(ResponseSnapshot other) => _hash != other._hash;
-  ResponseChange compare(ResponseSnapshot? current) => current == null
-      ? ResponseChange.unknown
-      : differsFrom(current)
-          ? ResponseChange.changed
-          : ResponseChange.unchanged;
 
   static ResponseSnapshot? capture(Element root, Rect viewport) {
     return _SnapshotBuilder(viewport).capture(root);

@@ -65,7 +65,6 @@ class _MyAppState extends State<MyApp> {
   late final Future<Mixpanel> _mixpanelFuture;
   late final MixpanelNavigatorObserver _navigatorObserver;
   Mixpanel? _instance;
-  MixpanelAutocaptureNavigatorObserver? _captureObserver;
 
   @override
   void initState() {
@@ -74,11 +73,7 @@ class _MyAppState extends State<MyApp> {
     _navigatorObserver = MixpanelNavigatorObserver(_mixpanelFuture);
     _mixpanelFuture.then((instance) {
       if (!mounted) return;
-      setState(() {
-        _instance = instance;
-        _captureObserver =
-            MixpanelAutocaptureNavigatorObserver(instance: instance);
-      });
+      setState(() => _instance = instance);
     });
   }
 
@@ -89,10 +84,7 @@ class _MyAppState extends State<MyApp> {
         child: MaterialApp(
           debugShowCheckedModeBanner: false,
           initialRoute: '/',
-          navigatorObservers: [
-            _navigatorObserver,
-            if (_captureObserver != null) _captureObserver!
-          ],
+          navigatorObservers: [_navigatorObserver],
           routes: {
             '/': (context) => FirstScreen(),
             '/event': (context) => EventScreen(),

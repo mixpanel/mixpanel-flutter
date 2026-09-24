@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
@@ -13,7 +12,6 @@ void main() {
   const channel = MethodChannel(
       'mixpanel_flutter', StandardMethodCodec(MixpanelMessageCodec()));
   final events = <Map<dynamic, dynamic>>[];
-  bool? optedOut;
   late Mixpanel instance;
   Future<Mixpanel> init(
       [AutocaptureOptions? options = const AutocaptureOptions()]) async {
@@ -29,23 +27,16 @@ void main() {
     return id == null ? b : Semantics(identifier: id, child: b);
   }
 
-  Widget host(Widget child, {List<NavigatorObserver> observers = const []}) =>
-      MixpanelAutocaptureWidget(
-          instance: instance,
-          child: MaterialApp(
-              navigatorObservers: observers,
-              home: Scaffold(body: Center(child: child))));
+  Widget host(Widget child) => MixpanelAutocaptureWidget(
+      instance: instance,
+      child: MaterialApp(home: Scaffold(body: Center(child: child))));
   List<Map<dynamic, dynamic>> named(String name) =>
       events.where((e) => e['eventName'] == name).toList();
 
   setUp(() {
     events.clear();
-    optedOut = false;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, (call) async {
-      if (call.method == 'hasOptedOutTracking') return optedOut;
-      if (call.method == 'optOutTracking') optedOut = true;
-      if (call.method == 'optInTracking') optedOut = false;
       if (call.method == 'track') events.add(call.arguments as Map);
       return null;
     });
@@ -90,7 +81,9 @@ void main() {
     expect(named(r'$mp_dead_click'), isEmpty);
   });
 
-  testWidgets('transient text response remains a response after disappearing',
+  // Android parity: only the deadline state is compared, so a response that
+  // fully reverts before the deadline is not observed.
+  testWidgets('response reverted before the deadline is not observed',
       (tester) async {
     await init();
     var visible = false;
@@ -107,7 +100,8 @@ void main() {
     update(() => visible = false);
     await tester.pump(const Duration(milliseconds: 100));
     await tester.pump(const Duration(milliseconds: 501));
-    expect(named(r'$mp_dead_click'), isEmpty);
+    await tester.pump();
+    expect(named(r'$mp_dead_click'), hasLength(1));
   });
 
   testWidgets('new noninteractive tap cancels old dead check', (tester) async {
@@ -142,47 +136,12 @@ void main() {
     });
   }
 
-  testWidgets('omitted options and unknown/persisted opt-out emit nothing',
-      (tester) async {
+  testWidgets('omitted options emit nothing', (tester) async {
     await init(null);
     await tester.pumpWidget(host(button()));
     await tester.tap(find.text('Buy'));
-    for (final state in [true, null]) {
-      optedOut = state;
-      await init();
-      await tester.pumpWidget(host(button()));
-      await tester.tap(find.text('Buy'));
-      await tester.pump(const Duration(seconds: 1));
-    }
+    await tester.pump(const Duration(seconds: 1));
     expect(events, isEmpty);
-  });
-
-  testWidgets('opt-out immediately cancels pending work; opt-in resumes',
-      (tester) async {
-    await init();
-    await tester.pumpWidget(host(button()));
-    await tester.tap(find.text('Buy'));
-    instance.optOutTracking();
-    await tester.tap(find.text('Buy'));
-    await tester.pump(const Duration(seconds: 1));
-    expect(named(r'$mp_click'), hasLength(1));
-    expect(named(r'$mp_dead_click'), isEmpty);
-    instance.optInTracking();
-    await tester.pump();
-    await tester.tap(find.text('Buy'));
-    await tester.pump(const Duration(seconds: 1));
-    await tester.pump();
-    expect(named(r'$mp_click'), hasLength(2));
-    expect(named(r'$mp_dead_click'), hasLength(1));
-  });
-
-  testWidgets('reset invalidates pending events', (tester) async {
-    await init();
-    await tester.pumpWidget(host(button()));
-    await tester.tap(find.text('Buy'));
-    await instance.reset();
-    await tester.pump(const Duration(seconds: 1));
-    expect(named(r'$mp_dead_click'), isEmpty);
   });
 
   testWidgets('long press, cancelled and swipe-return gestures are rejected',
@@ -249,38 +208,30 @@ void main() {
     expect(named(r'$mp_dead_click'), isEmpty);
   });
 
-  testWidgets(
-      'unmount clears timers without remounting child on consent change',
-      (tester) async {
+  testWidgets('unmount clears pending timers', (tester) async {
     await init();
-    var builds = 0;
-    final key = GlobalKey();
-    await tester.pumpWidget(host(StatefulBuilder(
-        key: key,
-        builder: (_, __) {
-          builds++;
-          return button();
-        })));
-    final state = key.currentState;
-    instance.optOutTracking();
-    await tester.pump();
-    expect(key.currentState, same(state));
-    expect(builds, 1);
+    await tester.pumpWidget(host(button()));
+    await tester.tap(find.text('Buy'));
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(seconds: 1));
     expect(tester.takeException(), isNull);
+    expect(named(r'$mp_dead_click'), isEmpty);
   });
 
   testWidgets('navigation and background cancel pending dead clicks',
       (tester) async {
     await init();
-    final observer = MixpanelAutocaptureNavigatorObserver(instance: instance);
-    await tester.pumpWidget(host(button(), observers: [observer]));
+    await tester.pumpWidget(host(button()));
     await tester.tap(find.text('Buy'));
-    observer.didPush(
-        MaterialPageRoute<void>(builder: (_) => const SizedBox()), null);
+    // A route change is a screen change, cancelling through the snapshot.
+    tester
+        .state<NavigatorState>(find.byType(Navigator))
+        .push(MaterialPageRoute<void>(builder: (_) => const Text('Next')));
     await tester.pump(const Duration(milliseconds: 501));
+    await tester.pump();
     expect(named(r'$mp_dead_click'), isEmpty);
+    tester.state<NavigatorState>(find.byType(Navigator)).pop();
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Buy'));
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
     await tester.pump(const Duration(milliseconds: 501));
@@ -389,77 +340,6 @@ void main() {
     await tester.pump(const Duration(milliseconds: 501));
     expect(named(r'$mp_click'), hasLength(1));
     expect(named(r'$mp_dead_click'), hasLength(1));
-  });
-
-  for (final operation in ['identify', 'reset', 'optInTracking']) {
-    for (final duringRead in [false, true]) {
-      testWidgets(
-          '$operation resumes after navigation during ${duringRead ? 'consent read' : 'native operation'}',
-          (tester) async {
-        await init();
-        final observer =
-            MixpanelAutocaptureNavigatorObserver(instance: instance);
-        await tester.pumpWidget(host(button(), observers: [observer]));
-        final gate = Completer<void>();
-        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-            .setMockMethodCallHandler(channel, (call) async {
-          if (call.method == (duringRead ? 'hasOptedOutTracking' : operation)) {
-            await gate.future;
-          }
-          if (call.method == 'hasOptedOutTracking') return false;
-          if (call.method == 'track') events.add(call.arguments as Map);
-          return null;
-        });
-        Future<void>? pending;
-        if (operation == 'identify') pending = instance.identify('login-user');
-        if (operation == 'reset') pending = instance.reset();
-        if (operation == 'optInTracking') instance.optInTracking();
-        await tester.pump();
-        observer.didPush(
-            MaterialPageRoute<void>(builder: (_) => const SizedBox()), null);
-        gate.complete();
-        await tester.pump();
-        if (pending != null) await pending;
-        await tester.tap(find.text('Buy'));
-        await tester.pump(const Duration(milliseconds: 501));
-        expect(named(r'$mp_click'), hasLength(1));
-      });
-    }
-  }
-
-  testWidgets(
-      'secondary Dart handle opt-out stops the shared active controller',
-      (tester) async {
-    await init();
-    await tester.pumpWidget(host(button()));
-    Mixpanel('other-handle').optOutTracking();
-    await tester.tap(find.text('Buy'));
-    await tester.pump(const Duration(milliseconds: 501));
-    expect(events, isEmpty);
-  });
-
-  testWidgets('overlapping presses still detect transient responses',
-      (tester) async {
-    await init();
-    var label = 'AAAA';
-    late StateSetter update;
-    await tester.pumpWidget(host(StatefulBuilder(builder: (_, setState) {
-      update = setState;
-      return Column(children: [button(), Text(label)]);
-    })));
-    await tester.tap(find.text('Buy'));
-    await tester.pump(const Duration(milliseconds: 100));
-    final next = await tester.createGesture();
-    await next.down(tester.getCenter(find.text('Buy')),
-        timeStamp: const Duration(milliseconds: 100));
-    update(() => label = 'BBBB');
-    await tester.pump(const Duration(milliseconds: 16));
-    update(() => label = 'AAAA');
-    await tester.pump(const Duration(milliseconds: 16));
-    await next.up(timeStamp: const Duration(milliseconds: 140));
-    await tester.pump(const Duration(milliseconds: 501));
-    expect(named(r'$mp_click'), hasLength(2));
-    expect(named(r'$mp_dead_click'), isEmpty);
   });
 
   testWidgets('snapshot overflow suppresses dead but hit-path click survives',
@@ -723,8 +603,10 @@ void main() {
       (tester) async {
     await init(const AutocaptureOptions(
       clickOptions: ClickOptions(enabled: false),
-      rageClickOptions:
-          RageClickOptions(clickThreshold: 2, timeWindow: Duration(milliseconds: 100), radius: 8),
+      rageClickOptions: RageClickOptions(
+          clickThreshold: 2,
+          timeWindow: Duration(milliseconds: 100),
+          radius: 8),
       deadClickOptions: DeadClickOptions(enabled: false),
     ));
     await tester.pumpWidget(host(button()));
@@ -742,7 +624,8 @@ void main() {
     await init(const AutocaptureOptions(
       clickOptions: ClickOptions(enabled: false),
       rageClickOptions: RageClickOptions(enabled: false),
-      deadClickOptions: DeadClickOptions(timeWindow: Duration(milliseconds: 100)),
+      deadClickOptions:
+          DeadClickOptions(timeWindow: Duration(milliseconds: 100)),
     ));
     await tester.pumpWidget(host(button()));
     await tester.tap(find.text('Buy'));

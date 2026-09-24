@@ -231,25 +231,21 @@ final mixpanel = await Mixpanel.init(
     deadClickOptions: DeadClickOptions(enabled: true, timeWindow: Duration(milliseconds: 500)),
   ),
 );
-final observer = MixpanelAutocaptureNavigatorObserver(instance: mixpanel);
 runApp(MixpanelAutocaptureWidget(
   instance: mixpanel,
-  child: MaterialApp(
-    navigatorObservers: [observer],
-    home: const MyHomePage(),
-  ),
+  child: const MaterialApp(home: MyHomePage()),
 ));
 ```
 
-Place one wrapper above the app's navigators. Register a separate observer for
-**each** nested Navigator too; retain observers across rebuilds. The wrapper
-accepts a null instance during asynchronous initialization and preserves child
-state when capture changes. This uses Flutter's built-in NavigatorObserver.
+Place one wrapper above the app's navigators. The wrapper accepts a null
+instance during asynchronous initialization and preserves child state when
+capture changes.
 
 A rage click means four accepted taps within a rolling 1,000 ms window and
 44 logical pixels of the latest tap. Emitting clears the burst history. A dead
-click means an eligible control had no observed meaningful response within
-500 ms. Thresholds are configurable through `AutocaptureOptions`. Any new
+click means an eligible control's screen showed no meaningful change 500 ms
+after the tap; like Android, only the state at the deadline is compared, and
+scroll, focus and window-size changes cancel the check early. Thresholds are configurable through `AutocaptureOptions`. Any new
 accepted tap cancels the previous pending dead check, even a noninteractive tap.
 Manual signal APIs remain independent of these detectors.
 
@@ -270,9 +266,9 @@ Use manual APIs for app-detected signals on unsupported surfaces. Custom render
 objects and raw-pointer response handlers require further coverage validation;
 this experimental observer is not a general pixel-difference detector.
 
-Opt-out immediately stops collection and cancels pending detections. Identity
-changes, reset, navigation, backgrounding, and disposal invalidate pending work.
-Unknown consent disables capture. Automatic capture currently does nothing on
+Autocaptured events use the analytics opt-out handling: nothing is sent while
+tracking is opted out. Navigation changes the screen and so cancels a pending
+dead check; backgrounding and disposal also cancel it. Automatic capture currently does nothing on
 web, desktop, keyboard activation, and assistive-technology activation.
 
 

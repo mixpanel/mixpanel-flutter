@@ -316,3 +316,20 @@ analytics library; AutocaptureBinding and its Expando registry are removed. Publ
 entry-point imports and APIs are unchanged. The controller and detector components
 remain independent internal libraries for focused testing. The controller's injected
 event sink is retained for testability, not future publishing/package extraction.
+
+## Simplification — 2026-09-24
+
+Confirmed with Rahul; supersedes the consent, navigation-observer and
+per-frame sampling sections above.
+
+- Consent: rely on the native SDKs, which drop tracked events while opted out.
+  No Dart consent state; optIn/optOut/identify/reset are unchanged from main.
+- Dead clicks match Android master DeadClickDetector: baseline snapshot at
+  pointer-down, one comparison at the deadline. Scroll, focus and metrics
+  changes cancel early. A response that fully reverts before the deadline is
+  not observed (accepted trade-off). No per-frame sampling or frame observer.
+- MixpanelAutocaptureNavigatorObserver removed: navigation changes the
+  snapshot, which cancels a pending check.
+- AutocaptureController, DetectionSession and per-view ownership removed. The
+  widget reads options from the instance; a nested widget is inert.
+- These context/ and docs/SDK30_* files are working notes, not for the PR.

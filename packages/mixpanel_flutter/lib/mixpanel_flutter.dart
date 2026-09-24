@@ -10,13 +10,11 @@ import 'package:mixpanel_flutter/codec/mixpanel_message_codec.dart';
 import 'package:mixpanel_flutter/src/version.dart';
 import 'package:mixpanel_flutter/src/autocapture/click_event.dart';
 import 'package:mixpanel_flutter/src/autocapture/autocapture_options.dart';
-import 'package:mixpanel_flutter/src/autocapture/autocapture_controller.dart';
 import 'src/autocapture/dead_click_detector.dart';
 import 'src/autocapture/rage_click_tracker.dart';
 import 'src/autocapture/response_snapshot.dart';
 import 'src/autocapture/target_resolver.dart';
 import 'src/autocapture/pointer_tap_tracker.dart';
-import 'src/autocapture/ui_response_tracker.dart';
 
 import 'package:mixpanel_flutter_common/mixpanel_flutter_common.dart';
 
@@ -458,11 +456,8 @@ class Mixpanel {
   final People _people;
   final FeatureFlags _featureFlags;
   Autocapture? _autocapture;
-  AutocaptureController? _autocaptureController;
-  // Native platform channels share one active SDK instance. Lifecycle calls
-  // through any Dart handle must invalidate that same active capture controller.
-  static AutocaptureController? _activeAutocapture;
-  static int _autocaptureInitGeneration = 0;
+  // Set by init when automatic capture is enabled; read by the capture widget.
+  AutocaptureOptions? _autocaptureOptions;
 
   Mixpanel(String token)
       : _token = token,
@@ -495,9 +490,6 @@ class Mixpanel {
       FeatureFlagsConfig? featureFlags,
       String? serverURL,
       AutocaptureOptions? autocaptureOptions}) async {
-    final initGeneration = ++_autocaptureInitGeneration;
-    _activeAutocapture?.close();
-    _activeAutocapture = null;
     // Defer the reverse-channel wiring until something actually reads
     // MixpanelEventBridge.events. Apps that never subscribe pay only the
     // stored function reference — no MethodCallHandler, no native subscribe.
@@ -520,16 +512,9 @@ class Mixpanel {
     }
     await _channel.invokeMethod<void>('initialize', allProperties);
     final instance = Mixpanel(token);
-    if (initGeneration == _autocaptureInitGeneration &&
-        autocaptureOptions != null &&
-        autocaptureOptions.isEnabled) {
-      final controller = AutocaptureController(
-          autocaptureOptions,
-          (name, event) =>
-              instance.autocapture._trackClickEvent(name, event, null));
-      instance._autocaptureController = controller;
-      _activeAutocapture = controller;
-      await controller.refreshConsent(instance.hasOptedOutTracking);
+    // Opt-out is enforced by the native SDKs, which drop tracked events.
+    if (autocaptureOptions != null && autocaptureOptions.isEnabled) {
+      instance._autocaptureOptions = autocaptureOptions;
     }
     return instance;
   }
@@ -596,17 +581,7 @@ class Mixpanel {
   /// calls will be sent to Mixpanel after using this method.
   /// This method will internally track an opt-in event to your project.
   void optInTracking() {
-    final controller = _activeAutocapture;
-    final request = controller?.beginConsentOperation();
-    _channel.invokeMethod<void>('optInTracking').then<void>((_) async {
-      if (controller != null) {
-        await controller.refreshConsent(hasOptedOutTracking,
-            request: request);
-      }
-    }).catchError((Object _) {
-      developer.log('Autocapture opt-in failed; capture remains suspended.',
-          name: 'Mixpanel');
-    });
+    _channel.invokeMethod<void>('optInTracking');
   }
 
   /// Use this method to opt-out a user from tracking. Events and people updates that haven't been
@@ -615,11 +590,7 @@ class Mixpanel {
   ///
   /// This method will also remove any user-related information from the device.
   void optOutTracking() {
-    _activeAutocapture?.suspend();
-    _channel.invokeMethod<void>('optOutTracking').catchError((Object _) {
-      developer.log('Opt-out request failed; autocapture remains suspended.',
-          name: 'Mixpanel');
-    });
+    _channel.invokeMethod<void>('optOutTracking');
   }
 
   /// Set the number of events sent in a single network request to the Mixpanel server.
@@ -648,20 +619,8 @@ class Mixpanel {
   /// value is globally unique for each individual user you intend to track.
   Future<void> identify(String distinctId) async {
     if (_MixpanelHelper.isValidString(distinctId)) {
-      final controller = _activeAutocapture;
-      final request = controller?.beginConsentOperation();
-      try {
-        await _channel.invokeMethod<void>(
-            'identify', <String, dynamic>{'distinctId': distinctId});
-      } finally {
-        // Even a failed native call may have changed native state. Recover only
-        // from a fresh consent read; preserve the original exception for callers.
-        // The request guard prevents recovery over a newer opt-out/reset/close.
-        if (controller != null) {
-          await controller.refreshConsent(hasOptedOutTracking,
-              request: request);
-        }
-      }
+      await _channel.invokeMethod<void>(
+          'identify', <String, dynamic>{'distinctId': distinctId});
     } else {
       developer.log('`identify` failed: distinctId cannot be blank',
           name: 'Mixpanel');
@@ -937,18 +896,7 @@ class Mixpanel {
   /// Clear super properties and generates a new random distinctId for this instance.
   /// Useful for clearing data when a user logs out.
   Future<void> reset() async {
-    final controller = _activeAutocapture;
-    final request = controller?.beginConsentOperation();
-    try {
-      await _channel.invokeMethod<void>('reset');
-    } finally {
-      // Recover after failure only if consent is confirmed and still current.
-      // refreshConsent contains read failures, leaving the original error intact.
-      if (controller != null) {
-        await controller.refreshConsent(hasOptedOutTracking,
-            request: request);
-      }
-    }
+    await _channel.invokeMethod<void>('reset');
   }
 
   /// Returns the current distinct id of the user.
