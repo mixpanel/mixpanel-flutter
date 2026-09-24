@@ -10,7 +10,7 @@ The analytics SDK can observe Flutter pointer interactions and emit `$mp_click`,
 
 Automatic capture is opt-in and currently runs only on Android and iOS. Manual signal APIs are separate: the application supplies metadata and determines that the signal occurred. A manual click does not start automatic rage or dead detection.
 
-The implementation ships inside `mixpanel_flutter`, with Flutter >=3.19.0 and Dart >=3.3.0. The direct use of `SemanticsProperties.identifier` drove the Flutter floor. This is a package-wide compatibility change, including applications that leave autocapture disabled. Older applications must upgrade Flutter or stay on an earlier analytics release. We chose one package to avoid introducing publishing/setup work now; this is a deliberate tradeoff, not evidence that all customers have upgraded. See [the packaging decision](SDK30_PACKAGE_BOUNDARY.md) for possible extraction before release.
+The implementation ships inside `mixpanel_flutter`, with Flutter >=3.19.0 and Dart >=3.3.0. The direct use of `SemanticsProperties.identifier` drove the Flutter floor. This is a package-wide compatibility change, including applications that leave autocapture disabled. Older applications must upgrade Flutter or stay on an earlier analytics release. We chose one package to avoid introducing publishing/setup work now; this is a deliberate tradeoff, not evidence that all customers have upgraded. See [the packaging decision](SDK30_PACKAGE_BOUNDARY.md) for the superseded extraction plan and current integration decision.
 
 Behavior decisions are recorded in [AUTOCAPTURE.md](../context/AUTOCAPTURE.md). In particular, Android supplies the agreed rage-reset and dead-candidate replacement rules. The Flutter implementation does not call Android's detectors.
 
@@ -29,7 +29,6 @@ Source links below are relative to this document.
 | Component | Current responsibility | Dependencies and retained state |
 | --- | --- | --- |
 | [Mixpanel / Autocapture](../packages/mixpanel_flutter/lib/mixpanel_flutter.dart) | Initialize the capture adapter, coordinate consent/identity lifecycle, expose manual APIs, serialize events into the existing `track` channel | Active controller, initialization generation; existing analytics/native transport |
-| [AutocaptureBinding](../packages/mixpanel_flutter/lib/src/autocapture/autocapture_binding.dart) | Associate an SDK instance with its internal controller | Static `Expando` with weak instance keys |
 | [AutocaptureController](../packages/mixpanel_flutter/lib/src/autocapture/autocapture_controller.dart) | Gate automatic delivery, invalidate pending work, arbitrate view ownership | Options, event-sink callback, explicit capture status, consent request, capture session, view-owner map; no MethodChannel or widget-tree inspection |
 | [MixpanelAutocaptureWidget / _CaptureState](../packages/mixpanel_flutter/lib/src/autocapture/autocapture_widget.dart) | Attach observation, recognize pointer taps, coordinate targets and responses, dispatch signals | Controller, detectors, active pointers, one pending-tap object, subscriptions |
 | MixpanelAutocaptureNavigatorObserver | Cancel pending detection on push/pop/remove/replace without collecting route metadata | SDK instance and internal controller lookup |
@@ -48,8 +47,7 @@ Source links below are relative to this document.
 flowchart TD
     App[Application] --> SDK[Mixpanel.init and lifecycle APIs]
     SDK --> Controller[AutocaptureController]
-    SDK --> Binding[AutocaptureBinding]
-    Wrapper[MixpanelAutocaptureWidget] --> Binding
+    Wrapper[MixpanelAutocaptureWidget] -->|private instance field| SDK
     Wrapper --> Controller
     Nav[Navigator observer] --> Controller
     Wrapper --> Resolver[TargetResolver]
@@ -73,11 +71,18 @@ delivery callback, keeping target lifetime separate from view observation.
 
 ## SDK/widget association and ownership
 
-The widget receives the same `Mixpanel` instance the application uses for analytics. It does not create a second instance. Initialization creates a controller, attaches it to that instance in `AutocaptureBinding`, and injects an event sink that invokes the existing autocapture serializer.
+Autocapture is part of the analytics SDK; future extraction is no longer a design
+requirement. `Mixpanel` stores its controller in `_autocaptureController`.
+`autocapture_widget.dart` is a `part` of the analytics library, allowing the root
+widget and navigator observer to access that private field directly. There is no
+static association registry or public controller accessor. Applications continue
+to import the public analytics entry point; public class names and setup do not change.
 
-The binding exists because separate Dart libraries cannot access each other's private members. Keeping a private controller field in `mixpanel_flutter.dart` would not make it accessible to `autocapture_widget.dart`. An earlier public controller getter exposed implementation state; the internal binding replaced it. `Expando` keys avoid a strong static map retaining discarded SDK instances. This bridge is not exported from the public entry point, though Dart `lib/src` conventions are not an absolute access-control boundary.
-
-This has costs: association is implicit, lookup is static, and it is less obvious than a constructor dependency. Alternatives include a deliberately exposed adapter contract or sharing library-private state through `part` files. Neither alternative has been adopted; `part` coupling would also affect future extraction.
+The controller, pointer/response trackers, resolver, snapshots and detectors remain
+ordinary internal libraries. Their separation supports focused tests and clear
+responsibilities, rather than another package. The controller retains its injected
+event sink to keep tests independent of native transport. Only the widget/navigation
+integration shares analytics library privacy.
 
 Two ownership rules are distinct:
 
@@ -214,4 +219,4 @@ Target/snapshot tests still require Flutter trees and a test binding, but need n
 Dedicated pointer, response-tracker and classification tests supplement the resolver,
 snapshot, controller and dead-detector tests. Validation: 303 analytics tests pass on
 Flutter 3.19.0 and 3.44.6. This is not a substitute for the outstanding device and
-profile-mode validation before release. The internal binding mechanism is unchanged.
+profile-mode validation before release. The subsequent hybrid integration replaces the internal binding with direct private-field access.

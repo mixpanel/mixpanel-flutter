@@ -1,15 +1,4 @@
-import 'package:flutter/foundation.dart';
-import 'package:flutter/gestures.dart';
-import 'package:flutter/widgets.dart';
-import '../../mixpanel_flutter.dart';
-import 'autocapture_controller.dart';
-import 'autocapture_binding.dart';
-import 'dead_click_detector.dart';
-import 'rage_click_tracker.dart';
-import 'response_snapshot.dart';
-import 'target_resolver.dart';
-import 'pointer_tap_tracker.dart';
-import 'ui_response_tracker.dart';
+part of '../../mixpanel_flutter.dart';
 
 /// Observes pointer clicks within [child] on Android and iOS.
 ///
@@ -83,7 +72,7 @@ class _CaptureState extends State<MixpanelAutocaptureWidget>
   }
 
   void _attach() {
-    final controller = AutocaptureBinding.getController(widget.instance);
+    final controller = widget.instance?._autocaptureController;
     if (identical(controller, _controller)) return;
     _controller = controller;
     if (controller == null || _viewId == null) return;
@@ -279,7 +268,7 @@ class _PendingTap {
 class MixpanelAutocaptureNavigatorObserver extends NavigatorObserver {
   MixpanelAutocaptureNavigatorObserver({required this.instance});
   final Mixpanel instance;
-  void _change() => AutocaptureBinding.getController(instance)?.invalidate();
+  void _change() => instance._autocaptureController?.invalidate();
   @override
   void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) =>
       _change();

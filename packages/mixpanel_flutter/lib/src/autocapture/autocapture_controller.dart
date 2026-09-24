@@ -20,7 +20,8 @@ class DetectionSession {
 }
 
 /// Analytics adapter boundary. No widget or native-channel dependencies.
-/// Not an application API; kept separate for future package extraction.
+/// Internal to analytics; the injected sink keeps lifecycle tests independent
+/// of native transport.
 class AutocaptureController extends ChangeNotifier {
   AutocaptureController(this.options, this._emit);
   final AutocaptureOptions options;

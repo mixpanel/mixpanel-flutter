@@ -14,8 +14,8 @@ and performance validation and custom-rendering hardening remain before release.
 ## Confirmed behavior
 
 - Ship inside analytics; Flutter >=3.19.0 / Dart >=3.3.0. No new package or
-  publishing workflow now. Keep boundaries suitable for extraction before launch
-  as described in `docs/SDK30_PACKAGE_BOUNDARY.md`.
+  publishing workflow now. The 2026-09-24 decision below supersedes the earlier
+  requirement to preserve package-extraction boundaries.
 - Android and iOS first; shared Dart logic should allow later web/macOS work.
 - Require one root MixpanelAutocaptureWidget, not wrappers on individual controls.
 - Explicit opt-in. Click, rage and dead are independently configurable; all
@@ -305,3 +305,14 @@ Validation: all 303 tests pass on Flutter 3.19.0 and 3.44.6 in separate clean pa
 copies. New focused tests cover pointer boundaries, response outcomes, shared sampling,
 subscription cleanup and classification. Existing lifecycle/privacy/portal regressions
 remain in the full suite.
+
+
+## Analytics-owned hybrid integration (2026-09-24)
+
+Rahul removed the requirement for autocapture to remain extractable before release.
+Mixpanel now owns `_autocaptureController` directly. The root widget and navigator
+observer share private access through autocapture_widget.dart as a part of the
+analytics library; AutocaptureBinding and its Expando registry are removed. Public
+entry-point imports and APIs are unchanged. The controller and detector components
+remain independent internal libraries for focused testing. The controller's injected
+event sink is retained for testability, not future publishing/package extraction.

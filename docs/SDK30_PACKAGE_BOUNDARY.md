@@ -1,5 +1,20 @@
 # SDK-30 packaging decision
 
+## Current decision (2026-09-24)
+
+Autocapture is built into analytics. Extractability into an optional package is no
+longer a requirement. Mixpanel owns a private controller field; the root widget and
+navigator observer share library-private access through a narrow Dart `part` file.
+The Expando binding registry has been removed. Detector components remain separate
+internal libraries for clarity and testability, and the controller keeps an injected
+event sink. Public integration and Flutter/Dart minimums remain unchanged.
+
+The original scoping notes below are historical and superseded where they require
+future package extraction or prohibit `part` integration. Extraction would now be
+a deliberate future redesign, not a supported boundary promised by this implementation.
+
+## Historical scoping notes
+
 2026-09-14: Ship the feature inside `mixpanel_flutter` with Flutter >=3.19.0
 and Dart >=3.3.0. Do not create a package or publishing configuration now.
 Initial automatic platform scope is Android/iOS. Rage detection follows

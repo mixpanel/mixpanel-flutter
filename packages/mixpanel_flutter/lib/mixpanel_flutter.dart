@@ -2,20 +2,27 @@ import 'dart:async';
 import 'dart:developer' as developer;
 import 'dart:io' show Platform;
 
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform, TargetPlatform;
+import 'package:flutter/gestures.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter/services.dart';
 import 'package:mixpanel_flutter/codec/mixpanel_message_codec.dart';
 import 'package:mixpanel_flutter/src/version.dart';
 import 'package:mixpanel_flutter/src/autocapture/click_event.dart';
 import 'package:mixpanel_flutter/src/autocapture/autocapture_options.dart';
 import 'package:mixpanel_flutter/src/autocapture/autocapture_controller.dart';
-import 'package:mixpanel_flutter/src/autocapture/autocapture_binding.dart';
+import 'src/autocapture/dead_click_detector.dart';
+import 'src/autocapture/rage_click_tracker.dart';
+import 'src/autocapture/response_snapshot.dart';
+import 'src/autocapture/target_resolver.dart';
+import 'src/autocapture/pointer_tap_tracker.dart';
+import 'src/autocapture/ui_response_tracker.dart';
 
 import 'package:mixpanel_flutter_common/mixpanel_flutter_common.dart';
 
 export 'package:mixpanel_flutter/src/autocapture/click_event.dart';
 export 'package:mixpanel_flutter/src/autocapture/autocapture_options.dart';
-export 'package:mixpanel_flutter/src/autocapture/autocapture_widget.dart';
+part 'src/autocapture/autocapture_widget.dart';
 
 /// Describes why the SDK returned a fallback variant.
 ///
@@ -451,6 +458,7 @@ class Mixpanel {
   final People _people;
   final FeatureFlags _featureFlags;
   Autocapture? _autocapture;
+  AutocaptureController? _autocaptureController;
   // Native platform channels share one active SDK instance. Lifecycle calls
   // through any Dart handle must invalidate that same active capture controller.
   static AutocaptureController? _activeAutocapture;
@@ -519,7 +527,7 @@ class Mixpanel {
           autocaptureOptions,
           (name, event) =>
               instance.autocapture._trackClickEvent(name, event, null));
-      AutocaptureBinding.attach(instance, controller);
+      instance._autocaptureController = controller;
       _activeAutocapture = controller;
       await controller.refreshConsent(instance.hasOptedOutTracking);
     }
