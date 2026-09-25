@@ -22,6 +22,8 @@ jobs:
           flutter-version: "3.41.0"
       - run: flutter pub get
       - run: flutter test
+      # Autocapture runs in Dart on web too; exercise that path in Chrome.
+      - run: flutter test --platform chrome test/autocapture
       - run: flutter analyze --no-pub --no-current-package --no-fatal-infos lib
 
   test-common:

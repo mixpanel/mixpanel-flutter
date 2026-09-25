@@ -167,3 +167,125 @@ No worries, here are some links that you will find useful:
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/mixpanel/mixpanel-flutter)
 
 Have any questions? Reach out to Mixpanel [Support](https://help.mixpanel.com/hc/en-us/requests/new) to speak to someone smart, quickly.
+
+
+### SDK requirements
+
+The next analytics release requires Flutter 3.19.0 or later (Dart 3.3.0 or
+later). This package requirement applies even when automatic capture is disabled.
+Automatic targeting uses `Semantics.identifier`, available from Flutter 3.19.
+Applications on older Flutter versions must upgrade Flutter or remain on an
+earlier analytics release.
+
+### Manual frustration signals (Beta)
+
+> **Autocapture is in beta.** Autocapture — `$mp_click`, `$mp_rage_click` and
+> `$mp_dead_click`, and the `mixpanel.autocapture` API — may contain issues, and
+> its API and the properties it captures may change in a future release before
+> general availability. Pin your SDK version if you build reports on autocaptured events.
+
+Use `mixpanel.autocapture.trackClick`, `trackRageClick`, or `trackDeadClick`
+when your application has already detected the corresponding interaction:
+
+```dart
+await mixpanel.autocapture.trackClick(const ClickEvent(
+  x: 120,
+  y: 240,
+  elementId: 'checkout_button',
+  tagName: 'ElevatedButton',
+  role: 'Button',
+));
+```
+
+Coordinates are in the owning Flutter view's logical pixels. Supply a static
+identifier without personal data; do not use accessibility labels, input values,
+or visible text. Optional metadata and extra properties are developer-supplied
+and are not automatically sanitized. Blank identifiers or nonfinite coordinates
+are ignored. Typed click metadata and `$mp_autocapture: true` override conflicting
+extra properties. Events use the existing analytics transport and its opt-out
+handling.
+
+These methods emit one event each. They do not observe gestures or automatically
+detect rage/dead clicks. Automatic capture is still under development for SDK-30.
+The example app's **Manual Frustration Signals** page provides test fixtures.
+
+### Automatic frustration signals (Beta, Android/iOS/macOS/web)
+
+> **Autocapture is in beta.** Autocapture — `$mp_click`, `$mp_rage_click` and
+> `$mp_dead_click`, and the `mixpanel.autocapture` API — may contain issues, and
+> its API and the properties it captures may change in a future release before
+> general availability. Pin your SDK version if you build reports on autocaptured events.
+
+Requires Flutter 3.19 / Dart 3.3. No additional package is needed. Capture is off
+unless `autocaptureOptions` is supplied at initialization:
+
+```dart
+final mixpanel = await Mixpanel.init(
+  'YOUR_PROJECT_TOKEN',
+  trackAutomaticEvents: false,
+  autocaptureOptions: const AutocaptureOptions(
+    clickOptions: ClickOptions(enabled: true),
+    rageClickOptions: RageClickOptions(
+      enabled: true, clickThreshold: 4, timeWindow: Duration(seconds: 1), radius: 44,
+    ),
+    deadClickOptions: DeadClickOptions(enabled: true, timeWindow: Duration(milliseconds: 500)),
+  ),
+);
+runApp(MixpanelAutocaptureWidget(
+  instance: mixpanel,
+  child: const MaterialApp(home: MyHomePage()),
+));
+```
+
+Place one wrapper above the app's navigators. The wrapper accepts a null
+instance during asynchronous initialization and preserves child state when
+capture changes.
+
+A rage click means four accepted taps within a rolling 1,000 ms window and
+44 logical pixels of the latest tap. Emitting clears the burst history. A dead
+click means an eligible control's screen showed no meaningful change 500 ms
+after the tap. Only the state at the deadline is compared; scroll, focus and
+window-size changes cancel the check early. Thresholds are configurable through
+`AutocaptureOptions`. Any new
+accepted tap cancels the previous pending dead check, even a noninteractive tap.
+Manual signal APIs remain independent of these detectors.
+
+Metadata contains logical coordinates, canonical widget type/role, structural
+ancestry, and either a developer-supplied `Semantics(identifier: 'checkout')` or
+a structural fallback ID. Do not put personal data in identifiers. Labels,
+editable values, passwords, widget keys, and arbitrary widget descriptions are
+never used as event metadata. Noneditable display text is compared transiently
+in memory to detect responses; neither that text nor its digest is transmitted,
+logged, or persisted. Structural fallback IDs can change with layout changes.
+
+Automatic dead detection is conservative: text entry and feedback controls are
+ineligible. Visible platform views, textures, and app-owned CustomPaint surfaces
+suppress automatic dead detection for the observed view because their responses
+cannot be reliably inspected. Missing/over-budget snapshots also suppress it.
+Material border/ripple feedback does not itself count as a meaningful response.
+Use manual APIs for app-detected signals on unsupported surfaces. Custom render
+objects and raw-pointer response handlers require further coverage validation;
+this experimental observer is not a general pixel-difference detector.
+
+Autocaptured events use the analytics opt-out handling: nothing is sent while
+tracking is opted out. Navigation changes the screen and so cancels a pending
+dead check; backgrounding and disposal also cancel it. Automatic capture currently does nothing on
+Windows or Linux, and does not observe keyboard or assistive-technology activation.
+
+
+Automatic pointer capture accepts primary touch/mouse taps lasting at most
+500 ms (including exactly 500 ms). Stylus and inverted-stylus
+input are not captured in this Beta. iPad trackpad clicks delivered by Flutter
+as mouse/touch events follow the same rules.
+
+Target lookup follows hit-test render ancestry. Response checks retain a bounded
+view traversal; exceeding the node/depth budget suppresses affected signals and
+emits one generic diagnostic per process. This protects app responsiveness but
+means exceptionally complex visible views can lack automatic dead-click events.
+
+Autocapture time windows accept `Duration` values from 1 millisecond to 1 minute,
+including microsecond precision within that range. The rage threshold must be
+2–100 and radius must be finite and 0–100000 logical pixels. Debug assertions
+check threshold/radius at construction and durations when detectors consume them
+(the configuration constructors remain `const`). In release builds, detectors
+clamp out-of-range values and use radius 44 for nonfinite values.
