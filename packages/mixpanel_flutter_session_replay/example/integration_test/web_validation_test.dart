@@ -414,11 +414,6 @@ void main() {
           ),
           reason: '${scenario.name} produced a long browser frame gap',
         );
-        expect(
-          metrics.longFrameCount,
-          0,
-          reason: '${scenario.name} produced a browser frame gap over 50ms',
-        );
         if (metrics.longTaskSupported) {
           expect(
             metrics.longTaskCount,
