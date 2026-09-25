@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mixpanel_flutter/codec/mixpanel_message_codec.dart';
@@ -343,6 +344,37 @@ void main() {
         'CupertinoButton');
     debugDefaultTargetPlatformOverride = null;
   });
+
+  testWidgets('macOS mouse clicks are captured', (tester) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    await init();
+    await tester.pumpWidget(host(button()));
+    final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await gesture.addPointer(location: tester.getCenter(find.text('Buy')));
+    await gesture.down(tester.getCenter(find.text('Buy')));
+    await gesture.up();
+    await tester.pump(const Duration(milliseconds: 501));
+    await tester.pump();
+    expect(named(r'$mp_click').single['properties'][r'$el_id'], 'checkout');
+    expect(named(r'$mp_dead_click'), hasLength(1));
+    await gesture.removePointer();
+    debugDefaultTargetPlatformOverride = null;
+  });
+
+  for (final platform in [TargetPlatform.windows, TargetPlatform.linux]) {
+    testWidgets('capture stays off on ${platform.name}', (tester) async {
+      debugDefaultTargetPlatformOverride = platform;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+      await init();
+      await tester.pumpWidget(host(button()));
+      await tester.tap(find.text('Buy'));
+      await tester.pump(const Duration(milliseconds: 501));
+      expect(events, isEmpty);
+      debugDefaultTargetPlatformOverride = null;
+      // On web the browser, not the host OS, decides support.
+    }, skip: kIsWeb);
+  }
 
   testWidgets('nested custom gesture keeps identity inside a button',
       (tester) async {

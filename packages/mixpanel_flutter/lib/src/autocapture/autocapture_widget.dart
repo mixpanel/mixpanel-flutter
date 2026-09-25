@@ -1,6 +1,6 @@
 part of '../../mixpanel_flutter.dart';
 
-/// Observes pointer clicks within [child] on Android, iOS and web.
+/// Observes pointer clicks within [child] on Android, iOS, macOS and web.
 ///
 /// Place once above MaterialApp/CupertinoApp and its navigators.
 /// [instance] may be null while initialization completes. The child is not
@@ -52,10 +52,11 @@ class _CaptureState extends State<MixpanelAutocaptureWidget>
     _disable();
     final instance = widget.instance;
     final options = instance?._autocaptureOptions;
-    // Desktop is not yet validated.
+    // Windows and Linux are not yet validated.
     final supported = kIsWeb ||
         defaultTargetPlatform == TargetPlatform.android ||
-        defaultTargetPlatform == TargetPlatform.iOS;
+        defaultTargetPlatform == TargetPlatform.iOS ||
+        defaultTargetPlatform == TargetPlatform.macOS;
     if (instance == null || options == null || !supported) return;
     final autocapture = instance.autocapture;
     final session = CaptureSession(options,
