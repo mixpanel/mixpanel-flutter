@@ -74,6 +74,29 @@ class InMemoryEventQueue implements EventQueue {
   }
 
   @override
+  Future<QueuedEventHeader?> fetchOldestHeader() async {
+    _checkNotDisposed();
+    if (_events.isEmpty) return null;
+    return _headerFor(_events.first);
+  }
+
+  @override
+  Future<QueuedEventHeader?> fetchNewestHeader() async {
+    _checkNotDisposed();
+    if (_events.isEmpty) return null;
+    return _headerFor(_events.last);
+  }
+
+  QueuedEventHeader _headerFor(PersistedSessionReplayEvent event) {
+    return QueuedEventHeader(
+      id: event.id,
+      sessionId: event.sessionId,
+      distinctId: event.distinctId,
+      timestamp: event.timestamp,
+    );
+  }
+
+  @override
   Future<List<PersistedSessionReplayEvent>> fetchBatch({
     required String sessionId,
     required String distinctId,

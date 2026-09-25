@@ -11,8 +11,11 @@ import 'session_event.dart' show WireframePayload;
 /// State transitions:
 /// ```
 /// notRecording ──[sampling passes]──► initializing ──[DB done]──► recording
-///      ▲                                                              │
-///      └──────────────────[stopRecording/background]──────────────────┘
+///      ▲                                                              │  ▲
+///      │                                                              │  │
+///      │                                                              ▼  │
+///      │                                                            paused
+///      └──────────────────────────[stopRecording]─────────────────────┘
 ///
 /// notRecording ──[sampling fails]──► notRecording (allows re-roll)
 /// ```
@@ -33,6 +36,13 @@ enum RecordingState {
   ///
   /// Screenshots and interactions are being captured and queued for upload.
   recording,
+
+  /// Recording is temporarily paused
+  ///
+  /// The current replay is retained while the app or page is backgrounded and
+  /// continues with the same replay ID on foreground. Screenshots and
+  /// interactions are not captured while paused.
+  paused,
 }
 
 /// Initialization errors that can occur during SDK setup
@@ -43,7 +53,8 @@ enum InitializationError {
   /// Cannot initialize local storage
   storageFailure,
 
-  /// Platform security requirements not met (e.g., macOS App Sandbox not enabled)
+  /// Platform requirements not met (for example, macOS App Sandbox or the
+  /// browser capabilities required for non-blocking capture).
   platformSecurityNotMet,
 
   /// `serverUrl` was empty, not HTTPS, or otherwise malformed.
@@ -110,16 +121,20 @@ final class CaptureSuccess extends CaptureResult {
   /// Captured screenshot data (JPEG bytes)
   final Uint8List data;
 
-  /// Screenshot width in pixels
+  /// Captured viewport width in logical pixels.
+  ///
+  /// The encoded raster may be downscaled to bound capture work.
   final int width;
 
-  /// Screenshot height in pixels
+  /// Captured viewport height in logical pixels.
+  ///
+  /// The encoded raster may be downscaled to bound capture work.
   final int height;
 
   /// Number of masked regions applied
   final int maskCount;
 
-  /// Timestamp when the screenshot was captured (when toImage() was called)
+  /// Timestamp when creation of the platform image snapshot began.
   final DateTime timestamp;
 
   /// Mask regions that were detected (for debug overlay)

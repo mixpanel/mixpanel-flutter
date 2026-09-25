@@ -10,8 +10,12 @@ export 'src/models/configuration.dart'
         AutoMaskedView,
         LogLevel,
         RemoteSettingsMode,
+        ReplayBackgroundBehavior,
+        ReplayBackgroundPauseBehavior,
+        ReplayBackgroundStopBehavior,
         PlatformOptions,
-        MobileOptions;
+        MobileOptions,
+        WebOptions;
 export 'src/models/data_residency.dart' show DataResidency;
 export 'src/models/debug_overlay_colors.dart'
     show DebugOptions, DebugOverlayColors;

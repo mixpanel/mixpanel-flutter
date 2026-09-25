@@ -1,6 +1,5 @@
-import 'dart:io' show Platform;
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:mixpanel_flutter_session_replay/mixpanel_flutter_session_replay.dart';
 import 'package:provider/provider.dart';
 
@@ -8,6 +7,7 @@ import '../models/config_model.dart';
 import '../models/wireframe_model.dart';
 import '../services/mixpanel_analytics.dart';
 import '../utils/constants.dart';
+import 'background_behavior_screen.dart';
 
 /// Configuration screen for SDK initialization
 class ConfigScreen extends StatefulWidget {
@@ -25,11 +25,15 @@ class _ConfigScreenState extends State<ConfigScreen> {
   late TextEditingController _flushIntervalController;
   late TextEditingController _autoRecordController;
   late TextEditingController _storageQuotaController;
+  late TextEditingController _webIdleTimeoutController;
+  late TextEditingController _webMaxSessionController;
 
-  bool get _isMobilePlatform {
-    if (kIsWeb) return false;
-    return Platform.isAndroid || Platform.isIOS;
-  }
+  bool get _isWebPlatform => kIsWeb;
+
+  bool get _isMobilePlatform =>
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.iOS);
 
   @override
   void initState() {
@@ -45,6 +49,12 @@ class _ConfigScreenState extends State<ConfigScreen> {
     );
     _storageQuotaController = TextEditingController(
       text: configVm.storageQuota,
+    );
+    _webIdleTimeoutController = TextEditingController(
+      text: configVm.webIdleTimeoutSeconds,
+    );
+    _webMaxSessionController = TextEditingController(
+      text: configVm.webMaxSessionSeconds,
     );
 
     // Update ViewModel when text changes
@@ -63,6 +73,12 @@ class _ConfigScreenState extends State<ConfigScreen> {
     _storageQuotaController.addListener(
       () => configVm.setStorageQuota(_storageQuotaController.text),
     );
+    _webIdleTimeoutController.addListener(
+      () => configVm.setWebIdleTimeoutSeconds(_webIdleTimeoutController.text),
+    );
+    _webMaxSessionController.addListener(
+      () => configVm.setWebMaxSessionSeconds(_webMaxSessionController.text),
+    );
   }
 
   @override
@@ -72,6 +88,8 @@ class _ConfigScreenState extends State<ConfigScreen> {
     _flushIntervalController.dispose();
     _autoRecordController.dispose();
     _storageQuotaController.dispose();
+    _webIdleTimeoutController.dispose();
+    _webMaxSessionController.dispose();
     super.dispose();
   }
 
@@ -92,9 +110,9 @@ class _ConfigScreenState extends State<ConfigScreen> {
       final config = configVm.getConfig();
       wireframeVm.clear();
 
-      // Initialize analytics SDK first so its native broadcast receiver /
-      // notification observer is ready before session replay registers
-      // the $mp_replay_id super property.
+      // Initialize analytics first so its native property bridge (mobile) or
+      // Mixpanel JS instance (web) is ready before replay registers the
+      // $mp_replay_id super property.
       await MixpanelAnalytics.initialize(
         token: config.token,
         distinctId: config.distinctId,
@@ -230,6 +248,73 @@ class _ConfigScreenState extends State<ConfigScreen> {
                     _buildLogLevelDropdown(configVm, _isInitializing),
                     const SizedBox(height: 16),
                     _buildRemoteSettingsModeDropdown(configVm, _isInitializing),
+                    if (_isWebPlatform || _isMobilePlatform) ...[
+                      const SizedBox(height: 16),
+                      Card(
+                        child: ListTile(
+                          title: const Text('Background Recording Behavior'),
+                          subtitle: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                configVm.backgroundBehavior ==
+                                        BackgroundBehaviorSelection.pause
+                                    ? 'Pause and retain for '
+                                          '${configVm.backgroundPauseIdleSeconds}s'
+                                    : 'Stop replay on background',
+                              ),
+                              if (configVm.backgroundPauseIdleError
+                                  case final error?)
+                                Text(
+                                  'Pause idle duration: $error',
+                                  style: TextStyle(
+                                    color: Theme.of(context).colorScheme.error,
+                                  ),
+                                ),
+                            ],
+                          ),
+                          trailing: const Icon(Icons.chevron_right),
+                          enabled: !_isInitializing,
+                          onTap: _isInitializing
+                              ? null
+                              : () => Navigator.of(context).push(
+                                  MaterialPageRoute<void>(
+                                    builder: (_) =>
+                                        const BackgroundBehaviorScreen(),
+                                  ),
+                                ),
+                        ),
+                      ),
+                    ],
+                    if (_isWebPlatform) ...[
+                      const SizedBox(height: 16),
+                      _buildTextField(
+                        controller: _webIdleTimeoutController,
+                        label: 'Idle Timeout (seconds, 0 = disabled) [Web]',
+                        enabled: !_isInitializing,
+                        keyboardType: TextInputType.number,
+                        errorText: configVm.webIdleTimeoutError,
+                      ),
+                      const SizedBox(height: 16),
+                      _buildTextField(
+                        controller: _webMaxSessionController,
+                        label: 'Max Session Duration (seconds) [Web]',
+                        enabled: !_isInitializing,
+                        keyboardType: TextInputType.number,
+                        errorText: configVm.webMaxSessionError,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Defaults are 1800s idle / 86400s max, matching '
+                        'Mixpanel JS. Shorten them to observe an idle-out or '
+                        'a max-duration rollover by hand.',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontStyle: FontStyle.italic,
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                    ],
                     if (_isMobilePlatform) ...[
                       const SizedBox(height: 16),
                       _buildSwitch(

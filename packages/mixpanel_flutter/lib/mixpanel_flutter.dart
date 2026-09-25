@@ -396,12 +396,9 @@ class Mixpanel {
     'mp_lib': 'flutter',
   };
 
-  // Wires the reverse path from the native MixpanelEventBridge into the
-  // Dart-side [MixpanelEventBridge]. Runs only when a consumer actually
-  // reads [MixpanelEventBridge.events] — `init()` registers this as a
-  // one-shot hook via [MixpanelEventBridge.setSourceWiringHook], so apps
-  // that never subscribe never install the MethodCallHandler and never
-  // issue start/stopEventBridge over the channel.
+  // Wires native event pushes and web hook activation into the Dart-side
+  // [MixpanelEventBridge]. Runs only when a consumer reads its events stream,
+  // so apps without subscribers never start upstream event forwarding.
   static void _wireEventBridge() {
     _channel.setMethodCallHandler((MethodCall call) async {
       if (call.method == 'onMixpanelEvent') {
@@ -472,11 +469,9 @@ class Mixpanel {
     // Defer the reverse-channel wiring until something actually reads
     // MixpanelEventBridge.events. Apps that never subscribe pay only the
     // stored function reference — no MethodCallHandler, no native subscribe.
-    // Web is skipped — the JS SDK has no EventBridge.
-    if (!kIsWeb) {
-      // ignore: invalid_use_of_internal_member
-      MixpanelEventBridge.setSourceWiringHook(_wireEventBridge);
-    }
+    // Both native plugins and the web JS hook forward into this bridge.
+    // ignore: invalid_use_of_internal_member
+    MixpanelEventBridge.setSourceWiringHook(_wireEventBridge);
     var allProperties = <String, dynamic>{'token': token};
     allProperties['optOutTrackingDefault'] = optOutTrackingDefault;
     allProperties['trackAutomaticEvents'] = trackAutomaticEvents;

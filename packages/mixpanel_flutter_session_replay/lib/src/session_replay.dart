@@ -1,19 +1,20 @@
-import 'dart:io' show Platform;
-
 import 'package:flutter/foundation.dart' show debugPrint, kDebugMode;
 import 'package:http/http.dart' as http;
 import 'package:meta/meta.dart';
 
+import 'internal/platform/platform_info.dart';
+import 'internal/platform/platform_init.dart';
 import 'models/debug_overlay_colors.dart';
-import 'models/results.dart';
+import 'models/configuration.dart'
+    show ReplayBackgroundBehavior, ReplayBackgroundPauseBehavior;
 import 'models/masking_directive.dart';
+import 'models/results.dart';
 import 'session_replay_options.dart';
 import 'internal/endpoints.dart';
-import 'internal/native_image_compressor.dart';
-import 'internal/screenshot_capturer.dart';
 import 'internal/event_recorder.dart';
 import 'internal/storage/event_queue_interface.dart';
-import 'internal/storage/sqlite_event_queue.dart';
+import 'internal/session/idle_timeout_timer.dart';
+import 'internal/session/recording_limits.dart';
 import 'internal/session/session_manager.dart';
 import 'internal/upload/upload_service.dart';
 import 'internal/upload/payload_serializer.dart';
@@ -96,6 +97,23 @@ class MixpanelSessionReplay {
     );
   }
 
+  static ReplayBackgroundBehavior _capBackgroundBehavior(
+    ReplayBackgroundBehavior behavior, {
+    required String name,
+    required MixpanelLogger logger,
+  }) => switch (behavior) {
+    ReplayBackgroundPauseBehavior(:final idleTimeout)
+        when idleTimeout > maxRecordingDuration =>
+      ReplayBackgroundBehavior.pause(
+        idleTimeout: capRecordingDuration(
+          idleTimeout,
+          name: name,
+          logger: logger,
+        ),
+      ),
+    _ => behavior,
+  };
+
   /// Internal initialization with dependency injection for testing
   ///
   /// **INTERNAL USE ONLY** - This method is NOT part of the public API and should
@@ -148,6 +166,34 @@ class MixpanelSessionReplay {
           throw ArgumentError('storageQuotaMB must be positive');
         }
 
+        final webOptions = options.platformOptions.web;
+        if (webOptions.idleTimeout < Duration.zero) {
+          throw ArgumentError('web idleTimeout cannot be negative');
+        }
+
+        if (options.platformOptions.mobile.onBackground
+            case ReplayBackgroundPauseBehavior(:final idleTimeout)) {
+          if (idleTimeout <= Duration.zero) {
+            throw ArgumentError(
+              'mobile background pause idleTimeout must be positive',
+            );
+          }
+        }
+
+        if (webOptions.onBackground case ReplayBackgroundPauseBehavior(
+          :final idleTimeout,
+        )) {
+          if (idleTimeout <= Duration.zero) {
+            throw ArgumentError(
+              'web background pause idleTimeout must be positive',
+            );
+          }
+        }
+
+        if (webOptions.maxSessionDuration <= Duration.zero) {
+          throw ArgumentError('web maxSessionDuration must be positive');
+        }
+
         logger.debug('Configuration valid');
       } catch (e) {
         logger.error('Configuration invalid: $e');
@@ -179,9 +225,7 @@ class MixpanelSessionReplay {
       // Enforce App Sandbox on macOS — screenshots are stored locally and must
       // be protected from other processes reading them.
       // Skip when eventQueue is injected (unit tests don't store real screenshots).
-      if (eventQueue == null &&
-          Platform.isMacOS &&
-          !Platform.environment.containsKey('APP_SANDBOX_CONTAINER_ID')) {
+      if (eventQueue == null && isMacOsWithoutSandbox) {
         const message =
             'macOS App Sandbox is required for Session Replay. '
             'Enable com.apple.security.app-sandbox in your entitlements file.';
@@ -205,34 +249,9 @@ class MixpanelSessionReplay {
         logger.debug('Old instance cleaned up');
       }
 
-      // Initialize event queue (use injected or create SqliteEventQueue)
-      logger.debug('Creating event queue...');
-      final EventQueue queue =
-          eventQueue ??
-          SqliteEventQueue(
-            token: token,
-            quotaMB: options.storageQuotaMB,
-            logger: logger,
-          );
-      await queue.initialize();
-      logger.debug('Event queue initialized');
-
-      // Clear all data on app launch
-      await queue.removeAll();
-      logger.debug('Cleared all existing data');
-
-      // Create internal components
-      logger.debug('Creating internal components...');
-
-      // Create session manager
-      final sessionManager = SessionManager();
-
-      // Create masking directive from options
-      final directive = MaskingDirective(
-        autoMaskTypes: options.autoMaskedViews,
-      );
-
-      // Build wireframe emitter if opted in. One instance per SDK lifetime.
+      // Platform-specific initialization (queue, screenshot capturer,
+      // session resume, idle timeout, expiry persistence)
+      logger.debug('Running platform init...');
       final wireframesOptions = options.wireframesOptions;
       final wireframeEmitter = wireframesOptions != null
           ? WireframeEmitter(
@@ -241,17 +260,46 @@ class MixpanelSessionReplay {
               logger: logger,
             )
           : null;
-
-      // Create screenshot capturer with native JPEG compression
-      final screenshotCapturer = ScreenshotCapturer(
-        directive: directive,
-        logger: logger,
+      final platformResult = await platformInit(
+        token: token,
+        storageQuotaMB: options.storageQuotaMB,
+        directive: MaskingDirective(autoMaskTypes: options.autoMaskedViews),
         debugOverlayEnabled: options.debugOptions?.overlayColors != null,
-        nativeCompressor: NativeImageCompressor(),
+        mobileWifiOnly: options.platformOptions.mobile.wifiOnly,
+        webIdleTimeout: capRecordingDuration(
+          options.platformOptions.web.idleTimeout,
+          name: 'web idleTimeout',
+          logger: logger,
+        ),
+        webMaxSessionDuration: capRecordingDuration(
+          options.platformOptions.web.maxSessionDuration,
+          name: 'web maxSessionDuration',
+          logger: logger,
+        ),
+        mobileBackgroundBehavior: _capBackgroundBehavior(
+          options.platformOptions.mobile.onBackground,
+          name: 'mobile background pause idleTimeout',
+          logger: logger,
+        ),
+        webBackgroundBehavior: _capBackgroundBehavior(
+          options.platformOptions.web.onBackground,
+          name: 'web background pause idleTimeout',
+          logger: logger,
+        ),
         wireframeEmitter: wireframeEmitter,
         useAccessibilityLabelFallback:
             wireframesOptions?.useAccessibilityLabelFallback ?? false,
+        logger: logger,
+        eventQueue: eventQueue,
       );
+      final queue = platformResult.queue;
+      logger.debug('Platform init complete');
+
+      // Create internal components
+      logger.debug('Creating internal components...');
+
+      // Create session manager
+      final sessionManager = SessionManager();
 
       // Create instance first (before components) so we can reference it in closures
       final instance = MixpanelSessionReplay._internal(
@@ -291,7 +339,7 @@ class MixpanelSessionReplay {
       final uploadService = UploadService(
         eventQueue: queue,
         payloadSerializer: payloadSerializer,
-        wifiOnly: options.platformOptions.mobile.wifiOnly,
+        wifiOnly: platformResult.wifiOnly,
         getRemoteEnablementState: () => settingsService.remoteState,
         flushInterval: options.flushInterval,
         logger: logger,
@@ -301,11 +349,22 @@ class MixpanelSessionReplay {
 
       logger.debug('Internal components created');
 
+      // Create idle timeout timer if platform provides an idle timeout
+      IdleTimeoutTimer? idleTimer;
+      late final SessionReplayCoordinator coordinator;
+      final idleTimeout = platformResult.idleTimeout;
+
+      if (idleTimeout != null && idleTimeout > Duration.zero) {
+        idleTimer = IdleTimeoutTimer(
+          timeout: idleTimeout,
+          onTimeout: () => coordinator.handleIdleTimeout(),
+        );
+      }
+
       // Create coordinator with all internal components
-      // Note: CaptureScheduler is now owned by FrameMonitor widget
       logger.debug('Creating coordinator...');
-      final coordinator = SessionReplayCoordinator(
-        screenshotCapturer: screenshotCapturer,
+      coordinator = SessionReplayCoordinator(
+        screenshotCapturer: platformResult.screenshotCapturer,
         eventRecorder: eventRecorder,
         uploadService: uploadService,
         settingsService: settingsService,
@@ -314,17 +373,35 @@ class MixpanelSessionReplay {
         autoRecordSessionsPercent: options.autoRecordSessionsPercent,
         remoteSettingsMode: options.remoteSettingsMode,
         debugOptions: options.debugOptions,
+        idleTimer: idleTimer,
+        maxSessionDuration: platformResult.maxSessionDuration,
+        backgroundBehavior: platformResult.backgroundBehavior,
+        persistIdleExpiry: platformResult.persistIdleExpiry,
       );
 
       // Wire up the coordinator and shared HTTP client to the instance
       instance._coordinator = coordinator;
       instance._httpClient = sharedHttpClient;
 
+      // Resume session if applicable (web page reload with valid session)
+      if (platformResult.resumableSession != null) {
+        coordinator.prepareSessionResume(
+          platformResult.resumableSession!,
+          idleExpiry: platformResult.resumableIdleExpiry,
+        );
+      }
+
       // Register instance in registry
       _instances[token] = instance;
 
       logger.info('Initialization successful!');
       return InitializationResult.success(instance);
+    } on PlatformCapabilityException catch (e) {
+      logger.error('Initialization failed: $e');
+      return InitializationResult.failure(
+        InitializationError.platformSecurityNotMet,
+        'Initialization failed: $e',
+      );
     } catch (e) {
       logger.error('Initialization failed: $e');
       return InitializationResult.failure(
@@ -375,6 +452,7 @@ class MixpanelSessionReplay {
   /// - [RecordingState.notRecording]: Not recording (initial state or after stop)
   /// - [RecordingState.initializing]: Sampling passed, setting up session
   /// - [RecordingState.recording]: Actively capturing screenshots and interactions
+  /// - [RecordingState.paused]: Replay retained, but capture temporarily stopped
   ///
   /// Example:
   /// ```dart

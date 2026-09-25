@@ -1,5 +1,4 @@
-import 'dart:io' show Platform;
-import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
+import 'package:flutter/foundation.dart';
 import 'package:mixpanel_flutter_session_replay/mixpanel_flutter_session_replay.dart';
 
 /// Configuration data for SDK initialization
@@ -19,6 +18,9 @@ class SdkConfig {
     required this.enableWireframes,
     required this.enableWireframeDebugEmitter,
     required this.useAccessibilityLabelFallback,
+    required this.backgroundBehavior,
+    required this.webIdleTimeoutSeconds,
+    required this.webMaxSessionSeconds,
   });
 
   final String token;
@@ -35,6 +37,15 @@ class SdkConfig {
   final bool enableWireframes;
   final bool enableWireframeDebugEmitter;
   final bool useAccessibilityLabelFallback;
+  final ReplayBackgroundBehavior backgroundBehavior;
+
+  /// Web idle timeout in seconds. 0 disables it. Exposed here so a tester can
+  /// shorten the 30 minute default and actually observe an idle-out by hand.
+  final int webIdleTimeoutSeconds;
+
+  /// Web max session duration in seconds. Same reason: the 24 hour default
+  /// cannot be reached in a manual test.
+  final int webMaxSessionSeconds;
 
   /// Default configuration
   factory SdkConfig.defaultConfig() {
@@ -53,14 +64,24 @@ class SdkConfig {
       enableWireframes: false,
       enableWireframeDebugEmitter: true,
       useAccessibilityLabelFallback: false,
+      backgroundBehavior: kIsWeb
+          ? const ReplayBackgroundBehavior.pause(
+              idleTimeout: Duration(minutes: 30),
+            )
+          : ReplayBackgroundBehavior.stop,
+      webIdleTimeoutSeconds: 1800,
+      webMaxSessionSeconds: 86400,
     );
   }
 
+  /// Check if platform is web
+  static bool get isWebPlatform => kIsWeb;
+
   /// Check if platform is mobile (Android or iOS)
-  static bool get isMobilePlatform {
-    if (kIsWeb) return false;
-    return Platform.isAndroid || Platform.isIOS;
-  }
+  static bool get isMobilePlatform =>
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.iOS);
 
   /// Convert to SessionReplayOptions.
   ///
@@ -86,7 +107,15 @@ class SdkConfig {
       remoteSettingsMode: remoteSettingsMode,
       storageQuotaMB: storageQuota,
       platformOptions: PlatformOptions(
-        mobile: MobileOptions(wifiOnly: wifiOnly),
+        mobile: MobileOptions(
+          wifiOnly: wifiOnly,
+          onBackground: backgroundBehavior,
+        ),
+        web: WebOptions(
+          idleTimeout: Duration(seconds: webIdleTimeoutSeconds),
+          maxSessionDuration: Duration(seconds: webMaxSessionSeconds),
+          onBackground: backgroundBehavior,
+        ),
       ),
       debugOptions: (showDebugMaskOverlay || wantsEmitter)
           ? DebugOptions(

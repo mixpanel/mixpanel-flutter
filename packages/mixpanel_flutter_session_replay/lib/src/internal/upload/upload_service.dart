@@ -4,16 +4,26 @@ import 'dart:math';
 import 'package:clock/clock.dart';
 import 'package:http/http.dart' as http;
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:uuid/uuid.dart';
 
 import '../endpoints.dart';
 import '../storage/event_queue_interface.dart';
+import '../storage/upload_lease.dart';
 import 'payload_serializer.dart';
 import '../settings/settings_service.dart';
 import '../logger.dart';
 import '../../models/results.dart';
+import '../../models/session.dart';
 
 /// Result of an upload attempt
-enum UploadResult { success, networkError, serverError, quotaExceeded, backoff }
+enum UploadResult {
+  success,
+  networkError,
+  serverError,
+  quotaExceeded,
+  backoff,
+  busy,
+}
 
 /// Service for uploading session replay events to Mixpanel
 ///
@@ -73,6 +83,11 @@ class UploadService {
 
   /// Full `/record` endpoint, derived from the configured base URL.
   final String _endpoint;
+
+  /// Stable for this SDK instance and unique across browser tabs.
+  final String _uploadLeaseOwnerId = const Uuid().v4();
+
+  static const Duration _uploadLeaseTtl = Duration(minutes: 2);
 
   /// Minimum backoff delay (60 seconds)
   static const Duration _minBackoff = Duration(seconds: 60);
@@ -195,7 +210,7 @@ class UploadService {
         _requestAllowedAfterTime = null;
 
         // Check if we're falling behind - check oldest event across ALL sessions
-        final oldestEvent = await eventQueue.fetchOldest();
+        final oldestEvent = await eventQueue.fetchOldestHeader();
         if (oldestEvent != null) {
           final age = clock.now().difference(oldestEvent.timestamp);
           _logger.debug(
@@ -267,7 +282,7 @@ class UploadService {
 
       // Get the newest event timestamp when flush started - only upload events with timestamp <= this
       // This ensures we only upload events that existed when flush was called
-      final newestEvent = await eventQueue.fetchNewest();
+      final newestEvent = await eventQueue.fetchNewestHeader();
 
       if (newestEvent == null) {
         _logger.debug('No events to flush');
@@ -283,7 +298,7 @@ class UploadService {
 
       // Upload batches until queue is empty OR we hit events newer than cutoff
       // The cutoff can be dynamically extended by concurrent flush() calls
-      var oldestEvent = await eventQueue.fetchOldest();
+      var oldestEvent = await eventQueue.fetchOldestHeader();
       while (oldestEvent != null &&
           !oldestEvent.timestamp.isAfter(_flushCutoffTimestamp!)) {
         // Check if we entered backoff during multi-batch flush
@@ -300,7 +315,7 @@ class UploadService {
           // Yield to event loop to prevent UI blocking on web
           await Future.delayed(Duration.zero);
           // Fetch next oldest event for next iteration
-          oldestEvent = await eventQueue.fetchOldest();
+          oldestEvent = await eventQueue.fetchOldestHeader();
         } else if (result == UploadResult.networkError ||
             result == UploadResult.serverError) {
           _handleFailure();
@@ -334,10 +349,42 @@ class UploadService {
 
   /// Upload a single batch of events
   Future<UploadResult> _uploadBatch() async {
+    final queue = eventQueue;
+    if (queue is! UploadLease) {
+      return _uploadBatchWithoutLease();
+    }
+    final uploadLease = queue as UploadLease;
+
+    var acquired = false;
+    try {
+      acquired = await uploadLease.acquireUploadLease(
+        ownerId: _uploadLeaseOwnerId,
+        ttl: _uploadLeaseTtl,
+      );
+      if (!acquired) {
+        _logger.debug('Another browser tab owns the upload lease');
+        return UploadResult.busy;
+      }
+      return await _uploadBatchWithoutLease();
+    } catch (e) {
+      _logger.error('Failed to coordinate replay upload: $e');
+      return UploadResult.networkError;
+    } finally {
+      if (acquired) {
+        try {
+          await uploadLease.releaseUploadLease(ownerId: _uploadLeaseOwnerId);
+        } catch (e) {
+          _logger.warning('Failed to release replay upload lease: $e');
+        }
+      }
+    }
+  }
+
+  Future<UploadResult> _uploadBatchWithoutLease() async {
     try {
       // Get the oldest event to determine which session/user to upload
       // This ensures FIFO order and prevents abandoned events
-      final oldestEvent = await eventQueue.fetchOldest();
+      final oldestEvent = await eventQueue.fetchOldestHeader();
 
       if (oldestEvent == null) {
         return UploadResult.success; // No events to upload
@@ -368,14 +415,26 @@ class UploadService {
       );
 
       // Get Session object for this sessionId (may be old session!)
-      // Session metadata is created when startRecording() is called, so this should always exist
-      final session = await eventQueue.getSessionMetadata(sessionId);
-
+      // Session metadata is created when startRecording() is called, so this
+      // normally exists. It can be missing when that write failed while later
+      // event writes succeeded. Retrying cannot fix that, and on web the
+      // backlog persists across launches, so the oldest event would block the
+      // shared queue. Rebuild it instead: nothing can have been uploaded
+      // without metadata, so the replay starts at sequence 0 from its oldest
+      // queued event. Like mixpanel-js with orphaned batches, a rare duplicate
+      // send is preferred over data that can never upload.
+      var session = await eventQueue.getSessionMetadata(sessionId);
       if (session == null) {
-        _logger.error(
-          'No session metadata found for session $sessionId - this should not happen!',
+        _logger.warning(
+          'No session metadata found for session $sessionId; rebuilding it '
+          'from the oldest queued event',
         );
-        return UploadResult.networkError;
+        session = Session(
+          id: sessionId,
+          startTime: events.first.timestamp,
+          status: SessionStatus.ended,
+        );
+        await eventQueue.createSessionMetadata(session);
       }
 
       // Get sequence number for THIS session being uploaded (per-session, not global)
@@ -412,28 +471,42 @@ class UploadService {
 
       // Handle response
       if (response.statusCode == 200) {
-        // Success - remove uploaded events from queue
-        _logger.debug(
-          'Removing ${events.length} events from queue (IDs: ${events.map((e) => e.id).join(", ")})',
-        );
-        await eventQueue.remove(events);
+        final queue = eventQueue;
+        if (queue is AtomicUploadCommit) {
+          final atomicQueue = queue as AtomicUploadCommit;
+          await atomicQueue.commitUploadedBatch(
+            events: events,
+            sessionId: session.id,
+            sequenceNumber: sequenceNumber,
+          );
+          _logger.debug(
+            'Atomically removed ${events.length} events and persisted '
+            'sequence $sequenceNumber',
+          );
+        } else {
+          // Native queues retain the existing two-step behavior. Shared web
+          // storage implements AtomicUploadCommit so a page close cannot land
+          // between deletion and sequence advancement.
+          _logger.debug(
+            'Removing ${events.length} events from queue '
+            '(IDs: ${events.map((e) => e.id).join(", ")})',
+          );
+          await queue.remove(events);
+          try {
+            await queue.updateSequenceNumber(session.id, sequenceNumber);
+            _logger.debug(
+              'Persisted sequence number: $sequenceNumber for session: ${session.id}',
+            );
+          } catch (e) {
+            _logger.error('Failed to persist sequence number: $e');
+          }
+        }
 
         // Verify events were removed
-        final remainingOldest = await eventQueue.fetchOldest();
+        final remainingOldest = await eventQueue.fetchOldestHeader();
         _logger.debug(
           'After removal, oldest event: ${remainingOldest?.id} (session: ${remainingOldest?.sessionId}, distinctId: ${remainingOldest?.distinctId})',
         );
-
-        // Persist sequence number to storage for THIS session
-        try {
-          await eventQueue.updateSequenceNumber(session.id, sequenceNumber);
-          _logger.debug(
-            'Persisted sequence number: $sequenceNumber for session: ${session.id}',
-          );
-        } catch (e) {
-          _logger.error('Failed to persist sequence number: $e');
-          // Continue - this is not critical for functionality
-        }
 
         _logger.info('Successfully uploaded ${events.length} events');
         return UploadResult.success;

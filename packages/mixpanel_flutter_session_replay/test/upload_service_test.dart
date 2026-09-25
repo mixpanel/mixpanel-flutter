@@ -832,28 +832,38 @@ void main() {
         service.dispose();
       });
 
-      test('handles missing session metadata gracefully', () async {
-        // GIVEN - add event without creating session metadata
-        await eventQueue.add(
-          SessionReplayEvent(
-            sessionId: 'orphan-session',
-            distinctId: testDistinctId,
-            timestamp: DateTime.fromMillisecondsSinceEpoch(1000, isUtc: true),
-            type: EventType.interaction,
-            payload: InteractionPayload(interactionType: 7, x: 1.0, y: 2.0),
-          ),
-        );
+      test(
+        'rebuilds missing session metadata and uploads the events',
+        () async {
+          // GIVEN - add event without creating session metadata
+          await eventQueue.add(
+            SessionReplayEvent(
+              sessionId: 'orphan-session',
+              distinctId: testDistinctId,
+              timestamp: DateTime.fromMillisecondsSinceEpoch(1000, isUtc: true),
+              type: EventType.interaction,
+              payload: InteractionPayload(interactionType: 7, x: 1.0, y: 2.0),
+            ),
+          );
 
-        final service = createService(eventQueue: eventQueue);
+          final service = createService(eventQueue: eventQueue);
 
-        // WHEN
-        await service.flush();
+          // WHEN
+          await service.flush();
 
-        // THEN - event remains (upload returned networkError due to missing metadata)
-        expect(eventQueue.eventCount, 1);
+          // THEN - the orphaned event uploads as the first batch of a replay
+          // that starts at its timestamp, instead of blocking the queue
+          expect(eventQueue.eventCount, 0);
+          final session = await eventQueue.getSessionMetadata('orphan-session');
+          expect(
+            session?.startTime,
+            DateTime.fromMillisecondsSinceEpoch(1000, isUtc: true),
+          );
+          expect(await eventQueue.getLastSequenceNumber('orphan-session'), 0);
 
-        service.dispose();
-      });
+          service.dispose();
+        },
+      );
 
       test('uploads screenshot binary data correctly', () async {
         // GIVEN
