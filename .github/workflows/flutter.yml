@@ -217,6 +217,7 @@ jobs:
           flutter-version: '3.41.2'
       - name: Install Chrome and matching ChromeDriver
         if: matrix.browser == 'chrome'
+        id: setup-chrome
         uses: browser-actions/setup-chrome@48483d551c22a1fe6154c6a195ccc6d5773dc8c4  # v2
         with:
           chrome-version: stable
@@ -228,9 +229,15 @@ jobs:
           firefox-version: latest
       - name: Install GeckoDriver
         if: matrix.browser == 'firefox'
-        uses: browser-actions/setup-geckodriver@bf8266f624ca122cedb6d0381a031f18f6c431cd
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          curl --fail --location --retry 3 \
+            --output "$RUNNER_TEMP/geckodriver.tar.gz" \
+            https://github.com/mozilla/geckodriver/releases/download/v0.37.1/geckodriver-v0.37.1-linux64.tar.gz
+          echo "e815130ea95983e162ae91843b48d3a3ce991735635fce83a647afde21e09f7e  $RUNNER_TEMP/geckodriver.tar.gz" | sha256sum --check
+          tar -xzf "$RUNNER_TEMP/geckodriver.tar.gz" -C "$RUNNER_TEMP" geckodriver
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/geckodriver" --version
       - name: Install example dependencies
         run: flutter pub get
         working-directory: packages/mixpanel_flutter_session_replay/example
@@ -239,7 +246,7 @@ jobs:
         run: |
           case "${{ matrix.browser }}" in
             chrome)
-              chromedriver --port=4444 > "$RUNNER_TEMP/webdriver.log" 2>&1 &
+              "${{ steps.setup-chrome.outputs.chromedriver-path }}" --port=4444 > "$RUNNER_TEMP/webdriver.log" 2>&1 &
               ;;
             firefox)
               geckodriver --port 4444 > "$RUNNER_TEMP/webdriver.log" 2>&1 &
@@ -258,16 +265,22 @@ jobs:
           cat "$RUNNER_TEMP/webdriver.log"
           exit 1
       - name: Validate real browser pipeline and UI-thread budget
-        run: >-
-          flutter drive -d web-server
-          --browser-name=${{ matrix.browser }}
-          --browser-dimension=1920x1080
-          --profile
-          ${{ matrix.wasm_flag }}
-          --driver=test_driver/web_validation_test.dart
-          --target=integration_test/web_validation_test.dart
-          --timeout=300
-          --dart-define=WEB_PERFORMANCE_ALLOWED_ADDED_FRAME_DELAY_MS=${{ matrix.added-frame-delay-budget }}
+        shell: bash
+        run: |
+          browser_args=()
+          if [ "${{ matrix.browser }}" = chrome ]; then
+            browser_args+=(--chrome-binary="${{ steps.setup-chrome.outputs.chrome-path }}")
+          fi
+          flutter drive -d web-server \
+            --browser-name=${{ matrix.browser }} \
+            --browser-dimension=1920x1080 \
+            --profile \
+            ${{ matrix.wasm_flag }} \
+            "${browser_args[@]}" \
+            --driver=test_driver/web_validation_test.dart \
+            --target=integration_test/web_validation_test.dart \
+            --timeout=300 \
+            --dart-define=WEB_PERFORMANCE_ALLOWED_ADDED_FRAME_DELAY_MS=${{ matrix.added-frame-delay-budget }}
         working-directory: packages/mixpanel_flutter_session_replay/example
       - name: Upload web validation metrics
         if: always()
