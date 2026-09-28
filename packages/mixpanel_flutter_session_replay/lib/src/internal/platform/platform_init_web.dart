@@ -80,7 +80,6 @@ Future<PlatformInitResult> platformInit({
   // Check for resumable session before clearing data
   final resumeInfo = await checkWebSessionResume(
     queue: queue,
-    idleTimeout: web.idleTimeout,
     maxSessionDuration: web.maxSessionDuration,
     logger: logger,
   );

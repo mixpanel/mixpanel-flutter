@@ -1,3 +1,5 @@
+import 'package:clock/clock.dart';
+
 import '../storage/event_queue_interface.dart';
 import '../storage/indexed_db_event_queue.dart';
 import '../logger.dart';
@@ -22,7 +24,6 @@ class SessionResumeInfo extends ResumableSession {
 
 Future<SessionResumeInfo?> checkWebSessionResume({
   required EventQueue queue,
-  required Duration idleTimeout,
   required Duration maxSessionDuration,
   required MixpanelLogger logger,
 }) async {
@@ -41,7 +42,7 @@ Future<SessionResumeInfo?> checkWebSessionResume({
   }
   final sessionStartTime = metadata['session_start_time'] as int;
   final lastSequenceNumber = metadata['last_sequence_number'] as int? ?? -1;
-  final now = DateTime.now().millisecondsSinceEpoch;
+  final now = clock.now().millisecondsSinceEpoch;
 
   final maxExpiresMs = metadata['max_expires'] as int?;
   if (maxExpiresMs != null && now >= maxExpiresMs) {

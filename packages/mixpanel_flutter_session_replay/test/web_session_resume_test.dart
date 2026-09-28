@@ -82,7 +82,6 @@ void main() {
         await queue.initialize();
         final result = await checkWebSessionResume(
           queue: queue,
-          idleTimeout: const Duration(minutes: 30),
           maxSessionDuration: const Duration(hours: 24),
           logger: logger,
         );
@@ -120,7 +119,6 @@ void main() {
         );
         final result = await checkWebSessionResume(
           queue: queue,
-          idleTimeout: const Duration(minutes: 30),
           maxSessionDuration: const Duration(hours: 24),
           logger: logger,
         );
@@ -146,7 +144,6 @@ void main() {
     test('returns null when no sessions exist', () async {
       final result = await checkWebSessionResume(
         queue: queue,
-        idleTimeout: const Duration(minutes: 30),
         maxSessionDuration: const Duration(hours: 24),
         logger: logger,
       );
@@ -173,7 +170,6 @@ void main() {
 
       final result = await checkWebSessionResume(
         queue: queue,
-        idleTimeout: const Duration(minutes: 30),
         maxSessionDuration: const Duration(hours: 24),
         logger: logger,
       );
@@ -202,7 +198,6 @@ void main() {
 
       final result = await checkWebSessionResume(
         queue: queue,
-        idleTimeout: const Duration(minutes: 30),
         maxSessionDuration: const Duration(hours: 24),
         logger: logger,
       );
@@ -229,7 +224,6 @@ void main() {
 
       final result = await checkWebSessionResume(
         queue: queue,
-        idleTimeout: const Duration(minutes: 30),
         maxSessionDuration: const Duration(hours: 24),
         logger: logger,
       );
@@ -256,7 +250,6 @@ void main() {
 
         final result = await checkWebSessionResume(
           queue: queue,
-          idleTimeout: const Duration(minutes: 30),
           maxSessionDuration: const Duration(hours: 24),
           logger: logger,
         );
@@ -280,7 +273,6 @@ void main() {
 
       final result = await checkWebSessionResume(
         queue: queue,
-        idleTimeout: const Duration(minutes: 30),
         maxSessionDuration: const Duration(hours: 24),
         logger: logger,
       );
@@ -313,7 +305,6 @@ void main() {
 
       final result = await checkWebSessionResume(
         queue: queue,
-        idleTimeout: const Duration(minutes: 30),
         maxSessionDuration: const Duration(hours: 24),
         logger: logger,
       );
@@ -340,7 +331,6 @@ void main() {
 
       final result = await checkWebSessionResume(
         queue: queue,
-        idleTimeout: const Duration(minutes: 30),
         maxSessionDuration: const Duration(hours: 24),
         logger: logger,
       );
@@ -380,7 +370,6 @@ void main() {
 
       final result = await checkWebSessionResume(
         queue: otherTab,
-        idleTimeout: const Duration(minutes: 30),
         maxSessionDuration: const Duration(hours: 24),
         logger: logger,
       );
@@ -421,7 +410,6 @@ void main() {
 
       final result = await checkWebSessionResume(
         queue: queue,
-        idleTimeout: const Duration(minutes: 30),
         maxSessionDuration: const Duration(hours: 24),
         logger: logger,
       );
@@ -453,7 +441,6 @@ void main() {
         // Verify the expiry is readable and session is resumable
         final result = await checkWebSessionResume(
           queue: queue,
-          idleTimeout: const Duration(minutes: 30),
           maxSessionDuration: const Duration(hours: 24),
           logger: logger,
         );
