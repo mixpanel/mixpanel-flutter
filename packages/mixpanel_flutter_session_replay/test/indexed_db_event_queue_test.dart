@@ -205,14 +205,16 @@ void main() {
           ),
         );
 
-        // THEN it is not attributed to this tab
+        // THEN it is not attributed to this tab and is already expired, so
+        // any tab may upload its events but no tab can resume it
         final owned = await storage.getLatestSessionMetadata(
           ownedBy: storage.ownerId,
-          includeUnowned: false,
         );
         expect(owned, isNull);
         final any = await storage.getLatestSessionMetadata();
         expect(any?['owner_id'], isNull);
+        expect(any?['max_expires'], 0);
+        expect(any?['idle_expires'], 0);
       });
 
       test('expiry writes do not take a session from another tab', () async {
@@ -499,6 +501,22 @@ void main() {
         await addEvent(storage, 'no-metadata');
 
         expect((await storage.fetchOldestHeader())?.sessionId, 'no-metadata');
+      });
+
+      test('metadata rebuilt as ended is eligible for any tab', () async {
+        // GIVEN the uploader in another tab rebuilt metadata for an orphaned
+        // backlog
+        final otherTab = await openOtherTab();
+        await addEvent(otherTab, 'rebuilt');
+        await otherTab.createSessionMetadata(
+          Session(
+            id: 'rebuilt',
+            startTime: DateTime.utc(2025),
+            status: SessionStatus.ended,
+          ),
+        );
+
+        expect((await storage.fetchOldestHeader())?.sessionId, 'rebuilt');
       });
 
       test(

@@ -29,17 +29,16 @@ Future<SessionResumeInfo?> checkWebSessionResume({
 }) async {
   if (queue is! IndexedDbEventQueue) return null;
 
+  // Only a session this tab recorded is a candidate, as in mixpanel-js where
+  // the registry is keyed by tab id. Metadata rebuilt by the uploader is
+  // unowned and already expired, so it is never returned here.
   final metadata = await queue.getLatestSessionMetadata(ownedBy: queue.ownerId);
   if (metadata == null) {
-    logger.debug('No existing session metadata found in IndexedDB');
+    logger.debug('No session recorded by this tab found in IndexedDB');
     return null;
   }
 
   final sessionId = metadata['session_id'] as String;
-  if (!await queue.claimSessionOwnership(sessionId)) {
-    logger.debug('Session $sessionId is active in another browser tab');
-    return null;
-  }
   final sessionStartTime = metadata['session_start_time'] as int;
   final lastSequenceNumber = metadata['last_sequence_number'] as int? ?? -1;
   final now = clock.now().millisecondsSinceEpoch;

@@ -516,14 +516,17 @@ class IndexedDbEventQueue
       if (!_isNullish(result)) return; // Already exists
 
       // Only a live session belongs to this tab. Metadata rebuilt by the
-      // uploader for an orphaned backlog is marked ended and stays unowned,
-      // so a reload of the rebuilding tab cannot resume a session another
-      // tab may still be recording into.
+      // uploader for an orphaned backlog is marked ended: it stays unowned and
+      // carries already-passed deadlines, like mixpanel-js setting maxExpires
+      // to zero, so any tab may upload its events but none can resume it.
+      final live = session.status == SessionStatus.active;
       final record = <String, dynamic>{
         'session_id': session.id,
         'last_sequence_number': -1,
         'session_start_time': session.startTime.millisecondsSinceEpoch,
-        'owner_id': session.status == SessionStatus.active ? ownerId : null,
+        'owner_id': live ? ownerId : null,
+        if (!live) 'idle_expires': 0,
+        if (!live) 'max_expires': 0,
       };
       store.put(record.jsify()!);
     }.toJS;
@@ -902,10 +905,9 @@ class IndexedDbEventQueue
   /// Returns null if no sessions exist.
   ///
   /// Uses the descending session-start index and stops at the first record
-  /// owned by this tab (or a legacy unowned record when allowed).
+  /// owned by [ownedBy], or the first record of any owner when null.
   Future<Map<String, dynamic>?> getLatestSessionMetadata({
     String? ownedBy,
-    bool includeUnowned = true,
   }) async {
     await _ensureOpen();
 
@@ -935,40 +937,13 @@ class IndexedDbEventQueue
           final value = map[key];
           if (value != null) map[key] = _asInt(value);
         }
-        final recordOwner = map['owner_id'] as String?;
-        if (ownedBy != null &&
-            recordOwner != ownedBy &&
-            !(includeUnowned && recordOwner == null)) {
+        if (ownedBy != null && map['owner_id'] != ownedBy) {
           cursor.continue_();
           return;
         }
         completer.complete(map);
       },
     );
-  }
-
-  /// Atomically adopts legacy unowned metadata, or confirms ownership of a
-  /// session already associated with this browser tab.
-  Future<bool> claimSessionOwnership(String sessionId) async {
-    await _ensureOpen();
-    final txn = _transaction(_metadataStore.toJS, 'readwrite');
-    final store = txn.objectStore(_metadataStore);
-    final request = store.get(sessionId.toJS);
-    var claimed = false;
-
-    request.onsuccess = (web.Event event) {
-      final result = (event.target as web.IDBRequest).result;
-      if (_isNullish(result)) return;
-      final map = (result.dartify()! as Map).cast<String, dynamic>();
-      final currentOwner = map['owner_id'] as String?;
-      if (currentOwner != null && currentOwner != ownerId) return;
-      map['owner_id'] = ownerId;
-      store.put(map.jsify()!);
-      claimed = true;
-    }.toJS;
-
-    await _awaitTransaction(txn);
-    return claimed;
   }
 
   // -- Helpers --

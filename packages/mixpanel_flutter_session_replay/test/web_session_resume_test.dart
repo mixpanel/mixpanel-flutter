@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/storage/indexed_db_event_queue.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/session/web_session_resume.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/session.dart';
+import 'package:mixpanel_flutter_session_replay/src/models/session_event.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/configuration.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/logger.dart';
 import 'package:web/web.dart' as web;
@@ -376,6 +377,51 @@ void main() {
 
       expect(result, isNull);
       await otherTab.dispose();
+    });
+
+    test('never resumes metadata rebuilt for an orphaned backlog', () async {
+      // GIVEN events for a session whose metadata write was lost, then the
+      // uploader rebuilding that metadata as an ended session
+      await queue.add(
+        SessionReplayEvent(
+          sessionId: 'orphaned',
+          distinctId: 'user-1',
+          timestamp: DateTime.now().toUtc(),
+          type: EventType.interaction,
+          payload: InteractionPayload(interactionType: 1, x: 1, y: 2),
+        ),
+      );
+      await queue.createSessionMetadata(
+        Session(
+          id: 'orphaned',
+          startTime: DateTime.now().toUtc(),
+          status: SessionStatus.ended,
+        ),
+      );
+      final otherTab = IndexedDbEventQueue(
+        token: token,
+        ownerId: 'tab-2',
+        logger: logger,
+      );
+      await otherTab.initialize();
+      addTearDown(otherTab.dispose);
+
+      // WHEN either the rebuilding tab or another tab reloads
+      final sameTab = await checkWebSessionResume(
+        queue: queue,
+        maxSessionDuration: const Duration(hours: 24),
+        logger: logger,
+      );
+      final other = await checkWebSessionResume(
+        queue: otherTab,
+        maxSessionDuration: const Duration(hours: 24),
+        logger: logger,
+      );
+
+      // THEN the rebuilt session stays uploadable but is not resumed
+      expect(sameTab, isNull);
+      expect(other, isNull);
+      expect((await otherTab.fetchOldestHeader())?.sessionId, 'orphaned');
     });
 
     test('resumes after reload when tab ownership is unchanged', () async {
