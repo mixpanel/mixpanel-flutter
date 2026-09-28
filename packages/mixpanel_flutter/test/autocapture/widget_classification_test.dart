@@ -1,3 +1,6 @@
+// ignore_for_file: deprecated_member_use
+
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mixpanel_flutter/src/autocapture/widget_classification.dart';
@@ -21,6 +24,17 @@ void main() {
     expect(isFeedbackControl(field), isTrue);
     expect(deadEligible(field), isFalse);
     expect(deadEligible(const Text('plain')), isFalse);
+  });
+  test('Cupertino toggles classify like their Material counterparts', () {
+    final checkbox = CupertinoCheckbox(value: true, onChanged: (_) {});
+    final radio =
+        CupertinoRadio<int>(value: 1, groupValue: 1, onChanged: (_) {});
+    expect(isFeedbackControl(checkbox), isTrue);
+    expect(isFeedbackControl(radio), isTrue);
+    expect(typeName(checkbox), 'Checkbox');
+    expect(role(checkbox), 'Checkbox');
+    expect(typeName(radio), 'Radio');
+    expect(role(radio), 'Radio');
   });
   test('hidden rules inspect visibility, not labels', () {
     expect(hidden(const Offstage()), isTrue);

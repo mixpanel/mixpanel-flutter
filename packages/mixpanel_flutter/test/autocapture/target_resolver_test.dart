@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mixpanel_flutter/src/autocapture/target_resolver.dart';
@@ -86,6 +87,19 @@ void main() {
     expect(disabled!.deadEligible, isFalse);
     final text = await resolve(tester, const Text('private text'));
     expect(text!.deadEligible, isFalse);
+  });
+
+  testWidgets('segment taps resolve to the control and are not dead eligible',
+      (tester) async {
+    final target = await resolve(
+        tester,
+        CupertinoSegmentedControl<int>(
+            children: const {0: Text('private text'), 1: Text('other')},
+            groupValue: 0,
+            onValueChanged: (_) {}));
+    expect(target, isNotNull);
+    expect(target!.event.tagName, 'Picker');
+    expect(target.deadEligible, isFalse);
   });
 
   testWidgets('zero-sized portal resolves visible overlay owner directly',

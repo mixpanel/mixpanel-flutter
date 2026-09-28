@@ -1,6 +1,7 @@
 // Legacy Radio constructor keeps these fixtures compatible with Flutter 3.19.
 // ignore_for_file: deprecated_member_use
 
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mixpanel_flutter/src/autocapture/response_snapshot.dart';
@@ -89,6 +90,44 @@ void main() {
         tester, Radio<int>(value: 1, groupValue: 1, onChanged: (_) {}));
     expect(first, isNotNull);
     expect(first!.differsFrom(second!), isTrue);
+  });
+  testWidgets('Cupertino toggle painters are control state, not app paint',
+      (tester) async {
+    final unchecked = await capture(
+        tester, CupertinoCheckbox(value: false, onChanged: (_) {}));
+    final checked = await capture(
+        tester, CupertinoCheckbox(value: true, onChanged: (_) {}));
+    expect(unchecked, isNotNull);
+    expect(unchecked!.differsFrom(checked!), isTrue);
+    final unselected = await capture(tester,
+        CupertinoRadio<int>(value: 1, groupValue: 0, onChanged: (_) {}));
+    final selected = await capture(tester,
+        CupertinoRadio<int>(value: 1, groupValue: 1, onChanged: (_) {}));
+    expect(unselected, isNotNull);
+    expect(unselected!.differsFrom(selected!), isTrue);
+  });
+  testWidgets('segmented control selection changes response', (tester) async {
+    const children = {0: Text('a'), 1: Text('b')};
+    final first = await capture(
+        tester,
+        CupertinoSegmentedControl<int>(
+            children: children, groupValue: 0, onValueChanged: (_) {}));
+    final second = await capture(
+        tester,
+        CupertinoSegmentedControl<int>(
+            children: children, groupValue: 1, onValueChanged: (_) {}));
+    expect(first, isNotNull);
+    expect(first!.differsFrom(second!), isTrue);
+    final sliding = await capture(
+        tester,
+        CupertinoSlidingSegmentedControl<int>(
+            children: children, groupValue: 0, onValueChanged: (_) {}));
+    final slid = await capture(
+        tester,
+        CupertinoSlidingSegmentedControl<int>(
+            children: children, groupValue: 1, onValueChanged: (_) {}));
+    expect(sliding, isNotNull);
+    expect(sliding!.differsFrom(slid!), isTrue);
   });
   testWidgets('budget exhaustion and empty viewport are unknown',
       (tester) async {

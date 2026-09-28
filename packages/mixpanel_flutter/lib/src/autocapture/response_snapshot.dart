@@ -150,9 +150,10 @@ class _SnapshotBuilder {
     if (w is Switch) add(w.value);
     if (w is CupertinoSwitch) add(w.value);
     if (w is Checkbox) add(w.value);
+    if (w is CupertinoCheckbox) add(w.value);
     // Flutter 3.19 has no RadioGroup API. RenderSemanticsAnnotations
     // exposes the effective selected state on both legacy and modern Radio.
-    if (w is Radio) {
+    if (w is Radio || w is CupertinoRadio) {
       bool? checked;
       void readChecked(Element child) {
         if (checked != null) return;
@@ -180,6 +181,10 @@ class _SnapshotBuilder {
       add(w.values.end);
     }
     if (w is CupertinoSlider) add(w.value);
+    // Selection is painted by the control's render object, not by any public
+    // descendant, so groupValue is the only observable response.
+    if (w is CupertinoSegmentedControl) add(w.groupValue);
+    if (w is CupertinoSlidingSegmentedControl) add(w.groupValue);
   }
 
   void addContent(Widget w, RenderObject? object) {

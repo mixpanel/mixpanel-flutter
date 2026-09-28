@@ -22,12 +22,16 @@ bool isFeedbackControl(Widget w) =>
     w is Switch ||
     w is CupertinoSwitch ||
     w is Checkbox ||
+    w is CupertinoCheckbox ||
     w is Radio ||
+    w is CupertinoRadio ||
     w is Slider ||
     w is RangeSlider ||
     w is CupertinoSlider ||
     w is CupertinoPicker ||
     w is CupertinoDatePicker ||
+    w is CupertinoSegmentedControl ||
+    w is CupertinoSlidingSegmentedControl ||
     w is DropdownButton ||
     w is CheckboxListTile ||
     w is SwitchListTile ||
@@ -53,8 +57,10 @@ String? role(Widget w) {
   if (w is Switch || w is CupertinoSwitch || w is SwitchListTile) {
     return 'Switch';
   }
-  if (w is Checkbox || w is CheckboxListTile) return 'Checkbox';
-  if (w is Radio || w is RadioListTile) return 'Radio';
+  if (w is Checkbox || w is CupertinoCheckbox || w is CheckboxListTile) {
+    return 'Checkbox';
+  }
+  if (w is Radio || w is CupertinoRadio || w is RadioListTile) return 'Radio';
   if (w is Slider || w is CupertinoSlider || w is RangeSlider) {
     return 'Slider';
   }
