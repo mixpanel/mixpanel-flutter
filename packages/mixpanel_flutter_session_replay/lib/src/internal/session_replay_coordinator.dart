@@ -837,8 +837,10 @@ class SessionReplayCoordinator implements WidgetCoordinator {
           if (_recordingState == RecordingState.notRecording ||
               _sessionManager.getCurrentSession().id != sessionId) {
             _expirePersistedSession(sessionId);
-          } else if (_recordingState == RecordingState.paused) {
-            // The first pause write may have preceded metadata creation.
+          } else {
+            // Still this session, now paused or already resumed to recording.
+            // Every deadline write so far found no record to update, so land
+            // the first one now rather than after the activity debounce.
             _lastExpiryWriteTime = null;
             _persistExpiryDebounced();
           }

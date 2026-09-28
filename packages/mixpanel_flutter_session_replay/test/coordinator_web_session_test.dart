@@ -47,10 +47,11 @@ void main() {
       ReplayBackgroundBehavior backgroundBehavior =
           ReplayBackgroundBehavior.stop,
       Future<void> Function(String, int, int, int?)? persistIdleExpiry,
+      EventRecorder? recorder,
     }) {
       return SessionReplayCoordinator(
         screenshotCapturer: screenshotCapturer,
-        eventRecorder: eventRecorder,
+        eventRecorder: recorder ?? eventRecorder,
         uploadService: uploadService,
         settingsService: settingsService,
         sessionManager: sessionManager,
@@ -1467,6 +1468,59 @@ void main() {
       });
     });
 
+    group('resume before metadata exists', () {
+      test('the first deadline write lands once metadata exists', () async {
+        // GIVEN a session whose metadata write is still pending when the page
+        // is hidden and shown again, so the replay resumes to recording first
+        final gated = _GatedMetadataQueue();
+        await gated.initialize();
+        addTearDown(gated.dispose);
+        final recorder = EventRecorder(
+          eventQueue: gated,
+          sessionManager: sessionManager,
+          getDistinctId: () => 'user-1',
+          logger: logger,
+        );
+        final writesWithMetadata = <String>[];
+        final idleTimer = IdleTimeoutTimer(
+          timeout: const Duration(minutes: 30),
+          onTimeout: () {},
+        );
+        addTearDown(idleTimer.dispose);
+        final coordinator = createCoordinator(
+          autoRecordSessionsPercent: 100,
+          recorder: recorder,
+          idleTimer: idleTimer,
+          maxSessionDuration: const Duration(hours: 24),
+          backgroundBehavior: const ReplayBackgroundBehavior.pause(
+            idleTimeout: Duration(minutes: 30),
+          ),
+          persistIdleExpiry: (sessionId, idle, max, background) async {
+            // Mirrors IndexedDB, where a deadline write for a session with no
+            // metadata record is a silent no-op.
+            if (await gated.getSessionMetadata(sessionId) != null) {
+              writesWithMetadata.add(sessionId);
+            }
+          },
+        );
+        coordinator.startRecording(sessionsPercent: 100);
+        final sessionId = sessionManager.getCurrentSession().id;
+        coordinator.onAppBackgrounded();
+        coordinator.onAppForegrounded();
+        await pumpEventQueue();
+        expect(coordinator.recordingState, RecordingState.recording);
+        expect(writesWithMetadata, isEmpty, reason: 'no record to update yet');
+
+        // WHEN the metadata write finally completes
+        gated.releaseMetadata();
+        await pumpEventQueue();
+
+        // THEN a deadline is persisted immediately instead of waiting for the
+        // next debounced activity write
+        expect(writesWithMetadata, [sessionId]);
+      });
+    });
+
     group('stopRecording persisted expiry', () {
       test('stop expires the recorded session in storage', () async {
         // GIVEN an active web recording
@@ -1639,5 +1693,21 @@ class _DelayedMetadataQueue extends InMemoryEventQueue {
   Future<void> createSessionMetadata(Session session) async {
     await ready.future;
     await super.createSessionMetadata(session);
+  }
+}
+
+/// Queue that holds session metadata creation until [releaseMetadata], so a
+/// test can drive lifecycle transitions while the record does not exist yet.
+class _GatedMetadataQueue extends InMemoryEventQueue {
+  final Completer<void> _gate = Completer<void>();
+
+  @override
+  Future<void> createSessionMetadata(Session session) async {
+    await _gate.future;
+    await super.createSessionMetadata(session);
+  }
+
+  void releaseMetadata() {
+    if (!_gate.isCompleted) _gate.complete();
   }
 }
