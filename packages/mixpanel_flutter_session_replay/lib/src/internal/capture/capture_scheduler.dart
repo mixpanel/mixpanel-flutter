@@ -23,6 +23,11 @@ class CaptureScheduler {
   /// Flag to track if a capture is currently in progress
   bool _isCaptureInProgress = false;
 
+  /// A frame rendered while a capture was in progress. The screen it showed
+  /// may be the settled state that capture missed or rejected, so one more
+  /// rate-limited capture is owed once the current one completes.
+  bool _frameArrivedDuringCapture = false;
+
   /// Timer for debouncing capture requests
   Timer? _debounceTimer;
 
@@ -58,13 +63,11 @@ class CaptureScheduler {
   /// - If enough time has passed, schedules callback to execute immediately (Duration.zero timer)
   /// - Otherwise, schedules the callback to run after the remaining time
   Duration? scheduleAfterRateLimit(VoidCallback callback) {
-    // Don't schedule if a capture is already in progress
-    // But update _lastCaptureTime so next frame callback will schedule a capture after completion
+    // Don't schedule while a capture is in progress; remember that a frame
+    // arrived so the caller can retry after completion.
     if (_isCaptureInProgress) {
-      _lastCaptureTime = clock.now();
-      _logger.debug(
-        'Capture in progress, updating timestamp for pending capture',
-      );
+      _frameArrivedDuringCapture = true;
+      _logger.debug('Capture in progress, frame noted for a follow-up capture');
       return null;
     }
 
@@ -97,6 +100,17 @@ class CaptureScheduler {
     final now = clock.now();
     _logger.debug('Capture started at ${now.millisecondsSinceEpoch}');
     _isCaptureInProgress = true;
+    _frameArrivedDuringCapture = false;
+  }
+
+  /// Whether a frame rendered during the capture that just completed, and
+  /// clears that note. The caller schedules one rate-limited follow-up so a
+  /// rejected or stale capture cannot leave the settled screen unrecorded
+  /// until something else repaints.
+  bool takeFrameArrivedDuringCapture() {
+    final arrived = _frameArrivedDuringCapture;
+    _frameArrivedDuringCapture = false;
+    return arrived;
   }
 
   /// Mark that a capture has completed (success or failure)

@@ -119,6 +119,30 @@ void main() {
         expect(callbackInvoked, false);
       });
 
+      test('remembers a frame that arrived during a capture', () {
+        // GIVEN a frame notification while a capture is running
+        scheduler.markCaptureStarted();
+        scheduler.scheduleAfterRateLimit(() {});
+
+        // WHEN that capture completes
+        scheduler.markCaptureCompleted();
+
+        // THEN the caller is told once to attempt a follow-up capture, so a
+        // rejected or stale capture cannot leave the settled screen unrecorded
+        expect(scheduler.takeFrameArrivedDuringCapture(), isTrue);
+        expect(scheduler.takeFrameArrivedDuringCapture(), isFalse);
+      });
+
+      test('forgets a noted frame when the next capture starts', () {
+        scheduler.markCaptureStarted();
+        scheduler.scheduleAfterRateLimit(() {});
+        scheduler.markCaptureCompleted();
+
+        scheduler.markCaptureStarted();
+
+        expect(scheduler.takeFrameArrivedDuringCapture(), isFalse);
+      });
+
       test('returns null when timer is already active', () {
         // GIVEN - Schedule a first callback to create an active timer
         scheduler.scheduleAfterRateLimit(() {});

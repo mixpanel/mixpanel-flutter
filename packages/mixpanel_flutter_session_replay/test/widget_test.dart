@@ -1,5 +1,9 @@
+import 'dart:async';
+
+import 'package:clock/clock.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/settings/settings_service.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/configuration.dart';
@@ -1209,6 +1213,50 @@ void main() {
       expect(fake.captureSnapshotCallCount, 1);
     });
 
+    testWidgets('follows up once when a frame arrives during a capture', (
+      tester,
+    ) async {
+      // A static screen renders no further frames, so without a follow-up a
+      // capture that was rejected (or that saw an intermediate state) would
+      // leave replay on an older screen until something else repaints.
+      var now = DateTime(2026, 1, 1, 12);
+      await withClock(Clock(() => now), () async {
+        // GIVEN the initial capture is still running
+        final fake = _GatedCaptureCoordinator();
+        final frameNotifier = ChangeNotifier();
+        await tester.pumpWidget(
+          MaterialApp(
+            home: FrameMonitor(
+              frameNotifier: frameNotifier,
+              coordinator: fake,
+              child: const SizedBox(width: 100, height: 100),
+            ),
+          ),
+        );
+        await tester.pump();
+        expect(fake.captureSnapshotCallCount, 1);
+
+        // WHEN the screen settles with one more frame while it runs, and the
+        // capture then completes
+        // ignore: invalid_use_of_protected_member, invalid_use_of_visible_for_testing_member
+        frameNotifier.notifyListeners();
+        await tester.pump();
+        expect(fake.captureSnapshotCallCount, 1, reason: 'busy, so deferred');
+        fake.releaseCapture();
+        await tester.pump();
+
+        // THEN one rate-limited follow-up capture runs with no new frame
+        now = now.add(const Duration(milliseconds: 600));
+        await tester.pump(const Duration(milliseconds: 600));
+        expect(fake.captureSnapshotCallCount, 2);
+
+        // AND it does not repeat on its own
+        now = now.add(const Duration(seconds: 2));
+        await tester.pump(const Duration(seconds: 2));
+        expect(fake.captureSnapshotCallCount, 2);
+      });
+    });
+
     testWidgets('renders debug mask overlay when debugOptions provided', (
       tester,
     ) async {
@@ -1442,4 +1490,25 @@ void main() {
       expect(find.text('Replaced'), findsOneWidget);
     });
   });
+}
+
+/// Coordinator whose first capture stays in flight until [releaseCapture].
+class _GatedCaptureCoordinator extends FakeWidgetCoordinator {
+  _GatedCaptureCoordinator() : super(recordingState: RecordingState.recording);
+
+  Completer<void>? _gate;
+
+  void releaseCapture() => _gate?.complete();
+
+  @override
+  Future<void> captureSnapshot(
+    RenderRepaintBoundary boundary, {
+    required Element boundaryElement,
+  }) async {
+    captureSnapshotCallCount++;
+    if (_gate == null) {
+      _gate = Completer<void>();
+      await _gate!.future;
+    }
+  }
 }

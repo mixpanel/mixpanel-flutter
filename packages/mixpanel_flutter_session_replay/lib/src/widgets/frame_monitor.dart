@@ -171,6 +171,11 @@ class _FrameMonitorState extends State<FrameMonitor> {
       if (mounted) {
         // The 500 ms rate limit starts whether capture succeeded or failed.
         _scheduler.markCaptureCompleted();
+        // A frame that rendered while this capture ran may show the settled
+        // screen, and a static screen produces no further frames. Attempt one
+        // rate-limited follow-up; the usual recording and foreground checks
+        // still apply when it fires.
+        if (_scheduler.takeFrameArrivedDuringCapture()) _attemptCapture();
       }
     }
   }
