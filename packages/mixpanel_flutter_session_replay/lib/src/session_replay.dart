@@ -198,17 +198,12 @@ class MixpanelSessionReplay {
               logger: logger,
             )
           : null;
-      final timings = resolvePlatformTimings(options.platformOptions, logger);
       final platformResult = await platformInit(
         token: token,
         storageQuotaMB: options.storageQuotaMB,
         directive: MaskingDirective(autoMaskTypes: options.autoMaskedViews),
         debugOverlayEnabled: options.debugOptions?.overlayColors != null,
-        mobileWifiOnly: options.platformOptions.mobile.wifiOnly,
-        webIdleTimeout: timings.webIdleTimeout,
-        webMaxSessionDuration: timings.webMaxSessionDuration,
-        mobileBackgroundBehavior: timings.mobileBackgroundBehavior,
-        webBackgroundBehavior: timings.webBackgroundBehavior,
+        platformOptions: capPlatformOptions(options.platformOptions, logger),
         wireframeEmitter: wireframeEmitter,
         useAccessibilityLabelFallback:
             wireframesOptions?.useAccessibilityLabelFallback ?? false,

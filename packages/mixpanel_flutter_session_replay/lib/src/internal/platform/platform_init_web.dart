@@ -21,16 +21,13 @@ Future<PlatformInitResult> platformInit({
   required int storageQuotaMB,
   required MaskingDirective directive,
   required bool debugOverlayEnabled,
-  required bool mobileWifiOnly,
-  required Duration webIdleTimeout,
-  required Duration webMaxSessionDuration,
-  required ReplayBackgroundBehavior mobileBackgroundBehavior,
-  required ReplayBackgroundBehavior webBackgroundBehavior,
+  required PlatformOptions platformOptions,
   WireframeEmitter? wireframeEmitter,
   required bool useAccessibilityLabelFallback,
   required MixpanelLogger logger,
   EventQueue? eventQueue,
 }) async {
+  final web = platformOptions.web;
   if (!isGzipSupported) {
     throw const PlatformCapabilityException(
       'Browser CompressionStream support is required for Session Replay',
@@ -83,8 +80,8 @@ Future<PlatformInitResult> platformInit({
   // Check for resumable session before clearing data
   final resumeInfo = await checkWebSessionResume(
     queue: queue,
-    idleTimeout: webIdleTimeout,
-    maxSessionDuration: webMaxSessionDuration,
+    idleTimeout: web.idleTimeout,
+    maxSessionDuration: web.maxSessionDuration,
     logger: logger,
   );
 
@@ -136,11 +133,11 @@ Future<PlatformInitResult> platformInit({
     queue: queue,
     screenshotCapturer: screenshotCapturer,
     wifiOnly: false,
-    idleTimeout: webIdleTimeout,
-    maxSessionDuration: webMaxSessionDuration,
+    idleTimeout: web.idleTimeout,
+    maxSessionDuration: web.maxSessionDuration,
     resumableSession: resumeInfo?.session,
     resumableIdleExpiry: resumeInfo?.idleExpiry,
     persistIdleExpiry: persistIdleExpiry,
-    backgroundBehavior: webBackgroundBehavior,
+    backgroundBehavior: web.onBackground,
   );
 }

@@ -6,21 +6,21 @@ import 'package:mixpanel_flutter_session_replay/src/models/configuration.dart';
 void main() {
   final logger = MixpanelLogger(LogLevel.none);
 
-  group('resolvePlatformTimings', () {
+  group('capPlatformOptions', () {
     test('keeps timings within 24 hours unchanged', () {
       // GIVEN the default platform options
       const options = PlatformOptions();
 
-      // WHEN the timings are resolved
-      final timings = resolvePlatformTimings(options, logger);
+      // WHEN the options are capped
+      final capped = capPlatformOptions(options, logger);
 
       // THEN the configured values pass through
-      expect(timings.webIdleTimeout, const Duration(minutes: 30));
-      expect(timings.webMaxSessionDuration, const Duration(hours: 24));
-      expect(timings.mobileBackgroundBehavior, ReplayBackgroundBehavior.stop);
+      expect(capped.mobile.wifiOnly, isTrue);
+      expect(capped.mobile.onBackground, ReplayBackgroundBehavior.stop);
+      expect(capped.web.idleTimeout, const Duration(minutes: 30));
+      expect(capped.web.maxSessionDuration, const Duration(hours: 24));
       expect(
-        (timings.webBackgroundBehavior as ReplayBackgroundPauseBehavior)
-            .idleTimeout,
+        (capped.web.onBackground as ReplayBackgroundPauseBehavior).idleTimeout,
         const Duration(minutes: 30),
       );
     });
@@ -30,6 +30,7 @@ void main() {
       const days = Duration(days: 30);
       const options = PlatformOptions(
         mobile: MobileOptions(
+          wifiOnly: false,
           onBackground: ReplayBackgroundBehavior.pause(idleTimeout: days),
         ),
         web: WebOptions(
@@ -39,23 +40,24 @@ void main() {
         ),
       );
 
-      // WHEN the timings are resolved
-      final timings = resolvePlatformTimings(options, logger);
+      // WHEN the options are capped
+      final capped = capPlatformOptions(options, logger);
 
-      // THEN each is lowered to the 24-hour maximum
+      // THEN each duration is lowered to the 24-hour maximum and the other
+      // settings are carried over
       const cap = Duration(hours: 24);
-      expect(timings.webIdleTimeout, cap);
-      expect(timings.webMaxSessionDuration, cap);
+      expect(capped.web.idleTimeout, cap);
+      expect(capped.web.maxSessionDuration, cap);
       expect(
-        (timings.mobileBackgroundBehavior as ReplayBackgroundPauseBehavior)
+        (capped.mobile.onBackground as ReplayBackgroundPauseBehavior)
             .idleTimeout,
         cap,
       );
       expect(
-        (timings.webBackgroundBehavior as ReplayBackgroundPauseBehavior)
-            .idleTimeout,
+        (capped.web.onBackground as ReplayBackgroundPauseBehavior).idleTimeout,
         cap,
       );
+      expect(capped.mobile.wifiOnly, isFalse);
     });
   });
 }

@@ -15,11 +15,7 @@ Future<PlatformInitResult> platformInit({
   required int storageQuotaMB,
   required MaskingDirective directive,
   required bool debugOverlayEnabled,
-  required bool mobileWifiOnly,
-  required Duration webIdleTimeout,
-  required Duration webMaxSessionDuration,
-  required ReplayBackgroundBehavior mobileBackgroundBehavior,
-  required ReplayBackgroundBehavior webBackgroundBehavior,
+  required PlatformOptions platformOptions,
   WireframeEmitter? wireframeEmitter,
   required bool useAccessibilityLabelFallback,
   required MixpanelLogger logger,
@@ -41,10 +37,11 @@ Future<PlatformInitResult> platformInit({
     useAccessibilityLabelFallback: useAccessibilityLabelFallback,
   );
 
+  final mobile = platformOptions.mobile;
   return PlatformInitResult(
     queue: queue,
     screenshotCapturer: screenshotCapturer,
-    wifiOnly: mobileWifiOnly,
-    backgroundBehavior: mobileBackgroundBehavior,
+    wifiOnly: mobile.wifiOnly,
+    backgroundBehavior: mobile.onBackground,
   );
 }

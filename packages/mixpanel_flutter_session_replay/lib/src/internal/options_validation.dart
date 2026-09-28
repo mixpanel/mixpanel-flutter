@@ -45,39 +45,39 @@ void _requirePositivePause(ReplayBackgroundBehavior behavior, String platform) {
   }
 }
 
-/// Platform timing options after applying [maxRecordingDuration].
-typedef PlatformTimings = ({
-  Duration webIdleTimeout,
-  Duration webMaxSessionDuration,
-  ReplayBackgroundBehavior mobileBackgroundBehavior,
-  ReplayBackgroundBehavior webBackgroundBehavior,
-});
-
-/// Caps each timing in [options] at [maxRecordingDuration], logging any value
-/// that had to be lowered.
-PlatformTimings resolvePlatformTimings(
+/// Returns [options] with every duration capped at [maxRecordingDuration],
+/// logging any value that had to be lowered.
+///
+/// Both platforms' options are capped; each platform's initialization reads
+/// only its own.
+PlatformOptions capPlatformOptions(
   PlatformOptions options,
   MixpanelLogger logger,
-) => (
-  webIdleTimeout: capRecordingDuration(
-    options.web.idleTimeout,
-    name: 'web idleTimeout',
-    logger: logger,
+) => PlatformOptions(
+  mobile: MobileOptions(
+    wifiOnly: options.mobile.wifiOnly,
+    onBackground: _capBackgroundBehavior(
+      options.mobile.onBackground,
+      name: 'mobile background pause idleTimeout',
+      logger: logger,
+    ),
   ),
-  webMaxSessionDuration: capRecordingDuration(
-    options.web.maxSessionDuration,
-    name: 'web maxSessionDuration',
-    logger: logger,
-  ),
-  mobileBackgroundBehavior: _capBackgroundBehavior(
-    options.mobile.onBackground,
-    name: 'mobile background pause idleTimeout',
-    logger: logger,
-  ),
-  webBackgroundBehavior: _capBackgroundBehavior(
-    options.web.onBackground,
-    name: 'web background pause idleTimeout',
-    logger: logger,
+  web: WebOptions(
+    idleTimeout: capRecordingDuration(
+      options.web.idleTimeout,
+      name: 'web idleTimeout',
+      logger: logger,
+    ),
+    maxSessionDuration: capRecordingDuration(
+      options.web.maxSessionDuration,
+      name: 'web maxSessionDuration',
+      logger: logger,
+    ),
+    onBackground: _capBackgroundBehavior(
+      options.web.onBackground,
+      name: 'web background pause idleTimeout',
+      logger: logger,
+    ),
   ),
 );
 
