@@ -604,5 +604,6 @@ class UploadService {
     _isDisposed = true;
 
     stopAutoFlush();
+    payloadSerializer.dispose();
   }
 }

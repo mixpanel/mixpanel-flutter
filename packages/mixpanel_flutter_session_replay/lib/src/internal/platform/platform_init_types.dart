@@ -2,6 +2,7 @@ import '../session/resumable_session.dart';
 import '../../models/configuration.dart';
 import '../screenshot_capturer.dart';
 import '../storage/event_queue_interface.dart';
+import 'gzip_compressor.dart';
 
 /// The current platform cannot provide a capability required to record
 /// without compromising application responsiveness or security.
@@ -18,6 +19,9 @@ class PlatformCapabilityException implements Exception {
 class PlatformInitResult {
   final EventQueue queue;
   final ScreenshotCapturer screenshotCapturer;
+
+  /// Upload payload compressor, owned by this SDK instance.
+  final GzipCompressor gzipCompressor;
   final bool wifiOnly;
   final Duration? idleTimeout;
   final Duration? maxSessionDuration;
@@ -37,6 +41,7 @@ class PlatformInitResult {
   const PlatformInitResult({
     required this.queue,
     required this.screenshotCapturer,
+    required this.gzipCompressor,
     required this.wifiOnly,
     this.idleTimeout,
     this.maxSessionDuration,

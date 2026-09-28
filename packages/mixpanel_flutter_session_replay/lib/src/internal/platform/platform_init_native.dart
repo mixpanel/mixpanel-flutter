@@ -8,6 +8,7 @@ import '../screenshot_capturer.dart';
 import '../storage/event_queue_interface.dart';
 import '../storage/sqlite_event_queue.dart';
 import '../wireframe/wireframe_emitter.dart';
+import 'gzip_compressor.dart';
 import 'platform_init_types.dart';
 
 Future<PlatformInitResult> platformInit({
@@ -41,6 +42,7 @@ Future<PlatformInitResult> platformInit({
   return PlatformInitResult(
     queue: queue,
     screenshotCapturer: screenshotCapturer,
+    gzipCompressor: createGzipCompressor(),
     wifiOnly: mobile.wifiOnly,
     backgroundBehavior: mobile.onBackground,
   );

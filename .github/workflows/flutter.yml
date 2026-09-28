@@ -170,7 +170,7 @@ jobs:
       - name: Run browser tests
         run: >-
           flutter test --platform chrome
-          test/gzip_compress_web_test.dart
+          test/gzip_compressor_web_test.dart
           test/indexed_db_event_queue_test.dart
           test/web_session_resume_test.dart
           test/platform_init_web_test.dart

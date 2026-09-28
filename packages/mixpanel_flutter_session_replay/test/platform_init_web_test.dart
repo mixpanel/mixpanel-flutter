@@ -54,6 +54,7 @@ void main() {
       expect(queue.eventCount, 1);
 
       await result.screenshotCapturer.dispose();
+      result.gzipCompressor.dispose();
       await queue.dispose();
     },
   );

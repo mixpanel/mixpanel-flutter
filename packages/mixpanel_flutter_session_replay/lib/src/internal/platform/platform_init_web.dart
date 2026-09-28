@@ -10,7 +10,7 @@ import '../../models/masking_directive.dart';
 import '../../models/configuration.dart';
 import '../session/web_session_resume.dart';
 import '../screenshot_capturer.dart';
-import 'gzip_compress.dart';
+import 'gzip_compressor.dart';
 import 'platform_init_types.dart';
 import 'web_rendered_surface_capture.dart';
 
@@ -28,15 +28,17 @@ Future<PlatformInitResult> platformInit({
   EventQueue? eventQueue,
 }) async {
   final web = platformOptions.web;
-  if (!isGzipSupported) {
+  final gzip = createGzipCompressor();
+  if (!gzip.isSupported) {
     throw const PlatformCapabilityException(
       'Browser CompressionStream support is required for Session Replay',
     );
   }
 
   try {
-    await initializeGzipCompression();
+    await gzip.initialize();
   } catch (error) {
+    gzip.dispose();
     throw PlatformCapabilityException(error.toString());
   }
 
@@ -99,6 +101,7 @@ Future<PlatformInitResult> platformInit({
     await surfaceCapture.initialize();
   } catch (error) {
     await queue.dispose();
+    gzip.dispose();
     throw PlatformCapabilityException(error.toString());
   }
 
@@ -137,6 +140,7 @@ Future<PlatformInitResult> platformInit({
   return PlatformInitResult(
     queue: queue,
     screenshotCapturer: screenshotCapturer,
+    gzipCompressor: gzip,
     wifiOnly: false,
     idleTimeout: web.idleTimeout,
     maxSessionDuration: web.maxSessionDuration,

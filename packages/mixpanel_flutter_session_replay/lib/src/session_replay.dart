@@ -2,7 +2,6 @@ import 'package:flutter/foundation.dart' show debugPrint, kDebugMode;
 import 'package:http/http.dart' as http;
 import 'package:meta/meta.dart';
 
-import 'internal/platform/gzip_compress.dart';
 import 'internal/platform/platform_info.dart';
 import 'internal/platform/platform_init.dart';
 import 'models/debug_overlay_colors.dart';
@@ -254,7 +253,10 @@ class MixpanelSessionReplay {
       );
 
       // Create upload service with payload serializer
-      final payloadSerializer = PayloadSerializer(token);
+      final payloadSerializer = PayloadSerializer(
+        token,
+        gzip: platformResult.gzipCompressor,
+      );
       final uploadService = UploadService(
         eventQueue: queue,
         payloadSerializer: payloadSerializer,
@@ -496,9 +498,6 @@ class MixpanelSessionReplay {
 
     // Close shared HTTP client (after coordinator dispose so flush completes first)
     _httpClient.close();
-
-    // Release the web gzip worker (no-op elsewhere)
-    disposeGzipCompression();
 
     // Remove from registry after cleanup is complete
     _instances.remove(_token);
