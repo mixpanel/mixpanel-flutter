@@ -1055,6 +1055,14 @@ class SessionReplayCoordinator implements WidgetCoordinator {
       );
       _isIdledOut = false;
       startRecording(sessionsPercent: _autoRecordSessionsPercent);
+      return;
+    }
+    // Keyboard, wheel, and trackpad input reach the idle window only here;
+    // pointer presses already refresh it through captureInteraction. Without
+    // this, a session whose captures are being rejected (for example by
+    // continuously moving masks) could idle out under active use.
+    if (_recordingState == RecordingState.recording) {
+      _onActivity();
     }
   }
 

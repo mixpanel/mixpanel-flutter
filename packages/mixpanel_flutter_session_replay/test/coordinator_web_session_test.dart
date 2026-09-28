@@ -679,6 +679,41 @@ void main() {
         expect(coordinator.recordingState, RecordingState.notRecording);
       });
 
+      test('refreshes the idle window while recording', () {
+        fakeAsync((async) {
+          // GIVEN a recording session with a ten second idle window
+          late SessionReplayCoordinator coordinator;
+          final idleTimer = IdleTimeoutTimer(
+            timeout: const Duration(seconds: 10),
+            onTimeout: () => coordinator.handleIdleTimeout(),
+          );
+          coordinator = createCoordinator(
+            autoRecordSessionsPercent: 100,
+            idleTimer: idleTimer,
+            maxSessionDuration: const Duration(hours: 24),
+          );
+          coordinator.startRecording(sessionsPercent: 100);
+          async.flushMicrotasks();
+          expect(coordinator.recordingState, RecordingState.recording);
+          final replayId = coordinator.replayId;
+
+          // WHEN keyboard, wheel, or trackpad activity arrives at nine
+          // seconds, with no successful capture to refresh the window
+          async.elapse(const Duration(seconds: 9));
+          coordinator.onUserActivity();
+
+          // THEN the session outlives its original deadline
+          async.elapse(const Duration(seconds: 5));
+          expect(coordinator.recordingState, RecordingState.recording);
+          expect(coordinator.replayId, replayId);
+
+          // AND still idles out ten seconds after the last activity
+          async.elapse(const Duration(seconds: 6));
+          expect(coordinator.recordingState, RecordingState.notRecording);
+          idleTimer.dispose();
+        });
+      });
+
       test('is a no-op during normal recording', () async {
         // GIVEN — coordinator is actively recording (not idled out)
         final coordinator = createCoordinator();
