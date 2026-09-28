@@ -259,7 +259,11 @@ class MixpanelSessionReplay {
         eventQueue: queue,
         payloadSerializer: payloadSerializer,
         wifiOnly: platformResult.wifiOnly,
-        getRemoteEnablementState: () => settingsService.remoteState,
+        // The coordinator's verdict, not the raw server flag: strict mode can
+        // disable recording even when the server reports is_enabled, and
+        // uploads must follow the same decision as capture.
+        getRemoteEnablementState: () =>
+            instance._coordinator.remoteEnablementState,
         flushInterval: options.flushInterval,
         logger: logger,
         httpClient: sharedHttpClient,
