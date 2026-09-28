@@ -75,6 +75,9 @@ enum CaptureError {
   /// OOM during capture
   insufficientMemory,
 
+  /// Recording stopped or paused while the frame was still being acquired
+  cancelled,
+
   /// JPEG encoding error
   compressionFailed,
 }

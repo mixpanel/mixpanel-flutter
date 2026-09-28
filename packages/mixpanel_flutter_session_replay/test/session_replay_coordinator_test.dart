@@ -1662,6 +1662,47 @@ void main() {
         },
       );
 
+      test(
+        'should cancel acquisition of a frame that crosses a stop',
+        () async {
+          // GIVEN - a capture is still waiting for the browser to present when
+          // the app stops the replay, for example before a sensitive screen
+          final coordinator = createCoordinator();
+          coordinator.startRecording(sessionsPercent: 100.0);
+          await pumpEventQueue();
+          final capture = coordinator.captureSnapshot(
+            RenderRepaintBoundary(),
+            boundaryElement: boundaryElement,
+          );
+          await pumpEventQueue();
+          expect(pendingCapturer.isCancelledProbe!(), isFalse);
+
+          // WHEN - recording stops before any pixels were acquired
+          coordinator.stopRecording();
+          expect(
+            pendingCapturer.isCancelledProbe!(),
+            isTrue,
+            reason: 'the capturer must not acquire pixels after the stop',
+          );
+          coordinator.startRecording(sessionsPercent: 100.0);
+          await pumpEventQueue();
+          pendingCapturer.completeCancelled();
+          await capture;
+          await pumpEventQueue();
+
+          // THEN - nothing from the aborted frame reaches either replay
+          expect(coordinator.recordingState, RecordingState.recording);
+          expect(
+            recordingQueue.addedEvents.where(
+              (event) =>
+                  event.type == EventType.screenshot ||
+                  event.type == EventType.wireframe,
+            ),
+            isEmpty,
+          );
+        },
+      );
+
       test('should discard a frame that crosses a background pause', () async {
         // GIVEN - a capture is in flight for a replay that pauses in the
         // background instead of ending.
@@ -1963,6 +2004,9 @@ class _PendingScreenshotCapturer extends ScreenshotCapturer {
   late String pinnedSessionId;
   late String pinnedDistinctId;
 
+  /// The cancellation probe the coordinator handed to the in-flight capture.
+  bool Function()? isCancelledProbe;
+
   @override
   Future<CaptureResult> capture(
     RenderRepaintBoundary boundary, {
@@ -1970,11 +2014,22 @@ class _PendingScreenshotCapturer extends ScreenshotCapturer {
     required String Function() getDistinctId,
     required Element boundaryElement,
     Set<AutoMaskedView>? maskTypes,
+    bool Function()? isCancelled,
   }) {
     pinnedSessionId = getCurrentSession().id;
     pinnedDistinctId = getDistinctId();
+    isCancelledProbe = isCancelled;
     return pendingCapture.future;
   }
+
+  /// Resolve the in-flight capture the way the real capturer does when its
+  /// cancellation probe fires before pixels are acquired.
+  void completeCancelled() => pendingCapture.complete(
+    const CaptureFailure(
+      CaptureError.cancelled,
+      'Recording stopped or paused while the frame was in flight',
+    ),
+  );
 
   /// Resolve the in-flight capture with the identity pinned when it started.
   void completeWithPinnedIdentity({

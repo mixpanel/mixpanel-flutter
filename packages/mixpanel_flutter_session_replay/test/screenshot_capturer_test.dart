@@ -395,6 +395,117 @@ void main() {
     );
 
     testWidgets(
+      'cancels before acquiring pixels when recording stops during the wait',
+      (tester) async {
+        // GIVEN a frame waiting for the browser to present when the replay
+        // stops, for example right before a sensitive screen is shown
+        final key = GlobalKey();
+        await tester.pumpWidget(
+          Directionality(
+            textDirection: TextDirection.ltr,
+            child: RepaintBoundary(
+              key: key,
+              child: const SizedBox(
+                width: 400,
+                height: 200,
+                child: Text('Account balance'),
+              ),
+            ),
+          ),
+        );
+        final element = key.currentContext! as Element;
+        final boundary = element.findRenderObject()! as RenderRepaintBoundary;
+        var stopped = false;
+        final compressor = _DirectSurfaceCapture()
+          ..duringPresentation = () async {
+            stopped = true;
+          };
+        final capturer = ScreenshotCapturer(
+          directive: MaskingDirective(
+            autoMaskTypes: const {AutoMaskedView.text},
+          ),
+          logger: MixpanelLogger(LogLevel.none),
+          debugOverlayEnabled: false,
+          surfaceCapture: compressor,
+        );
+
+        // WHEN
+        final pending = tester.runAsync(
+          () => capturer.capture(
+            boundary,
+            boundaryElement: element,
+            getCurrentSession: SessionManager().getCurrentSession,
+            getDistinctId: () => 'screenshot-capturer-test-distinct-id',
+            isCancelled: () => stopped,
+          ),
+        );
+        await tester.pump();
+        final result = await pending;
+
+        // THEN no pixels were read from the surface at all
+        expect(result, isA<CaptureFailure>());
+        expect((result! as CaptureFailure).error, CaptureError.cancelled);
+        expect(compressor.surfaceCaptureCount, 0);
+        expect(compressor.encodedCount, 0);
+      },
+    );
+
+    testWidgets(
+      'releases an acquired snapshot without encoding when cancelled',
+      (tester) async {
+        // GIVEN the replay stops after the immutable snapshot was taken but
+        // before it was encoded
+        final key = GlobalKey();
+        await tester.pumpWidget(
+          Directionality(
+            textDirection: TextDirection.ltr,
+            child: RepaintBoundary(
+              key: key,
+              child: const SizedBox(
+                width: 400,
+                height: 200,
+                child: Text('Account balance'),
+              ),
+            ),
+          ),
+        );
+        final element = key.currentContext! as Element;
+        final boundary = element.findRenderObject()! as RenderRepaintBoundary;
+        var stopped = false;
+        final compressor = _DirectSurfaceCapture()
+          ..beforeValidation = () async {
+            stopped = true;
+          };
+        final capturer = ScreenshotCapturer(
+          directive: MaskingDirective(
+            autoMaskTypes: const {AutoMaskedView.text},
+          ),
+          logger: MixpanelLogger(LogLevel.none),
+          debugOverlayEnabled: false,
+          surfaceCapture: compressor,
+        );
+
+        final pending = tester.runAsync(
+          () => capturer.capture(
+            boundary,
+            boundaryElement: element,
+            getCurrentSession: SessionManager().getCurrentSession,
+            getDistinctId: () => 'screenshot-capturer-test-distinct-id',
+            isCancelled: () => stopped,
+          ),
+        );
+        await tester.pump();
+        final result = await pending;
+
+        // THEN the snapshot is disposed, never encoded
+        expect((result! as CaptureFailure).error, CaptureError.cancelled);
+        expect(compressor.surfaceCaptureCount, 1);
+        expect(compressor.encodedCount, 0);
+        expect(compressor.disposedCount, 1);
+      },
+    );
+
+    testWidgets(
       'direct surface capture rejects a mask that moves before validation',
       (tester) async {
         final key = GlobalKey();

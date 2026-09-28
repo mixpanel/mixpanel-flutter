@@ -59,8 +59,15 @@ class SessionReplayCoordinator implements WidgetCoordinator {
   bool _isDisposed = false;
 
   /// Incremented when a background pause invalidates captures that started
-  /// while recording was active.
+  /// while recording was active. A frame that crosses a pause is discarded
+  /// even if its pixels were already acquired.
   int _captureGeneration = 0;
+
+  /// Incremented whenever recording stops or pauses. Polled by the capturer
+  /// so a frame still waiting for a browser presentation when recording ends
+  /// never acquires pixels. A frame acquired before a stop is still recorded
+  /// under the identity pinned when it began, matching the native SDKs.
+  int _captureEpoch = 0;
 
   @override
   bool get capturesRenderedSurface =>
@@ -248,14 +255,18 @@ class SessionReplayCoordinator implements WidgetCoordinator {
     if (_checkMaxSessionExpired()) return;
 
     final captureGeneration = _captureGeneration;
+    final captureEpoch = _captureEpoch;
     _logger.debug('Capturing snapshot', tag: 'coordinator');
 
-    // Get JPG bytes from screenshot capturer
+    // Get JPG bytes from screenshot capturer. The capturer polls the probe
+    // after each of its awaits so a stop or pause during the browser
+    // presentation wait aborts before any pixels are acquired.
     final result = await _screenshotCapturer.capture(
       boundary,
       getCurrentSession: _sessionManager.getCurrentSession,
       getDistinctId: _eventRecorder.getDistinctId,
       boundaryElement: boundaryElement,
+      isCancelled: () => _captureEpoch != captureEpoch,
     );
 
     // A pause may have happened while the asynchronous image capture was in
@@ -890,6 +901,7 @@ class SessionReplayCoordinator implements WidgetCoordinator {
 
     _logger.debug('Pausing recording for background', tag: 'coordinator');
     _captureGeneration++;
+    _captureEpoch++;
     _recordingState = RecordingState.paused;
     _lifetime.pause(idleTimeout);
 
@@ -1008,7 +1020,9 @@ class SessionReplayCoordinator implements WidgetCoordinator {
       _pendingResume = null;
     }
 
-    // Transition to notRecording state
+    // Transition to notRecording state. A frame still waiting to acquire
+    // pixels must not do so now; one already acquired stays with its replay.
+    _captureEpoch++;
     _recordingState = RecordingState.notRecording;
     _isIdledOut = false;
 

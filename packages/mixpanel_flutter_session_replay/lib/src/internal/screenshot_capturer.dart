@@ -148,6 +148,9 @@ class ScreenshotCapturer {
   /// - [boundaryElement]: The root element used for wireframe traversal
   /// - [maskTypes]: Set of view types to auto-mask (overrides directive if provided)
   /// - [getCurrentSession], [getDistinctId]: read at the frame to pin its identity
+  /// - [isCancelled]: polled after every await before pixels are acquired and
+  ///   before they are encoded, so a frame whose recording stopped or paused
+  ///   while it waited is never captured
   /// Returns CaptureResult with compressed image data or error
   Future<CaptureResult> capture(
     RenderRepaintBoundary boundary, {
@@ -155,8 +158,14 @@ class ScreenshotCapturer {
     required String Function() getDistinctId,
     required Element boundaryElement,
     Set<AutoMaskedView>? maskTypes,
+    bool Function()? isCancelled,
   }) async {
     final captureStart = clock.now();
+    const cancelledFailure = CaptureFailure(
+      CaptureError.cancelled,
+      'Recording stopped or paused while the frame was in flight',
+    );
+    bool cancelled() => isCancelled?.call() ?? false;
     try {
       if (!(_surfaceCapture?.isAvailable ?? _compressor!.isAvailable)) {
         return const CaptureFailure(
@@ -180,9 +189,11 @@ class ScreenshotCapturer {
       // endOfFrame ensures mask detection and snapshot initiation observe the
       // same completed Flutter paint.
       await SchedulerBinding.instance.endOfFrame;
+      if (cancelled()) return cancelledFailure;
       if (_surfaceCapture case final surface?) {
         final surfaceAvailability = await surface
             .waitUntilRenderedSurfaceAvailable(boundary.size);
+        if (cancelled()) return cancelledFailure;
         if (surfaceAvailability == RenderedSurfaceAvailability.unavailable) {
           return const CaptureFailure(
             CaptureError.renderBoundaryNotFound,
@@ -194,6 +205,7 @@ class ScreenshotCapturer {
         if (surfaceAvailability ==
             RenderedSurfaceAvailability.availableAfterBrowserFrame) {
           await SchedulerBinding.instance.endOfFrame;
+          if (cancelled()) return cancelledFailure;
         }
       }
 
@@ -250,6 +262,9 @@ class ScreenshotCapturer {
         lastRenderedSurfaceStabilityValidationTime = clock.now().difference(
           stabilityStart,
         );
+        // The stop may have happened during that wait; the sensitive screen
+        // shown afterward must not be acquired at all.
+        if (cancelled()) return cancelledFailure;
       }
 
       // Initiate the platform snapshot immediately. Because Dart is
@@ -342,6 +357,7 @@ class ScreenshotCapturer {
         }
         Uint8List? compressedBytes;
         try {
+          if (cancelled()) return cancelledFailure;
           if (!validateSnapshot()) return snapshotValidationFailure!;
           compressedBytes = await snapshot.encode(
             maskRects: rasterMaskRegions
@@ -396,6 +412,10 @@ class ScreenshotCapturer {
           CaptureError.renderBoundaryNotFound,
           'Failed to capture boundary: $e',
         );
+      }
+      if (cancelled()) {
+        rawImage.dispose();
+        return cancelledFailure;
       }
       final renderTime = clock.now().difference(captureTimestamp);
       logger.debug(
