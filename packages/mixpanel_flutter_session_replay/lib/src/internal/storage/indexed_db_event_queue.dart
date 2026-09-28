@@ -463,11 +463,15 @@ class IndexedDbEventQueue
       final result = (event.target as web.IDBRequest).result;
       if (!_isNullish(result)) return; // Already exists
 
+      // Only a live session belongs to this tab. Metadata rebuilt by the
+      // uploader for an orphaned backlog is marked ended and stays unowned,
+      // so a reload of the rebuilding tab cannot resume a session another
+      // tab may still be recording into.
       final record = <String, dynamic>{
         'session_id': session.id,
         'last_sequence_number': -1,
         'session_start_time': session.startTime.millisecondsSinceEpoch,
-        'owner_id': ownerId,
+        'owner_id': session.status == SessionStatus.active ? ownerId : null,
       };
       store.put(record.jsify()!);
     }.toJS;
@@ -822,7 +826,8 @@ class IndexedDbEventQueue
       map['max_expires'] = maxExpiresMs;
       // Null clears the paused deadline when the page returns.
       map['background_expires'] = backgroundExpiresMs;
-      map['owner_id'] = ownerId;
+      // Adopt a legacy unowned record; never take one from another tab.
+      map['owner_id'] ??= ownerId;
       store.put(map.jsify()!);
     }.toJS;
 

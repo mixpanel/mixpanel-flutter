@@ -194,6 +194,57 @@ void main() {
     // Shared contract tests (identical assertions for all EventQueue impls)
     runEventQueueContractTests(() => storage);
 
+    group('Session ownership', () {
+      test('rebuilt metadata for an ended session stays unowned', () async {
+        // GIVEN the uploader rebuilt metadata for an orphaned backlog
+        await storage.createSessionMetadata(
+          Session(
+            id: 'orphaned-session',
+            startTime: DateTime.utc(2025),
+            status: SessionStatus.ended,
+          ),
+        );
+
+        // THEN it is not attributed to this tab
+        final owned = await storage.getLatestSessionMetadata(
+          ownedBy: storage.ownerId,
+          includeUnowned: false,
+        );
+        expect(owned, isNull);
+        final any = await storage.getLatestSessionMetadata();
+        expect(any?['owner_id'], isNull);
+      });
+
+      test('expiry writes do not take a session from another tab', () async {
+        // GIVEN a session recorded by another tab
+        final otherTab = IndexedDbEventQueue(
+          token: token,
+          logger: MixpanelLogger(LogLevel.none),
+        );
+        await otherTab.initialize();
+        addTearDown(otherTab.dispose);
+        await otherTab.createSessionMetadata(
+          Session(
+            id: 'other-tab-session',
+            startTime: DateTime.utc(2025),
+            status: SessionStatus.active,
+          ),
+        );
+
+        // WHEN this tab writes deadlines for it
+        await storage.updateSessionExpiry(
+          sessionId: 'other-tab-session',
+          idleExpiresMs: 5000000,
+          maxExpiresMs: 9000000,
+        );
+
+        // THEN ownership is unchanged
+        final metadata = await storage.getLatestSessionMetadata();
+        expect(metadata?['owner_id'], otherTab.ownerId);
+        expect(metadata?['idle_expires'], 5000000);
+      });
+    });
+
     group('Unparseable rows', () {
       // A row whose event type this SDK version does not know. Parsing it
       // throws inside the cursor's success callback.
