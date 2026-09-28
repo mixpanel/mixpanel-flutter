@@ -311,6 +311,9 @@ class SessionReplayCoordinator implements WidgetCoordinator {
         // Emit wireframe alongside the screenshot with the same timestamp
         // so downstream ordering by ID aligns wireframe → matching screenshot.
         // Null when wireframes are disabled or the emitter deduped this frame.
+        // A capture is not user activity: like mixpanel-js, only input keeps
+        // the idle window open, so a screen that repaints on its own still
+        // idles out.
         if (wireframes != null) {
           await _eventRecorder.recordWireframe(
             payload: wireframes,
@@ -319,9 +322,6 @@ class SessionReplayCoordinator implements WidgetCoordinator {
             distinctId: distinctId,
           );
         }
-
-        // Reset idle timer and persist expiry (web only)
-        _onActivity();
       case CaptureFailure(:final error, :final errorMessage):
         _logger.debug(
           'Capture failed: $error - $errorMessage',
@@ -370,6 +370,9 @@ class SessionReplayCoordinator implements WidgetCoordinator {
       tag: 'coordinator',
     );
     _eventRecorder.recordTouchMove(positions: positions, timestamp: timestamp);
+
+    // A drag is user input and keeps the idle window open (web only).
+    _onActivity();
   }
 
   /// Shared gate for the touch stream: never record while disposed or while

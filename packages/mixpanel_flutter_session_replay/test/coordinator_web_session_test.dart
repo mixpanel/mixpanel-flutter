@@ -3,6 +3,7 @@ import 'package:clock/clock.dart';
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/gestures.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/session_replay_coordinator.dart';
@@ -20,6 +21,7 @@ import 'package:mixpanel_flutter_session_replay/src/models/configuration.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/masking_directive.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/results.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/session.dart';
+import 'package:mixpanel_flutter_session_replay/src/models/session_event.dart';
 import 'package:mixpanel_flutter_session_replay/src/widgets/interaction_detector.dart';
 
 import 'package:shared_preferences/shared_preferences.dart';
@@ -48,9 +50,10 @@ void main() {
           ReplayBackgroundBehavior.stop,
       Future<void> Function(String, int, int, int?)? persistIdleExpiry,
       EventRecorder? recorder,
+      ScreenshotCapturer? capturer,
     }) {
       return SessionReplayCoordinator(
-        screenshotCapturer: screenshotCapturer,
+        screenshotCapturer: capturer ?? screenshotCapturer,
         eventRecorder: recorder ?? eventRecorder,
         uploadService: uploadService,
         settingsService: settingsService,
@@ -710,6 +713,65 @@ void main() {
           // AND still idles out ten seconds after the last activity
           async.elapse(const Duration(seconds: 6));
           expect(coordinator.recordingState, RecordingState.notRecording);
+          idleTimer.dispose();
+        });
+      });
+
+      test('a screenshot capture does not extend the idle window', () {
+        // Like mixpanel-js, only user input keeps a session alive. A screen
+        // that repaints on its own (animation, live data) still idles out.
+        fakeAsync((async) {
+          late SessionReplayCoordinator coordinator;
+          final idleTimer = IdleTimeoutTimer(
+            timeout: const Duration(seconds: 10),
+            onTimeout: () => coordinator.handleIdleTimeout(),
+          );
+          coordinator = createCoordinator(
+            idleTimer: idleTimer,
+            maxSessionDuration: const Duration(hours: 24),
+            capturer: _ImmediateCapturer(logger: logger),
+          );
+          coordinator.startRecording(sessionsPercent: 100);
+          async.flushMicrotasks();
+          expect(coordinator.recordingState, RecordingState.recording);
+
+          // WHEN a frame is captured at nine seconds with no input
+          async.elapse(const Duration(seconds: 9));
+          coordinator.captureSnapshot(
+            RenderRepaintBoundary(),
+            boundaryElement: const SizedBox().createElement(),
+          );
+          async.flushMicrotasks();
+          expect(eventQueue.eventCount, greaterThan(0), reason: 'captured');
+
+          // THEN the session still idles out at ten seconds
+          async.elapse(const Duration(seconds: 2));
+          expect(coordinator.recordingState, RecordingState.notRecording);
+          idleTimer.dispose();
+        });
+      });
+
+      test('a drag keeps the idle window open', () {
+        fakeAsync((async) {
+          late SessionReplayCoordinator coordinator;
+          final idleTimer = IdleTimeoutTimer(
+            timeout: const Duration(seconds: 10),
+            onTimeout: () => coordinator.handleIdleTimeout(),
+          );
+          coordinator = createCoordinator(
+            idleTimer: idleTimer,
+            maxSessionDuration: const Duration(hours: 24),
+          );
+          coordinator.startRecording(sessionsPercent: 100);
+          async.flushMicrotasks();
+
+          async.elapse(const Duration(seconds: 9));
+          coordinator.captureTouchMove([
+            const TouchPosition(x: 1, y: 2, timeOffset: 0),
+          ], clock.now());
+
+          async.elapse(const Duration(seconds: 5));
+          expect(coordinator.recordingState, RecordingState.recording);
           idleTimer.dispose();
         });
       });
@@ -1745,4 +1807,34 @@ class _GatedMetadataQueue extends InMemoryEventQueue {
   void releaseMetadata() {
     if (!_gate.isCompleted) _gate.complete();
   }
+}
+
+/// Capturer that returns a small successful frame without touching the
+/// render tree, for tests about what a capture does and does not trigger.
+class _ImmediateCapturer extends ScreenshotCapturer {
+  _ImmediateCapturer({required super.logger})
+    : super(
+        directive: MaskingDirective(autoMaskTypes: {}),
+        debugOverlayEnabled: false,
+        compressor: DartPngCompressor(),
+      );
+
+  @override
+  Future<CaptureResult> capture(
+    RenderRepaintBoundary boundary, {
+    required Session Function() getCurrentSession,
+    required String Function() getDistinctId,
+    required Element boundaryElement,
+    Set<AutoMaskedView>? maskTypes,
+    bool Function()? isCancelled,
+  }) async => CaptureSuccess(
+    data: Uint8List.fromList([1, 2, 3]),
+    width: 10,
+    height: 10,
+    maskCount: 0,
+    timestamp: clock.now(),
+    sessionId: getCurrentSession().id,
+    distinctId: getDistinctId(),
+    maskRegions: const [],
+  );
 }

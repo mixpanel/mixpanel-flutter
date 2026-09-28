@@ -123,8 +123,9 @@ class WebOptions {
 
   /// Duration of user inactivity before the session is ended (default: 30 min).
   ///
-  /// Reset on every user interaction or screenshot capture, so a screen that
-  /// keeps repainting (an animation or live data) does not idle out.
+  /// Reset by user input only (pointer, keyboard, wheel, trackpad), never by
+  /// screen changes, matching mixpanel-js: a screen that repaints on its own
+  /// still idles out.
   /// When the timeout fires, recording stops. With `autoRecordSessionsPercent`
   /// above zero, the next user interaction starts a newly sampled session;
   /// with manual recording, call `startRecording()` again.
