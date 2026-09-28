@@ -6,6 +6,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:http/http.dart' as http;
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mixpanel_flutter_session_replay/src/internal/storage/event_queue_interface.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/upload/upload_service.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/upload/payload_serializer.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/settings/settings_service.dart';
@@ -1185,6 +1186,50 @@ void main() {
       );
     });
 
+    group('storage failures', () {
+      test('flush returns a result instead of throwing', () async {
+        // GIVEN a queue whose header reads fail, as IndexedDB does while its
+        // connection is closed
+        final failingQueue = _FailingHeaderQueue();
+        await failingQueue.initialize();
+        final service = createService(eventQueue: failingQueue);
+
+        // WHEN / THEN the failure is logged, not thrown to the caller
+        await expectLater(service.flush(), completes);
+
+        // AND the flush mutex is released so the next flush can run
+        await expectLater(service.flush(), completes);
+      });
+
+      test('flushOneBatch swallows a failing progress read', () async {
+        // GIVEN a healthy upload whose falling-behind header read fails. The
+        // first two oldest-header reads (batch selection and post-removal
+        // verification) succeed; the third, outside _uploadBatch, throws.
+        final failingQueue = _FailingHeaderQueue(failAfterFetches: 2);
+        await failingQueue.initialize();
+        final session = Session(
+          id: testSessionId,
+          startTime: DateTime.fromMillisecondsSinceEpoch(1000, isUtc: true),
+          status: SessionStatus.active,
+        );
+        await failingQueue.createSessionMetadata(session);
+        await failingQueue.add(
+          SessionReplayEvent(
+            sessionId: testSessionId,
+            distinctId: testDistinctId,
+            timestamp: DateTime.fromMillisecondsSinceEpoch(2000, isUtc: true),
+            type: EventType.interaction,
+            payload: InteractionPayload(interactionType: 7, x: 1, y: 2),
+          ),
+        );
+        final service = createService(eventQueue: failingQueue);
+
+        // WHEN / THEN
+        await expectLater(service.flushOneBatch(), completes);
+        await expectLater(service.flushOneBatch(), completes);
+      });
+    });
+
     group('dispose', () {
       test('stops auto flush timer', () async {
         // GIVEN
@@ -1224,4 +1269,26 @@ void main() {
 List<dynamic> decodeRequestEvents(http.Request request) {
   final decompressed = gzip.decode(request.bodyBytes);
   return jsonDecode(utf8.decode(decompressed)) as List<dynamic>;
+}
+
+/// Queue whose header reads fail the way IndexedDB does while its connection
+/// is closed. [failAfterFetches] oldest-header reads succeed first.
+class _FailingHeaderQueue extends InMemoryEventQueue {
+  _FailingHeaderQueue({this.failAfterFetches = 0});
+
+  final int failAfterFetches;
+  int _oldestHeaderFetches = 0;
+
+  @override
+  Future<QueuedEventHeader?> fetchNewestHeader() async {
+    throw StateError('IndexedDB connection is closed');
+  }
+
+  @override
+  Future<QueuedEventHeader?> fetchOldestHeader() {
+    if (_oldestHeaderFetches++ >= failAfterFetches) {
+      throw StateError('IndexedDB connection is closed');
+    }
+    return super.fetchOldestHeader();
+  }
 }

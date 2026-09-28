@@ -229,6 +229,11 @@ class UploadService {
           result == UploadResult.serverError) {
         _handleFailure();
       }
+    } catch (e) {
+      // The falling-behind check reads the queue outside _uploadBatch. A
+      // storage failure there must not escape into the periodic timer or the
+      // catch-up microtask as an unhandled error.
+      _logger.error('Periodic flush aborted by a storage error: $e');
     } finally {
       _isFlushing = false;
     }
@@ -337,6 +342,12 @@ class UploadService {
       final result = FlushResult();
       _flushCompleter?.complete(result);
       return result;
+    } catch (e) {
+      // Queue reads outside _uploadBatch (cutoff and progress headers) can
+      // throw, for example while an IndexedDB connection is closed. Flush is
+      // best-effort and must never surface storage failures to the host app.
+      _logger.error('Flush aborted by a storage error: $e');
+      return FlushResult();
     } finally {
       // Complete the completer if it hasn't been completed yet (exception case)
       if (_flushCompleter != null && !_flushCompleter!.isCompleted) {

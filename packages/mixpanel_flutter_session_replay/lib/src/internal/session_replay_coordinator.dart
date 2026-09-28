@@ -436,10 +436,22 @@ class SessionReplayCoordinator implements WidgetCoordinator {
     }
 
     // Call flush() to join the in-progress flush via the completer,
-    // then end the background task when it completes.
-    _uploadService.flush().whenComplete(() {
-      _backgroundTaskManager.endBackgroundTask();
-    });
+    // then end the background task when it completes. The error handler keeps
+    // a storage failure from surfacing as an unhandled asynchronous error.
+    _uploadService
+        .flush()
+        .catchError((Object e) {
+          _logger.error(
+            'Failed to flush events on background: $e',
+            null,
+            null,
+            'coordinator',
+          );
+          return FlushResult();
+        })
+        .whenComplete(() {
+          _backgroundTaskManager.endBackgroundTask();
+        });
   }
 
   /// Handle app returning to foreground
