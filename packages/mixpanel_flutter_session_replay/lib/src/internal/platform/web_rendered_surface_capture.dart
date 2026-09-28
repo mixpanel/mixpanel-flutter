@@ -17,6 +17,19 @@ class WebRenderedSurfaceCapture extends RenderedSurfaceCapture {
   final WebImageCompressor _encoder;
   WebImageCaptureTimings? lastCaptureTimings;
 
+  /// Browser frames to wait for a surface that has not been published yet.
+  /// Wasm can publish its visible canvas several frames after the first
+  /// Flutter frame on cold startup.
+  static const _coldStartFrames = 30;
+
+  /// Browser frames to wait for an existing canvas to match the boundary
+  /// size, covering a resize that has not reached the DOM yet.
+  static const _resizeFrames = 2;
+
+  /// Why the last capture was skipped, so the diagnostic is logged once per
+  /// distinct cause rather than once per frame while the layout persists.
+  String? _lastSkipReason;
+
   WebRenderedSurfaceCapture({
     required MixpanelLogger logger,
     double jpegQuality = 0.8,
@@ -31,19 +44,40 @@ class WebRenderedSurfaceCapture extends RenderedSurfaceCapture {
   Future<RenderedSurfaceAvailability> waitUntilRenderedSurfaceAvailable(
     Size logicalSize,
   ) async {
-    if (_matchingCanvases(logicalSize).length == 1) {
+    var lookup = _SurfaceLookup.of(logicalSize);
+    if (lookup.isReady) {
+      _lastSkipReason = null;
       return RenderedSurfaceAvailability.available;
     }
-    // Wasm can publish its visible canvas several browser frames after the
-    // first Flutter frame on cold startup. This is surface discovery only;
-    // ScreenshotCapturer establishes a fresh Flutter end-of-frame afterward.
-    for (var attempt = 0; attempt < 30; attempt++) {
-      await _nextAnimationFrame();
-      if (_matchingCanvases(logicalSize).length == 1) {
-        return RenderedSurfaceAvailability.availableAfterBrowserFrame;
+    // Only a surface that may still appear is worth waiting for. An ambiguous
+    // layout (several matching canvases, or several Flutter views) will not
+    // resolve by waiting, and polling it on every capture attempt would cost
+    // dozens of forced layouts per frame for as long as it persists. This is
+    // surface discovery only; ScreenshotCapturer establishes a fresh Flutter
+    // end-of-frame afterward.
+    if (!lookup.isAmbiguous) {
+      final attempts = lookup.hasNoCanvas ? _coldStartFrames : _resizeFrames;
+      for (var attempt = 0; attempt < attempts; attempt++) {
+        await _nextAnimationFrame();
+        lookup = _SurfaceLookup.of(logicalSize);
+        if (lookup.isReady) {
+          _lastSkipReason = null;
+          return RenderedSurfaceAvailability.availableAfterBrowserFrame;
+        }
+        if (lookup.isAmbiguous) break;
       }
     }
+    _reportSkip(lookup.describeSkip(logicalSize));
     return RenderedSurfaceAvailability.unavailable;
+  }
+
+  /// Logs a skipped capture once per distinct cause. Capture is attempted on
+  /// every scheduled frame, so repeating it would flood the console while a
+  /// platform view or second Flutter view stays on screen.
+  void _reportSkip(String reason) {
+    if (reason == _lastSkipReason) return;
+    _lastSkipReason = reason;
+    _logger.warning(reason);
   }
 
   static Future<void> _nextAnimationFrame() {
@@ -65,27 +99,13 @@ class WebRenderedSurfaceCapture extends RenderedSurfaceCapture {
     if (!isAvailable) return null;
 
     final captureWatch = Stopwatch()..start();
-    final matchingCanvases = _matchingCanvases(logicalSize);
+    final lookup = _SurfaceLookup.of(logicalSize);
     final surfaceLookup = captureWatch.elapsed;
-    if (matchingCanvases.length != 1) {
-      final available = _flutterCanvases()
-          .map((canvas) {
-            final bounds = canvas.getBoundingClientRect();
-            return '${bounds.width}x${bounds.height} CSS '
-                '(${canvas.width}x${canvas.height} backing)';
-          })
-          .join(', ');
-      _logger.warning(
-        matchingCanvases.isEmpty
-            ? 'Web capture skipped: no Flutter canvas matches '
-                  '${logicalSize.width}x${logicalSize.height}; available: '
-                  '${available.isEmpty ? 'none' : available}'
-            : 'Web capture skipped: ${matchingCanvases.length} canvases match '
-                  '${logicalSize.width}x${logicalSize.height}, so the source '
-                  'surface is ambiguous',
-      );
+    if (!lookup.isReady) {
+      _reportSkip(lookup.describeSkip(logicalSize));
       return null;
     }
+    final matchingCanvases = lookup.matches;
 
     web.ImageBitmap? imageBitmap;
     try {
@@ -134,9 +154,25 @@ class WebRenderedSurfaceCapture extends RenderedSurfaceCapture {
     }
   }
 
-  static List<web.HTMLCanvasElement> _matchingCanvases(Size logicalSize) {
+  static web.ShadowRoot? _shadowRoot(web.Element? host) =>
+      host?.getProperty('shadowRoot'.toJS);
+
+  @override
+  Future<void> dispose() => _encoder.dispose();
+}
+
+/// One inspection of the DOM for Flutter's rendering surface.
+class _SurfaceLookup {
+  const _SurfaceLookup._({
+    required this.canvases,
+    required this.matches,
+    required this.hasMultipleViews,
+  });
+
+  factory _SurfaceLookup.of(Size logicalSize) {
     const tolerance = 2.0;
-    return _flutterCanvases()
+    final (canvases, hasMultipleViews) = _flutterCanvases();
+    final matches = canvases
         .where((canvas) {
           final bounds = canvas.getBoundingClientRect();
           return (bounds.width - logicalSize.width).abs() <= tolerance &&
@@ -145,15 +181,59 @@ class WebRenderedSurfaceCapture extends RenderedSurfaceCapture {
               bounds.height > 0;
         })
         .toList(growable: false);
+    return _SurfaceLookup._(
+      canvases: canvases,
+      matches: matches,
+      hasMultipleViews: hasMultipleViews,
+    );
   }
 
-  /// Returns only canvases contained by a known Flutter engine surface host.
+  /// Every canvas under a Flutter engine surface host.
+  final List<web.HTMLCanvasElement> canvases;
+
+  /// The canvases whose CSS size matches the capture boundary.
+  final List<web.HTMLCanvasElement> matches;
+
+  /// More than one Flutter view or glass pane is mounted.
+  final bool hasMultipleViews;
+
+  bool get isReady => !hasMultipleViews && matches.length == 1;
+
+  /// Waiting cannot resolve this layout.
+  bool get isAmbiguous => hasMultipleViews || matches.length > 1;
+
+  /// No Flutter canvas has been published yet.
+  bool get hasNoCanvas => canvases.isEmpty;
+
+  String describeSkip(Size logicalSize) {
+    final size = '${logicalSize.width}x${logicalSize.height}';
+    if (hasMultipleViews) {
+      return 'Web capture skipped: more than one Flutter view is mounted, so '
+          'the source surface is ambiguous';
+    }
+    if (matches.length > 1) {
+      return 'Web capture skipped: ${matches.length} canvases match $size, so '
+          'the source surface is ambiguous';
+    }
+    final available = canvases
+        .map((canvas) {
+          final bounds = canvas.getBoundingClientRect();
+          return '${bounds.width}x${bounds.height} CSS '
+              '(${canvas.width}x${canvas.height} backing)';
+        })
+        .join(', ');
+    return 'Web capture skipped: no Flutter canvas matches $size; available: '
+        '${available.isEmpty ? 'none' : available}';
+  }
+
+  /// Returns the canvases contained by a known Flutter engine surface host,
+  /// and whether more than one Flutter view or glass pane is mounted.
   ///
   /// Restricting lookup to these small subtrees avoids both capturing an
   /// unrelated page canvas and recursively walking the full document. A new
   /// renderer structure therefore fails closed until its ownership can be
   /// identified explicitly.
-  static List<web.HTMLCanvasElement> _flutterCanvases() {
+  static (List<web.HTMLCanvasElement>, bool) _flutterCanvases() {
     final canvases = <web.HTMLCanvasElement>[];
     var flutterViewCount = 0;
     var glassPaneCount = 0;
@@ -167,28 +247,23 @@ class WebRenderedSurfaceCapture extends RenderedSurfaceCapture {
       }
     }
 
-    final hosts = web.document.querySelectorAll(_engineSurfaceHostSelector);
+    final hosts = web.document.querySelectorAll(
+      WebRenderedSurfaceCapture._engineSurfaceHostSelector,
+    );
     for (var index = 0; index < hosts.length; index++) {
       final host = hosts.item(index) as web.Element?;
       if (host != null) {
         if (host.localName == 'flutter-view') flutterViewCount++;
         if (host.localName == 'flt-glass-pane') glassPaneCount++;
         addCanvases(host.querySelectorAll('canvas'));
-        final shadowRoot = _shadowRoot(host);
+        final shadowRoot = WebRenderedSurfaceCapture._shadowRoot(host);
         if (shadowRoot != null) {
           addCanvases(shadowRoot.querySelectorAll('canvas'));
         }
       }
     }
-    if (flutterViewCount > 1 || glassPaneCount > 1) return const [];
-    return canvases;
+    return (canvases, flutterViewCount > 1 || glassPaneCount > 1);
   }
-
-  static web.ShadowRoot? _shadowRoot(web.Element? host) =>
-      host?.getProperty('shadowRoot'.toJS);
-
-  @override
-  Future<void> dispose() => _encoder.dispose();
 }
 
 class _WebCapturedSurface implements CapturedSurface {

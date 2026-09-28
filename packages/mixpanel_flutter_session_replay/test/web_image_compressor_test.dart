@@ -2,12 +2,14 @@
 library;
 
 import 'dart:js_interop';
+import 'package:mixpanel_flutter_session_replay/src/internal/capture/rendered_surface_capture.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/platform/web_rendered_surface_capture.dart';
 import 'dart:ui' show Rect, Size;
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
+import 'package:logging/logging.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/logger.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/platform/web_image_compressor.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/configuration.dart';
@@ -336,6 +338,97 @@ void main() {
       expect(compressor.isAvailable, isTrue);
     },
   );
+
+  test('an ambiguous surface fails fast instead of polling frames', () async {
+    // GIVEN two Flutter views, which no amount of waiting can disambiguate
+    final firstView = web.document.createElement('flutter-view');
+    final secondView = web.document.createElement('flutter-view');
+    web.document.body!
+      ..appendChild(firstView)
+      ..appendChild(secondView);
+    addTearDown(() => firstView.remove());
+    addTearDown(() => secondView.remove());
+    final compressor = WebRenderedSurfaceCapture(
+      logger: MixpanelLogger(LogLevel.none),
+    );
+    addTearDown(compressor.dispose);
+    await compressor.initialize();
+
+    // WHEN surface discovery runs
+    final watch = Stopwatch()..start();
+    final availability = await compressor.waitUntilRenderedSurfaceAvailable(
+      const Size(59, 41),
+    );
+
+    // THEN it gives up immediately rather than spending ~30 browser frames
+    // of forced layout on every capture attempt
+    expect(availability, RenderedSurfaceAvailability.unavailable);
+    expect(watch.elapsedMilliseconds, lessThan(200));
+  });
+
+  test('two same-sized canvases fail fast', () async {
+    final first = _appendCanvas(
+      logicalWidth: 59,
+      logicalHeight: 41,
+      backingWidth: 59,
+      backingHeight: 41,
+    );
+    final second = _appendCanvas(
+      logicalWidth: 59,
+      logicalHeight: 41,
+      backingWidth: 59,
+      backingHeight: 41,
+    );
+    addTearDown(() => _removeCanvasHost(first));
+    addTearDown(() => _removeCanvasHost(second));
+    final compressor = WebRenderedSurfaceCapture(
+      logger: MixpanelLogger(LogLevel.none),
+    );
+    addTearDown(compressor.dispose);
+    await compressor.initialize();
+
+    final watch = Stopwatch()..start();
+    final availability = await compressor.waitUntilRenderedSurfaceAvailable(
+      const Size(59, 41),
+    );
+
+    expect(availability, RenderedSurfaceAvailability.unavailable);
+    expect(watch.elapsedMilliseconds, lessThan(200));
+  });
+
+  test('a skipped capture is logged once per cause', () async {
+    // GIVEN a warning-level logger whose records are observable
+    final records = <LogRecord>[];
+    final subscription = Logger(
+      'mixpanel.session_replay',
+    ).onRecord.listen(records.add);
+    addTearDown(subscription.cancel);
+    final firstView = web.document.createElement('flutter-view');
+    final secondView = web.document.createElement('flutter-view');
+    web.document.body!
+      ..appendChild(firstView)
+      ..appendChild(secondView);
+    addTearDown(() => firstView.remove());
+    addTearDown(() => secondView.remove());
+    final compressor = WebRenderedSurfaceCapture(
+      logger: MixpanelLogger(LogLevel.warning),
+    );
+    addTearDown(compressor.dispose);
+    await compressor.initialize();
+
+    // WHEN several capture attempts hit the same ambiguous layout
+    await compressor.waitUntilRenderedSurfaceAvailable(const Size(59, 41));
+    await compressor.waitUntilRenderedSurfaceAvailable(const Size(59, 41));
+    await compressor.waitUntilRenderedSurfaceAvailable(const Size(59, 41));
+
+    // THEN the developer sees one warning, not one per frame
+    final skips = records.where(
+      (record) =>
+          record.level == Level.WARNING &&
+          record.message.contains('Web capture skipped'),
+    );
+    expect(skips, hasLength(1));
+  });
 
   test('rendered surface capture rejects multiple Flutter views', () async {
     final firstView = web.document.createElement('flutter-view');
