@@ -5,16 +5,14 @@ import 'package:meta/meta.dart';
 import 'internal/platform/platform_info.dart';
 import 'internal/platform/platform_init.dart';
 import 'models/debug_overlay_colors.dart';
-import 'models/configuration.dart'
-    show ReplayBackgroundBehavior, ReplayBackgroundPauseBehavior;
 import 'models/masking_directive.dart';
 import 'models/results.dart';
 import 'session_replay_options.dart';
 import 'internal/endpoints.dart';
 import 'internal/event_recorder.dart';
 import 'internal/storage/event_queue_interface.dart';
+import 'internal/options_validation.dart';
 import 'internal/session/idle_timeout_timer.dart';
-import 'internal/session/recording_limits.dart';
 import 'internal/session/session_manager.dart';
 import 'internal/upload/upload_service.dart';
 import 'internal/upload/payload_serializer.dart';
@@ -97,23 +95,6 @@ class MixpanelSessionReplay {
     );
   }
 
-  static ReplayBackgroundBehavior _capBackgroundBehavior(
-    ReplayBackgroundBehavior behavior, {
-    required String name,
-    required MixpanelLogger logger,
-  }) => switch (behavior) {
-    ReplayBackgroundPauseBehavior(:final idleTimeout)
-        when idleTimeout > maxRecordingDuration =>
-      ReplayBackgroundBehavior.pause(
-        idleTimeout: capRecordingDuration(
-          idleTimeout,
-          name: name,
-          logger: logger,
-        ),
-      ),
-    _ => behavior,
-  };
-
   /// Internal initialization with dependency injection for testing
   ///
   /// **INTERNAL USE ONLY** - This method is NOT part of the public API and should
@@ -149,51 +130,8 @@ class MixpanelSessionReplay {
 
     try {
       logger.debug('Validating configuration...');
-      // Validate configuration parameters
       try {
-        if (token.isEmpty) {
-          throw ArgumentError('token cannot be empty');
-        }
-
-        if (options.autoRecordSessionsPercent < 0 ||
-            options.autoRecordSessionsPercent > 100) {
-          throw ArgumentError(
-            'autoRecordSessionsPercent must be between 0 and 100',
-          );
-        }
-
-        if (options.storageQuotaMB <= 0) {
-          throw ArgumentError('storageQuotaMB must be positive');
-        }
-
-        final webOptions = options.platformOptions.web;
-        if (webOptions.idleTimeout < Duration.zero) {
-          throw ArgumentError('web idleTimeout cannot be negative');
-        }
-
-        if (options.platformOptions.mobile.onBackground
-            case ReplayBackgroundPauseBehavior(:final idleTimeout)) {
-          if (idleTimeout <= Duration.zero) {
-            throw ArgumentError(
-              'mobile background pause idleTimeout must be positive',
-            );
-          }
-        }
-
-        if (webOptions.onBackground case ReplayBackgroundPauseBehavior(
-          :final idleTimeout,
-        )) {
-          if (idleTimeout <= Duration.zero) {
-            throw ArgumentError(
-              'web background pause idleTimeout must be positive',
-            );
-          }
-        }
-
-        if (webOptions.maxSessionDuration <= Duration.zero) {
-          throw ArgumentError('web maxSessionDuration must be positive');
-        }
-
+        validateOptions(token, options);
         logger.debug('Configuration valid');
       } catch (e) {
         logger.error('Configuration invalid: $e');
@@ -260,32 +198,17 @@ class MixpanelSessionReplay {
               logger: logger,
             )
           : null;
+      final timings = resolvePlatformTimings(options.platformOptions, logger);
       final platformResult = await platformInit(
         token: token,
         storageQuotaMB: options.storageQuotaMB,
         directive: MaskingDirective(autoMaskTypes: options.autoMaskedViews),
         debugOverlayEnabled: options.debugOptions?.overlayColors != null,
         mobileWifiOnly: options.platformOptions.mobile.wifiOnly,
-        webIdleTimeout: capRecordingDuration(
-          options.platformOptions.web.idleTimeout,
-          name: 'web idleTimeout',
-          logger: logger,
-        ),
-        webMaxSessionDuration: capRecordingDuration(
-          options.platformOptions.web.maxSessionDuration,
-          name: 'web maxSessionDuration',
-          logger: logger,
-        ),
-        mobileBackgroundBehavior: _capBackgroundBehavior(
-          options.platformOptions.mobile.onBackground,
-          name: 'mobile background pause idleTimeout',
-          logger: logger,
-        ),
-        webBackgroundBehavior: _capBackgroundBehavior(
-          options.platformOptions.web.onBackground,
-          name: 'web background pause idleTimeout',
-          logger: logger,
-        ),
+        webIdleTimeout: timings.webIdleTimeout,
+        webMaxSessionDuration: timings.webMaxSessionDuration,
+        mobileBackgroundBehavior: timings.mobileBackgroundBehavior,
+        webBackgroundBehavior: timings.webBackgroundBehavior,
         wireframeEmitter: wireframeEmitter,
         useAccessibilityLabelFallback:
             wireframesOptions?.useAccessibilityLabelFallback ?? false,
