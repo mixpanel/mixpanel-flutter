@@ -293,6 +293,10 @@ class SessionReplayCoordinator implements WidgetCoordinator {
         :final distinctId,
         :final wireframes,
       ):
+        // The frame is accepted: only now may its wireframe become the dedup
+        // baseline, so a discarded frame cannot suppress the next one.
+        _screenshotCapturer.commitWireframeDedup();
+
         // Update mask regions for debug overlay (only if overlay is enabled)
         // Diff check prevents feedback loop: overlay rebuild → new frame → capture → repeat
         // dispose() disposes this notifier, and writing to a disposed one asserts

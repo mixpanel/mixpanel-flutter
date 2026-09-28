@@ -92,6 +92,10 @@ class ScreenshotCapturer {
   /// the capturer. No-op when wireframes are off. See [WireframeEmitter.resetDedup].
   void resetWireframeDedup() => _wireframeEmitter?.resetDedup();
 
+  /// Marks the wireframe of the most recent accepted frame as the dedup
+  /// baseline. See [WireframeEmitter.commitPending].
+  void commitWireframeDedup() => _wireframeEmitter?.commitPending();
+
   /// Records the server's verdict on wireframe capture.
   ///
   /// Called by the coordinator once `/settings` answers — including the

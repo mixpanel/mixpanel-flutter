@@ -46,6 +46,15 @@ class WireframeEmitter {
   /// session must not suppress the current session's opening wireframe.
   String? _lastSessionId;
 
+  /// Hash of the most recent [emit] that has not been committed yet.
+  ///
+  /// A frame can still be discarded after its wireframe was built, for
+  /// example when it crossed a pause or stop while in flight. Only a frame the
+  /// coordinator accepts may influence dedup, so [emit] records the hash here
+  /// and [commitPending] promotes it once the frame is queued.
+  int? _pendingPayloadHash;
+  String? _pendingSessionId;
+
   /// Clears [_lastPayloadHash] so the next [emit] publishes even if the render is
   /// identical.
   ///
@@ -61,6 +70,19 @@ class WireframeEmitter {
   void resetDedup() {
     _lastPayloadHash = null;
     _lastSessionId = null;
+    _pendingPayloadHash = null;
+    _pendingSessionId = null;
+  }
+
+  /// Makes the last [emit] the dedup baseline. Called when the coordinator
+  /// accepts the frame; a discarded frame is simply never committed, so the
+  /// next identical accepted frame still ships its wireframe.
+  void commitPending() {
+    if (_pendingPayloadHash == null) return;
+    _lastPayloadHash = _pendingPayloadHash;
+    _lastSessionId = _pendingSessionId;
+    _pendingPayloadHash = null;
+    _pendingSessionId = null;
   }
 
   /// Process raw elements through the pipeline. Returns null *only* when the
@@ -100,8 +122,8 @@ class WireframeEmitter {
     if (_lastSessionId == sessionId && _lastPayloadHash == payloadHash) {
       return null;
     }
-    _lastSessionId = sessionId;
-    _lastPayloadHash = payloadHash;
+    _pendingSessionId = sessionId;
+    _pendingPayloadHash = payloadHash;
 
     _fireDebugCallback(payload, timestamp);
     return payload;

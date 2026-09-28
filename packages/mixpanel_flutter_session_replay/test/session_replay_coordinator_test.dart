@@ -227,6 +227,7 @@ void main() {
           isNotNull,
           reason: 'precondition: first emit ships',
         );
+        emitter.commitPending(); // the previous session accepted that frame
         expect(
           emitFrame(),
           isNull,

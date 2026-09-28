@@ -117,6 +117,7 @@ void main() {
         viewport: defaultViewport,
         timestamp: defaultTimestamp,
       );
+      emitter.commitPending(); // the frame was accepted
       final second = emitter.emit(
         rawElements: const [],
         maskRegions: const [],
@@ -732,6 +733,7 @@ void main() {
         viewport: defaultViewport,
         timestamp: defaultTimestamp,
       );
+      emitter.commitPending(); // the frame was accepted
       final second = emitter.emit(
         rawElements: input,
         maskRegions: const [],
@@ -741,6 +743,58 @@ void main() {
 
       // THEN
       expect(first, isNotNull);
+      expect(second, isNull);
+    });
+
+    test('an uncommitted emit does not suppress the next identical frame', () {
+      // GIVEN a frame whose wireframe was built but which the coordinator then
+      // discarded, for example because it crossed a pause while in flight
+      final emitter = WireframeEmitter(
+        sensitiveRules: const [],
+        debugEmitter: null,
+        logger: logger,
+      );
+      final discarded = emitter.emit(
+        rawElements: [el(text: 'Hello')],
+        maskRegions: const [],
+        viewport: defaultViewport,
+        timestamp: defaultTimestamp,
+      );
+
+      // WHEN the next accepted frame shows the same screen
+      final accepted = emitter.emit(
+        rawElements: [el(text: 'Hello')],
+        maskRegions: const [],
+        viewport: defaultViewport,
+        timestamp: defaultTimestamp,
+      );
+
+      // THEN it still ships a wireframe; only committed frames dedup
+      expect(discarded, isNotNull);
+      expect(accepted, isNotNull);
+    });
+
+    test('commitPending makes the accepted frame the dedup baseline', () {
+      final emitter = WireframeEmitter(
+        sensitiveRules: const [],
+        debugEmitter: null,
+        logger: logger,
+      );
+      emitter.emit(
+        rawElements: [el(text: 'Hello')],
+        maskRegions: const [],
+        viewport: defaultViewport,
+        timestamp: defaultTimestamp,
+      );
+      emitter.commitPending();
+
+      final second = emitter.emit(
+        rawElements: [el(text: 'Hello')],
+        maskRegions: const [],
+        viewport: defaultViewport,
+        timestamp: defaultTimestamp,
+      );
+
       expect(second, isNull);
     });
 
@@ -895,6 +949,7 @@ void main() {
         viewport: defaultViewport,
         timestamp: defaultTimestamp,
       );
+      emitter.commitPending(); // the frame was accepted
       final second = emitter.emit(
         rawElements: input,
         maskRegions: [
@@ -957,6 +1012,7 @@ void main() {
         viewport: defaultViewport,
         timestamp: defaultTimestamp,
       );
+      emitter.commitPending(); // the frame was accepted
       final second = emitter.emit(
         rawElements: [el(text: null, maskDecision: MaskDecision.auto)],
         maskRegions: const [],
@@ -1004,13 +1060,14 @@ void main() {
         logger: logger,
       );
 
-      // WHEN — same input twice
+      // WHEN — same input twice, the first accepted
       emitter.emit(
         rawElements: [el()],
         maskRegions: const [],
         viewport: defaultViewport,
         timestamp: defaultTimestamp,
       );
+      emitter.commitPending();
       emitter.emit(
         rawElements: [el()],
         maskRegions: const [],
