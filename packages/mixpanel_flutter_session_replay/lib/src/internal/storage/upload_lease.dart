@@ -6,8 +6,9 @@ import '../../models/session_event.dart';
 /// Leases are per session, like mixpanel-js's per-replay lock. A tab only
 /// uploads sessions it recorded and sessions no live tab owns, so contention
 /// arises only when several tabs drain the same expired session; the lease
-/// ensures one runtime at a time reads, uploads, removes, and advances the
-/// sequence number for that session.
+/// keeps one runtime at a time uploading that session. As with the mixpanel-js
+/// lock timeout, a tab frozen past the lease TTL may repeat a batch another
+/// tab has since sent; the sequence number never moves backwards.
 abstract interface class UploadLease {
   /// Identity this runtime holds the lease under.
   ///
@@ -35,20 +36,4 @@ abstract interface class AtomicUploadCommit {
     required String sessionId,
     required int sequenceNumber,
   });
-}
-
-/// Thrown by [AtomicUploadCommit.commitUploadedBatch] when another runtime
-/// holds an unexpired upload lease at commit time.
-///
-/// The batch stays queued and the sequence number is untouched; the current
-/// lease holder uploads it. A TTL lease cannot rule out the acknowledged POST
-/// having been a duplicate, but refusing the commit keeps the sequence from
-/// advancing past a number another tab may still be about to use.
-class UploadLeaseLostException implements Exception {
-  const UploadLeaseLostException(this.message);
-
-  final String message;
-
-  @override
-  String toString() => message;
 }

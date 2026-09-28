@@ -7,7 +7,6 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/storage/indexed_db_event_queue.dart';
-import 'package:mixpanel_flutter_session_replay/src/internal/storage/upload_lease.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/session.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/session_event.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/configuration.dart';
@@ -760,63 +759,6 @@ void main() {
         expect(await storage.getLastSequenceNumber(sessionId), 4);
       },
     );
-
-    test('a commit is refused while another tab holds the lease', () async {
-      // GIVEN a batch selected by this tab, and a second tab that took over
-      // the upload lease after this tab's lease lapsed
-      const sessionId = 'lost-lease-session';
-      await storage.createSessionMetadata(
-        Session(
-          id: sessionId,
-          startTime: DateTime.utc(2025),
-          status: SessionStatus.active,
-        ),
-      );
-      await storage.add(
-        SessionReplayEvent(
-          sessionId: sessionId,
-          distinctId: 'user-1',
-          timestamp: DateTime.utc(2025),
-          type: EventType.interaction,
-          payload: InteractionPayload(interactionType: 1, x: 10, y: 20),
-        ),
-      );
-      final batch = await storage.fetchBatch(
-        sessionId: sessionId,
-        distinctId: 'user-1',
-        maxBytes: 1024,
-        maxCount: 10,
-      );
-      final secondTab = IndexedDbEventQueue(
-        token: token,
-        logger: MixpanelLogger(LogLevel.none),
-      );
-      await secondTab.initialize();
-      addTearDown(secondTab.dispose);
-      expect(
-        await secondTab.acquireUploadLease(
-          ownerId: secondTab.uploadLeaseOwnerId,
-          sessionId: sessionId,
-          ttl: const Duration(minutes: 1),
-        ),
-        isTrue,
-      );
-
-      // WHEN this tab tries to commit its acknowledged batch
-      await expectLater(
-        storage.commitUploadedBatch(
-          events: batch,
-          sessionId: sessionId,
-          sequenceNumber: 0,
-        ),
-        throwsA(isA<UploadLeaseLostException>()),
-      );
-
-      // THEN the batch stays queued for the lease holder and the sequence is
-      // untouched
-      expect(await storage.fetchOldest(), isNotNull);
-      expect(await storage.getLastSequenceNumber(sessionId), -1);
-    });
 
     test('a stale commit never moves the sequence number backwards', () async {
       // GIVEN a session another tab already advanced to sequence 5

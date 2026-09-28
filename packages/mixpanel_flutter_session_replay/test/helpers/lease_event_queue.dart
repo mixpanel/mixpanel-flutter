@@ -20,12 +20,6 @@ class LeaseEventQueue extends InMemoryEventQueue
   /// Results returned by successive acquire calls; `true` once exhausted.
   final List<bool> acquireResults = [];
 
-  /// Invoked on every acquire with the 1-based call count, before the result
-  /// is returned. Lets a test act as another tab between lease renewals.
-  void Function(int acquireCount)? onAcquire;
-
-  /// When true, commits behave as if another tab took the lease meanwhile.
-  bool commitLoses = false;
   int commitCount = 0;
 
   @override
@@ -36,7 +30,6 @@ class LeaseEventQueue extends InMemoryEventQueue
   }) async {
     acquireOwnerIds.add(ownerId);
     acquireSessionIds.add(sessionId);
-    onAcquire?.call(acquireOwnerIds.length);
     return acquireResults.isEmpty ? true : acquireResults.removeAt(0);
   }
 
@@ -56,9 +49,6 @@ class LeaseEventQueue extends InMemoryEventQueue
     required int sequenceNumber,
   }) async {
     commitCount++;
-    if (commitLoses) {
-      throw const UploadLeaseLostException('lease held by another tab');
-    }
     await remove(events);
     await updateSequenceNumber(sessionId, sequenceNumber);
   }

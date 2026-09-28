@@ -374,6 +374,8 @@ class UploadService {
     if (queue is! UploadLease) {
       return _uploadNextBatch(oldestEvent);
     }
+    // Per-session lease, as mixpanel-js locks per replay. Contention only
+    // arises when several tabs drain the same expired session.
     final uploadLease = queue as UploadLease;
 
     var acquired = false;
@@ -389,7 +391,7 @@ class UploadService {
         );
         return UploadResult.busy;
       }
-      return await _uploadNextBatch(oldestEvent, lease: uploadLease);
+      return await _uploadNextBatch(oldestEvent);
     } catch (e) {
       _logger.error('Failed to coordinate replay upload: $e');
       return UploadResult.networkError;
@@ -407,12 +409,8 @@ class UploadService {
     }
   }
 
-  /// Uploads the batch starting at [oldestEvent]. [lease] is the per-session
-  /// lease this runtime holds for it, or null for single-runtime storage.
-  Future<UploadResult> _uploadNextBatch(
-    QueuedEventHeader oldestEvent, {
-    UploadLease? lease,
-  }) async {
+  /// Uploads the batch starting at [oldestEvent].
+  Future<UploadResult> _uploadNextBatch(QueuedEventHeader oldestEvent) async {
     try {
       final sessionId = oldestEvent.sessionId;
       final distinctId = oldestEvent.distinctId;
@@ -486,32 +484,6 @@ class UploadService {
       _logger.debug('Headers: ${serialized.headers.keys.join(", ")}');
       _logger.debug('Compressed: ${serialized.isCompressed}');
 
-      // A tab frozen past its lease TTL can resume here long after another
-      // tab consumed this batch. Renew the lease and confirm the batch is
-      // still the head of the queue before posting, so a stale batch is left
-      // alone instead of being sent twice under a new sequence number.
-      if (lease != null) {
-        final renewed = await lease.acquireUploadLease(
-          ownerId: lease.uploadLeaseOwnerId,
-          sessionId: sessionId,
-          ttl: _uploadLeaseTtl,
-        );
-        if (!renewed) {
-          _logger.warning(
-            'Upload lease lost before posting; batch left queued',
-          );
-          return UploadResult.busy;
-        }
-        final head = await eventQueue.fetchOldestHeader();
-        if (head?.id != events.first.id) {
-          _logger.warning(
-            'Queued batch changed while preparing the upload; another tab '
-            'consumed it',
-          );
-          return UploadResult.busy;
-        }
-      }
-
       // Send request
       final response = await _httpClient
           .post(uri, headers: serialized.headers, body: serialized.body)
@@ -524,16 +496,11 @@ class UploadService {
         final queue = eventQueue;
         if (queue is AtomicUploadCommit) {
           final atomicQueue = queue as AtomicUploadCommit;
-          try {
-            await atomicQueue.commitUploadedBatch(
-              events: events,
-              sessionId: session.id,
-              sequenceNumber: sequenceNumber,
-            );
-          } on UploadLeaseLostException catch (e) {
-            _logger.warning('$e');
-            return UploadResult.busy;
-          }
+          await atomicQueue.commitUploadedBatch(
+            events: events,
+            sessionId: session.id,
+            sequenceNumber: sequenceNumber,
+          );
           _logger.debug(
             'Atomically removed ${events.length} events and persisted '
             'sequence $sequenceNumber',
