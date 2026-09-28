@@ -2,7 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:image/image.dart' as img;
 
-import 'screenshot_capturer.dart';
+import 'capture/image_compressor.dart';
 
 /// Native image compressor using platform JPEG encoders.
 ///

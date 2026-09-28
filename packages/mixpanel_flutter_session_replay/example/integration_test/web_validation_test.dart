@@ -15,7 +15,7 @@ import 'package:image/image.dart' as img;
 import 'package:integration_test/integration_test.dart';
 import 'package:mixpanel_flutter_session_replay/mixpanel_flutter_session_replay.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/logger.dart';
-import 'package:mixpanel_flutter_session_replay/src/internal/platform/web_image_compressor.dart';
+import 'package:mixpanel_flutter_session_replay/src/internal/platform/web_rendered_surface_capture.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/platform/web_image_worker.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/screenshot_capturer.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/session/session_manager.dart';
@@ -63,7 +63,7 @@ void main() {
       await queue.removeAll();
       addTearDown(queue.dispose);
 
-      final compressor = WebImageCompressor(
+      final compressor = WebRenderedSurfaceCapture(
         logger: MixpanelLogger(LogLevel.none),
       );
       await compressor.initialize();
@@ -72,7 +72,7 @@ void main() {
         directive: MaskingDirective(autoMaskTypes: const {AutoMaskedView.text}),
         logger: MixpanelLogger(LogLevel.none),
         debugOverlayEnabled: false,
-        compressor: compressor,
+        surfaceCapture: compressor,
       );
 
       final boundary = await _pumpScene(tester, complexity: 48);
@@ -240,7 +240,7 @@ void main() {
   testWidgets('masks real pixels during simultaneous animation and scrolling', (
     tester,
   ) async {
-    final compressor = WebImageCompressor(
+    final compressor = WebRenderedSurfaceCapture(
       logger: MixpanelLogger(LogLevel.none),
     );
     await compressor.initialize();
@@ -249,7 +249,7 @@ void main() {
       directive: MaskingDirective(autoMaskTypes: const {}),
       logger: MixpanelLogger(LogLevel.none),
       debugOverlayEnabled: true,
-      compressor: compressor,
+      surfaceCapture: compressor,
     );
 
     final boundaryKey = GlobalKey();
@@ -344,7 +344,7 @@ void main() {
   testWidgets('capture keeps browser frame delivery within budget', (
     tester,
   ) async {
-    final compressor = _BenchmarkWebImageCompressor(
+    final compressor = _BenchmarkWebRenderedSurfaceCapture(
       logger: MixpanelLogger(LogLevel.none),
       capturePixelRatioLimit: _benchmarkCapturePixelRatioLimit,
     );
@@ -356,7 +356,7 @@ void main() {
       ),
       logger: MixpanelLogger(LogLevel.none),
       debugOverlayEnabled: false,
-      compressor: compressor,
+      surfaceCapture: compressor,
     );
 
     final results = <String, Object?>{
@@ -441,8 +441,8 @@ void main() {
   });
 }
 
-class _BenchmarkWebImageCompressor extends WebImageCompressor {
-  _BenchmarkWebImageCompressor({
+class _BenchmarkWebRenderedSurfaceCapture extends WebRenderedSurfaceCapture {
+  _BenchmarkWebRenderedSurfaceCapture({
     required super.logger,
     required this.capturePixelRatioLimit,
   });
@@ -584,7 +584,7 @@ Future<_FrameMetrics> _measureWorkerOnly({
 Future<_FrameMetrics> _measureCaptures(
   WidgetTester tester,
   ScreenshotCapturer capturer,
-  WebImageCompressor compressor,
+  WebRenderedSurfaceCapture compressor,
   _BoundaryHandle boundary, {
   required double baselineMaxGapMs,
 }) async {

@@ -366,7 +366,11 @@ class MixpanelFlutterPlugin {
   void handleRegisterSuperProperties(MethodCall call) {
     Map<Object?, Object?> args = call.arguments as Map<Object?, Object?>;
     dynamic properties = args['properties'];
-    register(safeJsify(properties));
+    if (args['persistent'] == false) {
+      register(safeJsify(properties), safeJsify({'persistent': false}));
+    } else {
+      register(safeJsify(properties));
+    }
   }
 
   void handleRegisterSuperPropertiesOnce(MethodCall call) {
@@ -378,7 +382,11 @@ class MixpanelFlutterPlugin {
   void handleUnregisterSuperProperty(MethodCall call) {
     Map<Object?, Object?> args = call.arguments as Map<Object?, Object?>;
     String propertyName = args['propertyName'] as String;
-    unregister(propertyName);
+    if (args['persistent'] == false) {
+      unregister(propertyName, safeJsify({'persistent': false}));
+    } else {
+      unregister(propertyName);
+    }
   }
 
   void handleTimeEvent(MethodCall call) {

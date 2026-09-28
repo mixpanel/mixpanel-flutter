@@ -12,7 +12,7 @@ import '../session/web_session_resume.dart';
 import '../screenshot_capturer.dart';
 import 'gzip_compress.dart';
 import 'platform_init_types.dart';
-import 'web_image_compressor.dart';
+import 'web_rendered_surface_capture.dart';
 
 const _webStorageRetention = Duration(days: 5);
 
@@ -95,9 +95,9 @@ Future<PlatformInitResult> platformInit({
     logger.debug('No resumable session; preserving queued upload backlog');
   }
 
-  final imageCompressor = WebImageCompressor(logger: logger);
+  final surfaceCapture = WebRenderedSurfaceCapture(logger: logger);
   try {
-    await imageCompressor.initialize();
+    await surfaceCapture.initialize();
   } catch (error) {
     await queue.dispose();
     throw PlatformCapabilityException(error.toString());
@@ -107,21 +107,27 @@ Future<PlatformInitResult> platformInit({
     directive: directive,
     logger: logger,
     debugOverlayEnabled: debugOverlayEnabled,
-    compressor: imageCompressor,
+    surfaceCapture: surfaceCapture,
     wireframeEmitter: wireframeEmitter,
     useAccessibilityLabelFallback: useAccessibilityLabelFallback,
   );
 
   // Create persist callback for debounced idle expiry writes
-  Future<void> Function(String, int, int)? persistIdleExpiry;
+  Future<void> Function(String, int, int, int?)? persistIdleExpiry;
   persistIdleExpiry =
-      (String sessionId, int idleExpiresMs, int maxExpiresMs) async {
+      (
+        String sessionId,
+        int idleExpiresMs,
+        int maxExpiresMs,
+        int? backgroundExpiresMs,
+      ) async {
         try {
           await updateWebSessionExpiry(
             queue: queue,
             sessionId: sessionId,
             idleExpiresMs: idleExpiresMs,
             maxExpiresMs: maxExpiresMs,
+            backgroundExpiresMs: backgroundExpiresMs,
             logger: logger,
           );
         } catch (e) {
@@ -135,8 +141,7 @@ Future<PlatformInitResult> platformInit({
     wifiOnly: false,
     idleTimeout: web.idleTimeout,
     maxSessionDuration: web.maxSessionDuration,
-    resumableSession: resumeInfo?.session,
-    resumableIdleExpiry: resumeInfo?.idleExpiry,
+    resumableSession: resumeInfo,
     persistIdleExpiry: persistIdleExpiry,
     backgroundBehavior: web.onBackground,
   );

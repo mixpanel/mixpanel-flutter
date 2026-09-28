@@ -51,7 +51,7 @@ void main() {
   });
 
   test('draws regions outside any canvas the capture could select', () {
-    // GIVEN - WebImageCompressor skips the frame when more than one canvas
+    // GIVEN - WebRenderedSurfaceCapture skips the frame when more than one canvas
     // under a Flutter engine host matches the viewport
     // WHEN
     draw([MaskRegionInfo(const Rect.fromLTWH(0, 0, 10, 10), MaskSource.auto)]);

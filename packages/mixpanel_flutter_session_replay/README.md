@@ -287,12 +287,25 @@ When `remoteSettingsMode` is `strict` or `fallback`, valid remote
 `WebOptions` durations. Values are milliseconds. Missing or invalid fields keep
 the app-provided values; native replay durations are unaffected.
 
+After a web replay ends due to inactivity, a pointer press, wheel scroll,
+trackpad gesture, or keyboard input triggers a fresh sampling decision to start
+a new replay. Keyboard activity detection does not record the keys or typed text.
+
 `ReplayBackgroundBehavior.pause(idleTimeout: ...)` flushes pending replay data,
 unregisters `$mp_replay_id`, and resumes the same replay when the app or page
 returns before the idle timeout. After that duration, returning starts a newly
-sampled replay. `ReplayBackgroundBehavior.stop` ends the replay immediately.
+sampled replay. On web, the background deadline survives page reloads and
+is enforced even when activity idle timeout is disabled. Returning before the
+deadline clears it without extending the activity idle window.
+`ReplayBackgroundBehavior.stop` ends the replay immediately.
 
 #### Platform views are not recorded on web
+
+Web capture supports a single Flutter view with one matching rendering canvas.
+Platform-view composition can split Flutter content across several canvases.
+When more than one canvas matches the replay viewport, the SDK skips the entire
+screenshot until the surface is unambiguous again. Multiple Flutter views and
+capture boundaries that do not match the canvas size are also unsupported.
 
 Web capture reads the Flutter `<canvas>` backing store. An HTML platform view
 (`HtmlElementView`) renders into a separate DOM element that the browser

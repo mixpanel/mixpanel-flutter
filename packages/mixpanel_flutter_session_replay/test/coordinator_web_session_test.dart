@@ -1,6 +1,9 @@
+import 'dart:async';
 import 'package:clock/clock.dart';
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/gestures.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/session_replay_coordinator.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/event_recorder.dart';
@@ -17,6 +20,7 @@ import 'package:mixpanel_flutter_session_replay/src/models/configuration.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/masking_directive.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/results.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/session.dart';
+import 'package:mixpanel_flutter_session_replay/src/widgets/interaction_detector.dart';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -42,7 +46,7 @@ void main() {
       Duration? maxSessionDuration,
       ReplayBackgroundBehavior backgroundBehavior =
           ReplayBackgroundBehavior.stop,
-      Future<void> Function(String, int, int)? persistIdleExpiry,
+      Future<void> Function(String, int, int, int?)? persistIdleExpiry,
     }) {
       return SessionReplayCoordinator(
         screenshotCapturer: screenshotCapturer,
@@ -124,6 +128,215 @@ void main() {
       } catch (_) {}
     });
 
+    test(
+      'should not activate recording when metadata finishes after maximum expiry',
+      () {
+        fakeAsync((async) {
+          // GIVEN metadata persistence outlasting a short web recording limit.
+          final delayedQueue = _DelayedMetadataQueue();
+          eventRecorder = EventRecorder(
+            eventQueue: delayedQueue,
+            sessionManager: sessionManager,
+            getDistinctId: () => 'user-1',
+            logger: logger,
+          );
+          final coordinator = createCoordinator(
+            maxSessionDuration: const Duration(seconds: 1),
+          );
+          coordinator.startRecording();
+          expect(coordinator.recordingState, RecordingState.initializing);
+
+          // WHEN the maximum expires before storage acknowledges the session.
+          async.elapse(const Duration(seconds: 2));
+          delayedQueue.ready.complete();
+          async.flushMicrotasks();
+
+          // THEN the completion cannot revive the expired recording.
+          expect(coordinator.recordingState, RecordingState.notRecording);
+          expect(coordinator.replayId, isNull);
+          expect(coordinator.hasMaxSessionTimerForTest, isFalse);
+          coordinator.dispose();
+          async.flushMicrotasks();
+        });
+      },
+    );
+
+    group('resume and stop regressions', () {
+      for (final remaining in [Duration.zero, const Duration(seconds: -1)]) {
+        test(
+          'rejects a staged background deadline with $remaining remaining',
+          () async {
+            // GIVEN a reload staged before settings / foreground resolution.
+            final now = DateTime.utc(2026, 9, 28, 12);
+            final coordinator = createCoordinator(
+              autoRecordSessionsPercent: 100,
+            );
+            addTearDown(coordinator.dispose);
+            coordinator.prepareSessionResume(
+              Session(
+                id: 'paused-reload',
+                startTime: now,
+                status: SessionStatus.active,
+              ),
+              backgroundExpiry: now.add(remaining),
+            );
+
+            // WHEN the page can finally start recording.
+            await withClock(Clock.fixed(now), () async {
+              coordinator.onAppForegrounded();
+              await pumpEventQueue();
+            });
+
+            // THEN expired background retention causes a fresh sampling decision.
+            expect(coordinator.replayId, isNot('paused-reload'));
+            expect(coordinator.recordingState, RecordingState.recording);
+          },
+        );
+      }
+
+      for (final enableIdleTimer in [true, false]) {
+        test(
+          'persists and clears background expiry with activity timer=$enableIdleTimer',
+          () async {
+            // GIVEN independently configured activity and background deadlines.
+            final now = DateTime.utc(2026, 9, 28, 12);
+            final writes = <(String, int, int, int?)>[];
+            final coordinator = createCoordinator(
+              idleTimer: enableIdleTimer
+                  ? IdleTimeoutTimer(
+                      timeout: const Duration(minutes: 30),
+                      onTimeout: () {},
+                    )
+                  : null,
+              maxSessionDuration: const Duration(hours: 24),
+              backgroundBehavior: const ReplayBackgroundBehavior.pause(
+                idleTimeout: Duration(minutes: 1),
+              ),
+              persistIdleExpiry: (id, idle, max, background) async {
+                writes.add((id, idle, max, background));
+              },
+            );
+            addTearDown(coordinator.dispose);
+
+            await withClock(Clock.fixed(now), () async {
+              coordinator.startRecording();
+              await pumpEventQueue();
+              expect(writes.last.$4, isNull);
+              final activeIdle = writes.last.$2;
+              final replayId = coordinator.replayId;
+
+              // WHEN the page pauses.
+              coordinator.onAppBackgrounded();
+              await pumpEventQueue();
+
+              // THEN background retention is persisted without replacing activity idle.
+              expect(
+                writes.last.$4,
+                now.add(const Duration(minutes: 1)).millisecondsSinceEpoch,
+              );
+              expect(writes.last.$2, activeIdle);
+
+              // WHEN it returns before expiry without any new capture/interaction.
+              coordinator.onAppForegrounded();
+              await pumpEventQueue();
+
+              // THEN only the background deadline is cleared, even with idle disabled.
+              expect(coordinator.replayId, replayId);
+              expect(writes.last.$4, isNull);
+              expect(writes.last.$2, activeIdle);
+            });
+          },
+        );
+      }
+
+      test(
+        'resumed reload clears background expiry without resetting activity idle',
+        () async {
+          final now = DateTime.utc(2026, 9, 28, 12);
+          final idleExpiry = now.add(const Duration(minutes: 2));
+          final writes = <(String, int, int, int?)>[];
+          final coordinator = createCoordinator(
+            idleTimer: IdleTimeoutTimer(
+              timeout: const Duration(minutes: 30),
+              onTimeout: () {},
+            ),
+            maxSessionDuration: const Duration(hours: 24),
+            persistIdleExpiry: (id, idle, max, background) async {
+              writes.add((id, idle, max, background));
+            },
+          );
+          addTearDown(coordinator.dispose);
+          coordinator.prepareSessionResume(
+            Session(
+              id: 'valid-reload',
+              startTime: now,
+              status: SessionStatus.active,
+            ),
+            idleExpiry: idleExpiry,
+            backgroundExpiry: now.add(const Duration(seconds: 30)),
+          );
+          await withClock(Clock.fixed(now), () async {
+            coordinator.onAppForegrounded();
+            await pumpEventQueue();
+          });
+          expect(coordinator.replayId, 'valid-reload');
+          expect(writes.last.$2, idleExpiry.millisecondsSinceEpoch);
+          expect(writes.last.$4, isNull);
+        },
+      );
+
+      test(
+        'expired staged idle deadline is not resumed after settings',
+        () async {
+          final start = DateTime.utc(2026, 9, 28, 12);
+          late SessionReplayCoordinator coordinator;
+          final timer = IdleTimeoutTimer(
+            timeout: const Duration(minutes: 30),
+            onTimeout: () => coordinator.handleIdleTimeout(),
+          );
+          coordinator = createCoordinator(
+            autoRecordSessionsPercent: 100,
+            idleTimer: timer,
+            maxSessionDuration: const Duration(hours: 24),
+          );
+          addTearDown(coordinator.dispose);
+          withClock(Clock.fixed(start), () {
+            coordinator.prepareSessionResume(
+              Session(
+                id: 'expired-staged',
+                startTime: start,
+                status: SessionStatus.active,
+              ),
+              idleExpiry: start.add(const Duration(seconds: 1)),
+            );
+          });
+          await withClock(
+            Clock.fixed(start.add(const Duration(seconds: 2))),
+            () async {
+              coordinator.onAppForegrounded();
+              await pumpEventQueue();
+              expect(coordinator.replayId, isNot('expired-staged'));
+            },
+          );
+        },
+      );
+
+      test(
+        'explicit stop after idle expiration prevents activity restart',
+        () async {
+          final coordinator = createCoordinator(autoRecordSessionsPercent: 100);
+          addTearDown(coordinator.dispose);
+          coordinator.startRecording();
+          await pumpEventQueue();
+          coordinator.handleIdleTimeout();
+          coordinator.stopRecording();
+          coordinator.onUserActivity();
+          await pumpEventQueue();
+          expect(coordinator.recordingState, RecordingState.notRecording);
+        },
+      );
+    });
+
     group('resumeSession', () {
       test(
         'staged session waits for remote enablement before recording',
@@ -164,7 +377,7 @@ void main() {
         final coordinator = createCoordinator(
           autoRecordSessionsPercent: 100,
           maxSessionDuration: const Duration(hours: 24),
-          persistIdleExpiry: (id, idle, max) async {
+          persistIdleExpiry: (id, idle, max, background) async {
             persisted.add((id, idle, max));
           },
         );
@@ -302,6 +515,126 @@ void main() {
     });
 
     group('onUserActivity', () {
+      for (final input in [
+        'wheel',
+        'trackpad',
+        'trackpad update',
+        'keyboard',
+        'key repeat',
+      ]) {
+        testWidgets('should leave idle timeout when receiving $input input', (
+          tester,
+        ) async {
+          // Web replay sends super properties through the analytics plugin.
+          const analyticsChannel = MethodChannel('mixpanel_flutter');
+          final messenger = tester.binding.defaultBinaryMessenger;
+          messenger.setMockMethodCallHandler(
+            analyticsChannel,
+            (_) async => null,
+          );
+          addTearDown(
+            () => messenger.setMockMethodCallHandler(analyticsChannel, null),
+          );
+          // GIVEN a replay that timed out while its input detector stayed mounted.
+          final coordinator = createCoordinator(autoRecordSessionsPercent: 100);
+          final focusNode = FocusNode();
+          var appKeyEvents = 0;
+          await tester.pumpWidget(
+            Directionality(
+              textDirection: TextDirection.ltr,
+              child: InteractionDetector(
+                coordinator: coordinator,
+                child: Focus(
+                  focusNode: focusNode,
+                  onKeyEvent: (_, _) {
+                    appKeyEvents++;
+                    return KeyEventResult.handled;
+                  },
+                  child: const ColoredBox(
+                    color: Color(0xFFFFFFFF),
+                    child: SizedBox.expand(),
+                  ),
+                ),
+              ),
+            ),
+          );
+          focusNode.requestFocus();
+          coordinator.startRecording();
+          await tester.pump();
+          final originalReplayId = coordinator.replayId;
+          expect(originalReplayId, isNotNull);
+          if (input == 'key repeat') {
+            await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowDown);
+          }
+          if (input == 'trackpad update') {
+            await tester.sendEventToBinding(
+              const PointerPanZoomStartEvent(position: Offset(100, 100)),
+            );
+          }
+          coordinator.handleIdleTimeout();
+          expect(coordinator.recordingState, RecordingState.notRecording);
+
+          try {
+            // WHEN activity arrives without a new pointer-down event.
+            switch (input) {
+              case 'wheel':
+                await tester.sendEventToBinding(
+                  const PointerScrollEvent(
+                    position: Offset(100, 100),
+                    scrollDelta: Offset(0, 50),
+                  ),
+                );
+              case 'trackpad':
+                await tester.sendEventToBinding(
+                  const PointerPanZoomStartEvent(position: Offset(100, 100)),
+                );
+              case 'trackpad update':
+                await tester.sendEventToBinding(
+                  const PointerPanZoomUpdateEvent(
+                    position: Offset(100, 100),
+                    pan: Offset(0, 50),
+                    panDelta: Offset(0, 50),
+                  ),
+                );
+              case 'keyboard':
+                await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowDown);
+              case 'key repeat':
+                await tester.sendKeyRepeatEvent(LogicalKeyboardKey.arrowDown);
+            }
+            await tester.pump();
+
+            // THEN a new replay starts, and app keyboard handling still runs.
+            expect(coordinator.recordingState, RecordingState.recording);
+            expect(coordinator.replayId, isNot(originalReplayId));
+            if (input == 'keyboard' || input == 'key repeat') {
+              expect(appKeyEvents, input == 'keyboard' ? 1 : 2);
+              expect(focusNode.hasFocus, isTrue);
+
+              // Key release alone must not restart a recording.
+              coordinator.handleIdleTimeout();
+              await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowDown);
+              await tester.pump();
+              expect(coordinator.recordingState, RecordingState.notRecording);
+
+              // Removing the detector must remove its global keyboard observer.
+              await tester.pumpWidget(const SizedBox());
+              await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+              await tester.pump();
+              expect(coordinator.recordingState, RecordingState.notRecording);
+            }
+          } finally {
+            if (input.startsWith('trackpad')) {
+              await tester.sendEventToBinding(
+                const PointerPanZoomEndEvent(position: Offset(100, 100)),
+              );
+            }
+            await tester.pumpWidget(const SizedBox());
+            focusNode.dispose();
+            await coordinator.dispose();
+          }
+        });
+      }
+
       test('restarts recording after idle timeout', () async {
         // GIVEN
         final coordinator = createCoordinator(autoRecordSessionsPercent: 100.0);
@@ -389,7 +722,7 @@ void main() {
           remoteSettingsMode: RemoteSettingsMode.fallback,
           idleTimer: localIdleTimer,
           maxSessionDuration: const Duration(hours: 24),
-          persistIdleExpiry: (_, idle, max) async {
+          persistIdleExpiry: (_, idle, max, background) async {
             deadlines.add((idle, max));
           },
         );
@@ -439,7 +772,7 @@ void main() {
             autoRecordSessionsPercent: 100,
             remoteSettingsMode: RemoteSettingsMode.fallback,
             maxSessionDuration: const Duration(hours: 24),
-            persistIdleExpiry: (_, idle, max) async {
+            persistIdleExpiry: (_, idle, max, background) async {
               deadlines.add((idle, max));
             },
           );
@@ -482,7 +815,7 @@ void main() {
           autoRecordSessionsPercent: 100,
           idleTimer: idleTimer,
           maxSessionDuration: const Duration(hours: 24),
-          persistIdleExpiry: (_, idle, max) async {
+          persistIdleExpiry: (_, idle, max, background) async {
             deadlines.add((idle, max));
           },
         );
@@ -623,9 +956,15 @@ void main() {
         final coordinator = createCoordinator(
           idleTimer: idleTimer,
           maxSessionDuration: const Duration(hours: 24),
-          persistIdleExpiry: (sessionId, idleExpiresMs, maxExpiresMs) async {
-            persistedCalls.add((sessionId, idleExpiresMs, maxExpiresMs));
-          },
+          persistIdleExpiry:
+              (
+                sessionId,
+                idleExpiresMs,
+                maxExpiresMs,
+                backgroundExpiresMs,
+              ) async {
+                persistedCalls.add((sessionId, idleExpiresMs, maxExpiresMs));
+              },
         );
         coordinator.startRecording(sessionsPercent: 100.0);
         await pumpEventQueue();
@@ -1139,7 +1478,7 @@ void main() {
         final coordinator = createCoordinator(
           idleTimer: idleTimer,
           maxSessionDuration: const Duration(hours: 24),
-          persistIdleExpiry: (id, idle, max) async {
+          persistIdleExpiry: (id, idle, max, background) async {
             persisted.add((id, idle, max));
           },
         );
@@ -1166,7 +1505,7 @@ void main() {
         final persisted = <(String, int, int)>[];
         final coordinator = createCoordinator(
           maxSessionDuration: const Duration(hours: 24),
-          persistIdleExpiry: (id, idle, max) async {
+          persistIdleExpiry: (id, idle, max, background) async {
             persisted.add((id, idle, max));
           },
         );
@@ -1193,7 +1532,7 @@ void main() {
         final persisted = <(String, int, int)>[];
         final coordinator = createCoordinator(
           maxSessionDuration: const Duration(hours: 24),
-          persistIdleExpiry: (id, idle, max) async {
+          persistIdleExpiry: (id, idle, max, background) async {
             persisted.add((id, idle, max));
           },
         );
@@ -1224,7 +1563,7 @@ void main() {
         final coordinator = createCoordinator(
           idleTimer: idleTimer,
           maxSessionDuration: const Duration(hours: 24),
-          persistIdleExpiry: (id, idle, max) async {
+          persistIdleExpiry: (id, idle, max, background) async {
             persisted.add((id, idle, max));
           },
         );
@@ -1270,7 +1609,7 @@ void main() {
           autoRecordSessionsPercent: 100,
           remoteSettingsMode: RemoteSettingsMode.fallback,
           maxSessionDuration: const Duration(hours: 24),
-          persistIdleExpiry: (_, idle, max) async {
+          persistIdleExpiry: (_, idle, max, background) async {
             deadlines.add((idle, max));
           },
         );
@@ -1291,4 +1630,14 @@ void main() {
       });
     });
   });
+}
+
+class _DelayedMetadataQueue extends InMemoryEventQueue {
+  final ready = Completer<void>();
+
+  @override
+  Future<void> createSessionMetadata(Session session) async {
+    await ready.future;
+    await super.createSessionMetadata(session);
+  }
 }

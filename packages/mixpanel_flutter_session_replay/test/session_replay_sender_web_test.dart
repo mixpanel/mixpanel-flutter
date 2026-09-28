@@ -46,6 +46,7 @@ void main() {
         'registerSuperProperties',
         arguments: {
           'properties': {'\$mp_replay_id': 'replay-123'},
+          'persistent': false,
         },
       ),
     ]);
@@ -58,7 +59,7 @@ void main() {
     expect(mixpanelCalls, [
       isMethodCall(
         'unregisterSuperProperty',
-        arguments: {'propertyName': '\$mp_replay_id'},
+        arguments: {'propertyName': '\$mp_replay_id', 'persistent': false},
       ),
     ]);
   });

@@ -40,6 +40,8 @@ class SessionReplaySender {
         await _mixpanelFlutterChannel
             .invokeMethod<void>('registerSuperProperties', {
               'properties': properties,
+              // Replay ownership is page-local, unlike ordinary super props.
+              if (kIsWeb) 'persistent': false,
             })
             .timeout(_channelTimeout);
       } else {
@@ -63,6 +65,7 @@ class SessionReplaySender {
         await _mixpanelFlutterChannel
             .invokeMethod<void>('unregisterSuperProperty', {
               'propertyName': propertyName,
+              if (kIsWeb) 'persistent': false,
             })
             .timeout(_channelTimeout);
       } else {

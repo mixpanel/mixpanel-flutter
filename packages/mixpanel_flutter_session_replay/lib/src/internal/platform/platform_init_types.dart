@@ -1,4 +1,4 @@
-import '../../models/session.dart';
+import '../session/resumable_session.dart';
 import '../../models/configuration.dart';
 import '../screenshot_capturer.dart';
 import '../storage/event_queue_interface.dart';
@@ -21,14 +21,13 @@ class PlatformInitResult {
   final bool wifiOnly;
   final Duration? idleTimeout;
   final Duration? maxSessionDuration;
-  final Session? resumableSession;
+  final ResumableSession? resumableSession;
 
-  /// Persisted idle deadline for [resumableSession], when one was stored.
-  final DateTime? resumableIdleExpiry;
   final Future<void> Function(
     String sessionId,
     int idleExpiresMs,
     int maxExpiresMs,
+    int? backgroundExpiresMs,
   )?
   persistIdleExpiry;
 
@@ -42,7 +41,6 @@ class PlatformInitResult {
     this.idleTimeout,
     this.maxSessionDuration,
     this.resumableSession,
-    this.resumableIdleExpiry,
     this.persistIdleExpiry,
     required this.backgroundBehavior,
   });

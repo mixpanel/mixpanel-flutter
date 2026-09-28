@@ -304,8 +304,9 @@ class MixpanelSessionReplay {
       // Resume session if applicable (web page reload with valid session)
       if (platformResult.resumableSession != null) {
         coordinator.prepareSessionResume(
-          platformResult.resumableSession!,
-          idleExpiry: platformResult.resumableIdleExpiry,
+          platformResult.resumableSession!.session,
+          idleExpiry: platformResult.resumableSession!.idleExpiry,
+          backgroundExpiry: platformResult.resumableSession!.backgroundExpiry,
         );
       }
 

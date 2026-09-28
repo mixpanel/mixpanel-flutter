@@ -165,7 +165,7 @@ jobs:
         run: flutter pub get
         working-directory: packages/mixpanel_flutter_session_replay
       - name: Test analytics web event bridge
-        run: flutter test --platform chrome test/event_bridge_web_test.dart
+        run: flutter test --platform chrome test/event_bridge_web_test.dart test/super_properties_web_test.dart
         working-directory: packages/mixpanel_flutter
       - name: Run browser tests
         run: >-
@@ -176,6 +176,7 @@ jobs:
           test/platform_init_web_test.dart
           test/web_image_compressor_test.dart
           test/debug_overlay_host_web_test.dart
+          test/session_replay_sender_web_test.dart
         working-directory: packages/mixpanel_flutter_session_replay
       - name: Build web example
         run: flutter build web

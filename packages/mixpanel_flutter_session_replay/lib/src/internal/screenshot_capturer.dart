@@ -16,85 +16,8 @@ import 'masking/mask_painter.dart';
 import '../models/session.dart';
 import 'wireframe/wireframe_emitter.dart';
 import 'logger.dart';
-
-/// Interface for platform-specific image compression.
-///
-/// Implementations handle compressing raw RGBA bytes into an encoded
-/// format (typically JPEG) using platform-optimized APIs:
-/// - Native: MethodChannel to Android/iOS JPEG encoders
-/// - Web: OffscreenCanvas.convertToBlob() via Web Worker
-abstract class ImageCompressor {
-  /// Whether this compressor can still accept work.
-  ///
-  /// Platform implementations can switch this to false after a permanent
-  /// runtime failure so frame capture stops before allocating an RGBA image.
-  bool get isAvailable => true;
-
-  /// Whether privacy mask rectangles are painted by the compressor.
-  ///
-  /// Web performs this inside its image worker to avoid rendering a second
-  /// full-size Flutter image on the UI isolate. Native compressors keep the
-  /// default and receive pixels already masked by [MaskPainter].
-  bool get paintsMasks => false;
-
-  /// Whether this implementation captures the already-rendered platform
-  /// surface without first materializing a [ui.Image] in Dart.
-  ///
-  /// Flutter web uses this path to transfer the browser canvas to a worker as
-  /// an ImageBitmap. Native implementations keep the default RGBA path.
-  bool get capturesRenderedSurface => false;
-
-  /// Upper bound applied to the platform-independent capture ratio.
-  /// Implementations may lower it when their encoding pipeline competes with
-  /// frame rendering on resource-constrained devices.
-  double get maximumCapturePixelRatio => 1;
-
-  /// Wait for a directly captured platform surface to become discoverable.
-  /// If discovery crosses a browser frame, the caller waits for another
-  /// Flutter end-of-frame so it cannot separate mask detection from snapshot
-  /// start.
-  Future<RenderedSurfaceAvailability> waitUntilRenderedSurfaceAvailable(
-    Size logicalSize,
-  ) async => RenderedSurfaceAvailability.available;
-
-  /// Waits for a platform presentation opportunity before direct capture.
-  ///
-  /// A browser canvas can lag Flutter's render tree by one presented frame.
-  /// The caller compares mask geometry before and after this barrier and only
-  /// snapshots a surface whose privacy coordinates stayed stable.
-  Future<void> waitForRenderedSurfacePresentation() async {}
-
-  /// Capture, resize, mask, and encode the current rendered surface.
-  ///
-  /// [maskRects] are expressed in the requested output raster coordinates.
-  /// [validateSnapshot] must be invoked after the source becomes an immutable
-  /// snapshot and before any encoding work starts. Implementations may yield a
-  /// browser presentation opportunity first to keep the validation walk out of
-  /// the snapshot frame; the immutable source must remain local until it
-  /// validates.
-  /// Implementations must return `null` rather than an unmasked image when the
-  /// correct surface cannot be identified or captured.
-  Future<Uint8List?> captureRenderedSurface({
-    required Size logicalSize,
-    required int outputWidth,
-    required int outputHeight,
-    List<Rect> maskRects = const [],
-    bool Function()? validateSnapshot,
-  }) async => null;
-
-  /// Compress raw RGBA bytes into an encoded image.
-  ///
-  /// Returns compressed bytes, or null on failure.
-  Future<Uint8List?> compress(
-    Uint8List rgbaBytes, {
-    required int width,
-    required int height,
-    List<Rect> maskRects = const [],
-  });
-
-  /// Release resources held by the compressor.
-  Future<void> dispose();
-}
+import 'capture/image_compressor.dart';
+import 'capture/rendered_surface_capture.dart';
 
 /// Screenshot capturer with masking and platform-injected compression.
 ///
@@ -121,10 +44,11 @@ class ScreenshotCapturer {
   final bool debugOverlayEnabled;
 
   /// Platform-specific image compressor
-  final ImageCompressor _compressor;
+  final ImageCompressor? _compressor;
+  final RenderedSurfaceCapture? _surfaceCapture;
 
   /// Whether capture reads the already-rendered platform surface.
-  bool get capturesRenderedSurface => _compressor.capturesRenderedSurface;
+  bool get capturesRenderedSurface => _surfaceCapture != null;
 
   /// Optional wireframe emitter. When non-null, wireframes are collected on
   /// the same walk as mask detection and enqueued alongside each screenshot.
@@ -185,10 +109,13 @@ class ScreenshotCapturer {
     required this.directive,
     required this.logger,
     required this.debugOverlayEnabled,
-    required ImageCompressor compressor,
+    ImageCompressor? compressor,
+    RenderedSurfaceCapture? surfaceCapture,
     WireframeEmitter? wireframeEmitter,
     bool useAccessibilityLabelFallback = false,
-  }) : _compressor = compressor,
+  }) : assert((compressor == null) != (surfaceCapture == null)),
+       _compressor = compressor,
+       _surfaceCapture = surfaceCapture,
        _wireframeEmitter = wireframeEmitter,
        _useAccessibilityLabelFallback = useAccessibilityLabelFallback;
 
@@ -231,7 +158,7 @@ class ScreenshotCapturer {
   }) async {
     final captureStart = clock.now();
     try {
-      if (!_compressor.isAvailable) {
+      if (!(_surfaceCapture?.isAvailable ?? _compressor!.isAvailable)) {
         return const CaptureFailure(
           CaptureError.compressionFailed,
           'Image compression is unavailable',
@@ -253,8 +180,8 @@ class ScreenshotCapturer {
       // endOfFrame ensures mask detection and snapshot initiation observe the
       // same completed Flutter paint.
       await SchedulerBinding.instance.endOfFrame;
-      if (_compressor.capturesRenderedSurface) {
-        final surfaceAvailability = await _compressor
+      if (_surfaceCapture case final surface?) {
+        final surfaceAvailability = await surface
             .waitUntilRenderedSurfaceAvailable(boundary.size);
         if (surfaceAvailability == RenderedSurfaceAvailability.unavailable) {
           return const CaptureFailure(
@@ -310,7 +237,7 @@ class ScreenshotCapturer {
         );
       }
 
-      if (_compressor.capturesRenderedSurface) {
+      if (_surfaceCapture case final surface?) {
         // Flutter can finish layout/paint before the browser presents those
         // pixels to its canvas. Keep the first geometry as a fence and allow
         // one browser presentation before taking an immutable snapshot. The
@@ -319,7 +246,7 @@ class ScreenshotCapturer {
         // intermediate point; the required comparison still happens after the
         // source is immutable, and motion across the interval fails closed.
         final stabilityStart = clock.now();
-        await _compressor.waitForRenderedSurfacePresentation();
+        await surface.waitForRenderedSurfacePresentation();
         lastRenderedSurfaceStabilityValidationTime = clock.now().difference(
           stabilityStart,
         );
@@ -331,16 +258,12 @@ class ScreenshotCapturer {
       final captureTimestamp = clock.now();
       final logicalSize = boundary.size;
       final capturePixelRatio =
-          (_compressor.capturesRenderedSurface
-                  ? capturePixelRatioFor(logicalSize)
-                  : 1.0)
-              .clamp(0, _compressor.maximumCapturePixelRatio)
+          (capturesRenderedSurface ? capturePixelRatioFor(logicalSize) : 1.0)
+              .clamp(0, (_surfaceCapture?.maximumCapturePixelRatio ?? 1))
               .toDouble();
 
       CaptureFailure? snapshotValidationFailure;
-      var snapshotValidated = false;
       bool validateSnapshot() {
-        snapshotValidated = true;
         final validationStart = clock.now();
         // A browser presentation does not necessarily produce a new Flutter
         // frame. If Flutter's engine-frame timestamp is unchanged, the
@@ -398,7 +321,7 @@ class ScreenshotCapturer {
         return true;
       }
 
-      if (_compressor.capturesRenderedSurface) {
+      if (_surfaceCapture case final surface?) {
         final imageWidth = (logicalSize.width * capturePixelRatio).ceil();
         final imageHeight = (logicalSize.height * capturePixelRatio).ceil();
         final rasterMaskRegions = _scaleMaskRegions(
@@ -406,24 +329,28 @@ class ScreenshotCapturer {
           scaleX: imageWidth / logicalSize.width,
           scaleY: imageHeight / logicalSize.height,
         );
-        final compressedBytes = await _compressor.captureRenderedSurface(
+        final snapshot = await surface.capture(
           logicalSize: logicalSize,
           outputWidth: imageWidth,
           outputHeight: imageHeight,
-          maskRects: rasterMaskRegions
-              .where((region) => region.source != MaskSource.unmask)
-              .map((region) => region.bounds)
-              .toList(growable: false),
-          validateSnapshot: validateSnapshot,
         );
-        if (snapshotValidationFailure != null) {
-          return snapshotValidationFailure!;
-        }
-        if (!snapshotValidated) {
+        if (snapshot == null) {
           return const CaptureFailure(
-            CaptureError.maskDetectionFailed,
-            'Rendered surface was not validated after snapshot creation',
+            CaptureError.renderBoundaryNotFound,
+            'Rendered surface is not available for capture',
           );
+        }
+        Uint8List? compressedBytes;
+        try {
+          if (!validateSnapshot()) return snapshotValidationFailure!;
+          compressedBytes = await snapshot.encode(
+            maskRects: rasterMaskRegions
+                .where((region) => region.source != MaskSource.unmask)
+                .map((region) => region.bounds)
+                .toList(growable: false),
+          );
+        } finally {
+          snapshot.dispose();
         }
         if (compressedBytes == null) {
           return const CaptureFailure(
@@ -494,7 +421,7 @@ class ScreenshotCapturer {
       // second full-size image on the UI isolate.
       final maskPaintStart = clock.now();
       ui.Image imageForCompression = rawImage;
-      if (!_compressor.paintsMasks) {
+      if (!_compressor!.paintsMasks) {
         try {
           imageForCompression = await _maskPainter.applyMasks(
             rawImage,
@@ -592,7 +519,10 @@ class ScreenshotCapturer {
     }
   }
 
-  Future<void> dispose() => _compressor.dispose();
+  Future<void> dispose() async {
+    await _surfaceCapture?.dispose();
+    await _compressor?.dispose();
+  }
 
   WireframePayload? _emitWireframes({
     required MaskDetectionResult maskResult,
@@ -668,10 +598,4 @@ class ScreenshotCapturer {
     }
     return true;
   }
-}
-
-enum RenderedSurfaceAvailability {
-  available,
-  availableAfterBrowserFrame,
-  unavailable,
 }

@@ -44,6 +44,105 @@ void main() {
   });
 
   group('checkWebSessionResume', () {
+    test(
+      'rejects an expired background deadline after reopening storage',
+      () async {
+        // GIVEN a replay with valid activity/max deadlines but expired background retention.
+        final now = DateTime.now();
+        final ownerId = queue.ownerId;
+        await queue.createSessionMetadata(
+          Session(
+            id: 'background-expired',
+            startTime: now,
+            status: SessionStatus.active,
+          ),
+        );
+        await updateWebSessionExpiry(
+          queue: queue,
+          sessionId: 'background-expired',
+          idleExpiresMs: now
+              .add(const Duration(minutes: 30))
+              .millisecondsSinceEpoch,
+          maxExpiresMs: now
+              .add(const Duration(hours: 24))
+              .millisecondsSinceEpoch,
+          backgroundExpiresMs: now
+              .subtract(const Duration(seconds: 1))
+              .millisecondsSinceEpoch,
+          logger: logger,
+        );
+
+        // WHEN a new page opens the same tab's persistent queue.
+        await queue.dispose();
+        queue = IndexedDbEventQueue(
+          token: token,
+          logger: logger,
+          ownerId: ownerId,
+        );
+        await queue.initialize();
+        final result = await checkWebSessionResume(
+          queue: queue,
+          idleTimeout: const Duration(minutes: 30),
+          maxSessionDuration: const Duration(hours: 24),
+          logger: logger,
+        );
+
+        // THEN the old replay cannot resume even though activity idle has not expired.
+        expect(result, isNull);
+      },
+    );
+
+    test(
+      'returns background expiry for revalidation and clears it on foreground',
+      () async {
+        final now = DateTime.now();
+        final idle = now
+            .add(const Duration(minutes: 30))
+            .millisecondsSinceEpoch;
+        final max = now.add(const Duration(hours: 24)).millisecondsSinceEpoch;
+        final background = now
+            .add(const Duration(minutes: 1))
+            .millisecondsSinceEpoch;
+        await queue.createSessionMetadata(
+          Session(
+            id: 'background-valid',
+            startTime: now,
+            status: SessionStatus.active,
+          ),
+        );
+        await updateWebSessionExpiry(
+          queue: queue,
+          sessionId: 'background-valid',
+          idleExpiresMs: idle,
+          maxExpiresMs: max,
+          backgroundExpiresMs: background,
+          logger: logger,
+        );
+        final result = await checkWebSessionResume(
+          queue: queue,
+          idleTimeout: const Duration(minutes: 30),
+          maxSessionDuration: const Duration(hours: 24),
+          logger: logger,
+        );
+        expect(result!.backgroundExpiry!.millisecondsSinceEpoch, background);
+        expect(result.idleExpiry!.millisecondsSinceEpoch, idle);
+
+        // WHEN foregrounding clears background retention without changing activity idle.
+        await updateWebSessionExpiry(
+          queue: queue,
+          sessionId: 'background-valid',
+          idleExpiresMs: idle,
+          maxExpiresMs: max,
+          backgroundExpiresMs: null,
+          logger: logger,
+        );
+        final metadata = await queue.getLatestSessionMetadata();
+        expect(metadata!['background_expires'], isNull);
+        expect(metadata['idle_expires'], idle);
+        expect(metadata['max_expires'], max);
+      },
+    );
+
     test('returns null when no sessions exist', () async {
       final result = await checkWebSessionResume(
         queue: queue,

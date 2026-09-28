@@ -2,23 +2,22 @@ import '../storage/event_queue_interface.dart';
 import '../storage/indexed_db_event_queue.dart';
 import '../logger.dart';
 import '../../models/session.dart';
+import 'resumable_session.dart';
 
 /// Result of checking whether a previous web session can be resumed.
-class SessionResumeInfo {
-  final Session session;
+class SessionResumeInfo extends ResumableSession {
   final int lastSequenceNumber;
 
-  /// The persisted idle deadline, when one was stored.
-  ///
-  /// Carried through so a resumed session keeps the remaining inactivity
-  /// window instead of being granted a fresh one.
-  final DateTime? idleExpiry;
-
   SessionResumeInfo({
-    required this.session,
+    required Session session,
     required this.lastSequenceNumber,
-    this.idleExpiry,
-  });
+    DateTime? idleExpiry,
+    DateTime? backgroundExpiry,
+  }) : super(
+         session,
+         idleExpiry: idleExpiry,
+         backgroundExpiry: backgroundExpiry,
+       );
 }
 
 Future<SessionResumeInfo?> checkWebSessionResume({
@@ -45,14 +44,22 @@ Future<SessionResumeInfo?> checkWebSessionResume({
   final now = DateTime.now().millisecondsSinceEpoch;
 
   final maxExpiresMs = metadata['max_expires'] as int?;
-  if (maxExpiresMs != null && now > maxExpiresMs) {
+  if (maxExpiresMs != null && now >= maxExpiresMs) {
     logger.info('Previous session $sessionId expired (max duration exceeded)');
     return null;
   }
 
   final idleExpiresMs = metadata['idle_expires'] as int?;
-  if (idleExpiresMs != null && now > idleExpiresMs) {
+  if (idleExpiresMs != null && now >= idleExpiresMs) {
     logger.info('Previous session $sessionId expired (idle timeout exceeded)');
+    return null;
+  }
+
+  final backgroundExpiresMs = metadata['background_expires'] as int?;
+  if (backgroundExpiresMs != null && now >= backgroundExpiresMs) {
+    logger.info(
+      'Previous session $sessionId expired (background timeout exceeded)',
+    );
     return null;
   }
 
@@ -77,6 +84,9 @@ Future<SessionResumeInfo?> checkWebSessionResume({
       status: SessionStatus.active,
     ),
     lastSequenceNumber: lastSequenceNumber,
+    backgroundExpiry: backgroundExpiresMs == null
+        ? null
+        : DateTime.fromMillisecondsSinceEpoch(backgroundExpiresMs),
     idleExpiry: idleExpiresMs == null
         ? null
         : DateTime.fromMillisecondsSinceEpoch(idleExpiresMs),
@@ -88,6 +98,7 @@ Future<void> updateWebSessionExpiry({
   required String sessionId,
   required int idleExpiresMs,
   required int maxExpiresMs,
+  int? backgroundExpiresMs,
   required MixpanelLogger logger,
 }) async {
   if (queue is! IndexedDbEventQueue) return;
@@ -95,5 +106,6 @@ Future<void> updateWebSessionExpiry({
     sessionId: sessionId,
     idleExpiresMs: idleExpiresMs,
     maxExpiresMs: maxExpiresMs,
+    backgroundExpiresMs: backgroundExpiresMs,
   );
 }

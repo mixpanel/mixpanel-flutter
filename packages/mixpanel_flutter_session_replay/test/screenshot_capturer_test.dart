@@ -1,4 +1,6 @@
 import 'dart:typed_data';
+import 'package:mixpanel_flutter_session_replay/src/internal/capture/image_compressor.dart';
+import 'package:mixpanel_flutter_session_replay/src/internal/capture/rendered_surface_capture.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -55,56 +57,55 @@ class _RecordingCompressor extends ImageCompressor {
   Future<void> dispose() async {}
 }
 
-class _DirectSurfaceCompressor extends ImageCompressor {
+class _DirectSurfaceCapture extends RenderedSurfaceCapture {
   Size? logicalSize;
   int? outputWidth;
   int? outputHeight;
   List<Rect>? maskRects;
   Future<void> Function()? duringPresentation;
   Future<void> Function()? beforeValidation;
-  bool invokesSnapshotValidation = true;
+  bool returnsSnapshot = true;
   int surfaceCaptureCount = 0;
+  int encodedCount = 0;
+  int disposedCount = 0;
 
   @override
-  bool get capturesRenderedSurface => true;
-
+  bool get isAvailable => true;
   @override
   Future<void> waitForRenderedSurfacePresentation() async {
     await duringPresentation?.call();
   }
 
   @override
-  Future<Uint8List?> captureRenderedSurface({
+  Future<CapturedSurface?> capture({
     required Size logicalSize,
     required int outputWidth,
     required int outputHeight,
-    List<Rect> maskRects = const [],
-    bool Function()? validateSnapshot,
   }) async {
     surfaceCaptureCount++;
     this.logicalSize = logicalSize;
     this.outputWidth = outputWidth;
     this.outputHeight = outputHeight;
-    this.maskRects = maskRects;
     await beforeValidation?.call();
-    if (invokesSnapshotValidation &&
-        validateSnapshot != null &&
-        !validateSnapshot()) {
-      return null;
-    }
+    return returnsSnapshot ? _TestSurface(this) : null;
+  }
+
+  @override
+  Future<void> dispose() async {}
+}
+
+class _TestSurface implements CapturedSurface {
+  final _DirectSurfaceCapture source;
+  _TestSurface(this.source);
+  @override
+  Future<Uint8List?> encode({required List<Rect> maskRects}) async {
+    source.maskRects = maskRects;
+    source.encodedCount++;
     return Uint8List.fromList(const [0xff, 0xd8, 0xff, 0xd9]);
   }
 
   @override
-  Future<Uint8List?> compress(
-    Uint8List rgbaBytes, {
-    required int width,
-    required int height,
-    List<Rect> maskRects = const [],
-  }) => throw StateError('RGBA compression must not be called');
-
-  @override
-  Future<void> dispose() async {}
+  void dispose() => source.disposedCount++;
 }
 
 void main() {
@@ -289,14 +290,14 @@ void main() {
         await tester.pump();
         final element = key.currentContext! as Element;
         final boundary = element.findRenderObject()! as RenderRepaintBoundary;
-        final compressor = _DirectSurfaceCompressor();
+        final compressor = _DirectSurfaceCapture();
         final capturer = ScreenshotCapturer(
           directive: MaskingDirective(
             autoMaskTypes: const {AutoMaskedView.text},
           ),
           logger: MixpanelLogger(LogLevel.none),
           debugOverlayEnabled: false,
-          compressor: compressor,
+          surfaceCapture: compressor,
         );
 
         // When capture is requested through the platform surface path.
@@ -356,7 +357,7 @@ void main() {
         final boundary = element.findRenderObject()! as RenderRepaintBoundary;
         final movingTransform =
             transformKey.currentContext!.findRenderObject()! as RenderTransform;
-        final compressor = _DirectSurfaceCompressor()
+        final compressor = _DirectSurfaceCapture()
           ..duringPresentation = () async {
             movingTransform.transform = Matrix4.translationValues(40, 0, 0);
             await tester.pump(const Duration(milliseconds: 16));
@@ -367,7 +368,7 @@ void main() {
           ),
           logger: MixpanelLogger(LogLevel.none),
           debugOverlayEnabled: false,
-          compressor: compressor,
+          surfaceCapture: compressor,
         );
 
         final pending = tester.runAsync(
@@ -388,6 +389,8 @@ void main() {
         // The browser surface is made immutable first, then validation spans
         // the presentation and snapshot interval before any worker processing.
         expect(compressor.surfaceCaptureCount, 1);
+        expect(compressor.encodedCount, 0);
+        expect(compressor.disposedCount, 1);
       },
     );
 
@@ -420,7 +423,7 @@ void main() {
         final boundary = element.findRenderObject()! as RenderRepaintBoundary;
         final movingTransform =
             transformKey.currentContext!.findRenderObject()! as RenderTransform;
-        final compressor = _DirectSurfaceCompressor()
+        final compressor = _DirectSurfaceCapture()
           ..beforeValidation = () async {
             // Simulate a paint transform changing while asynchronous snapshot
             // creation is in flight. localToGlobal observes this immediately.
@@ -433,7 +436,7 @@ void main() {
           ),
           logger: MixpanelLogger(LogLevel.none),
           debugOverlayEnabled: false,
-          compressor: compressor,
+          surfaceCapture: compressor,
         );
 
         final pending = tester.runAsync(
@@ -451,11 +454,13 @@ void main() {
         final failure = result! as CaptureFailure;
         expect(failure.error, CaptureError.maskDetectionFailed);
         expect(failure.errorMessage, contains('masks no longer valid'));
+        expect(compressor.encodedCount, 0);
+        expect(compressor.disposedCount, 1);
       },
     );
 
     testWidgets(
-      'direct surface capture fails closed without post-snapshot validation',
+      'direct surface capture fails closed when acquisition returns no snapshot',
       (tester) async {
         final key = GlobalKey();
         await tester.pumpWidget(
@@ -469,15 +474,14 @@ void main() {
         );
         final element = key.currentContext! as Element;
         final boundary = element.findRenderObject()! as RenderRepaintBoundary;
-        final compressor = _DirectSurfaceCompressor()
-          ..invokesSnapshotValidation = false;
+        final compressor = _DirectSurfaceCapture()..returnsSnapshot = false;
         final capturer = ScreenshotCapturer(
           directive: MaskingDirective(
             autoMaskTypes: const {AutoMaskedView.text},
           ),
           logger: MixpanelLogger(LogLevel.none),
           debugOverlayEnabled: false,
-          compressor: compressor,
+          surfaceCapture: compressor,
         );
 
         final pending = tester.runAsync(
@@ -493,8 +497,8 @@ void main() {
 
         expect(result, isA<CaptureFailure>());
         final failure = result! as CaptureFailure;
-        expect(failure.error, CaptureError.maskDetectionFailed);
-        expect(failure.errorMessage, contains('not validated'));
+        expect(failure.error, CaptureError.renderBoundaryNotFound);
+        expect(compressor.encodedCount, 0);
       },
     );
   });

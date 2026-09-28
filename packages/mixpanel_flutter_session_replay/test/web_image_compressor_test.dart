@@ -2,6 +2,7 @@
 library;
 
 import 'dart:js_interop';
+import 'package:mixpanel_flutter_session_replay/src/internal/platform/web_rendered_surface_capture.dart';
 import 'dart:ui' show Rect, Size;
 import 'dart:typed_data';
 
@@ -95,7 +96,7 @@ void main() {
       final context = canvas.getContext('2d')! as web.CanvasRenderingContext2D;
       context.fillStyle = '#ff0000'.toJS;
       context.fillRect(0, 0, canvas.width, canvas.height);
-      final compressor = WebImageCompressor(
+      final compressor = WebRenderedSurfaceCapture(
         logger: MixpanelLogger(LogLevel.none),
         jpegQuality: 1,
       );
@@ -103,7 +104,8 @@ void main() {
       await compressor.initialize();
 
       // When the browser surface is resized entirely inside the worker.
-      final result = await compressor.captureRenderedSurface(
+      final result = await _captureAndEncode(
+        compressor,
         logicalSize: const Size(37, 29),
         outputWidth: 19,
         outputHeight: 15,
@@ -136,7 +138,7 @@ void main() {
     final context = canvas.getContext('2d')! as web.CanvasRenderingContext2D;
     context.fillStyle = '#ff0000'.toJS;
     context.fillRect(0, 0, canvas.width, canvas.height);
-    final compressor = WebImageCompressor(
+    final compressor = WebRenderedSurfaceCapture(
       logger: MixpanelLogger(LogLevel.none),
       jpegQuality: 1,
     );
@@ -144,7 +146,8 @@ void main() {
     await compressor.initialize();
 
     // When a partial privacy mask is supplied in output coordinates.
-    final result = await compressor.captureRenderedSurface(
+    final result = await _captureAndEncode(
+      compressor,
       logicalSize: const Size(43, 31),
       outputWidth: 22,
       outputHeight: 16,
@@ -181,14 +184,15 @@ void main() {
       );
       addTearDown(() => _removeCanvasHost(first));
       addTearDown(() => _removeCanvasHost(second));
-      final compressor = WebImageCompressor(
+      final compressor = WebRenderedSurfaceCapture(
         logger: MixpanelLogger(LogLevel.none),
       );
       addTearDown(compressor.dispose);
       await compressor.initialize();
 
       // When capture cannot identify a unique source surface.
-      final result = await compressor.captureRenderedSurface(
+      final result = await _captureAndEncode(
+        compressor,
         logicalSize: const Size(47, 33),
         outputWidth: 47,
         outputHeight: 33,
@@ -226,14 +230,15 @@ void main() {
     flutterContext.fillStyle = '#00ff00'.toJS;
     flutterContext.fillRect(0, 0, flutterCanvas.width, flutterCanvas.height);
 
-    final compressor = WebImageCompressor(
+    final compressor = WebRenderedSurfaceCapture(
       logger: MixpanelLogger(LogLevel.none),
       jpegQuality: 1,
     );
     addTearDown(compressor.dispose);
     await compressor.initialize();
 
-    final result = await compressor.captureRenderedSurface(
+    final result = await _captureAndEncode(
+      compressor,
       logicalSize: const Size(49, 35),
       outputWidth: 49,
       outputHeight: 35,
@@ -254,13 +259,14 @@ void main() {
     );
     web.document.body!.appendChild(unrelated);
     addTearDown(() => unrelated.remove());
-    final compressor = WebImageCompressor(
+    final compressor = WebRenderedSurfaceCapture(
       logger: MixpanelLogger(LogLevel.none),
     );
     addTearDown(compressor.dispose);
     await compressor.initialize();
 
-    final result = await compressor.captureRenderedSurface(
+    final result = await _captureAndEncode(
+      compressor,
       logicalSize: const Size(51, 37),
       outputWidth: 51,
       outputHeight: 37,
@@ -279,13 +285,14 @@ void main() {
         backingHeight: 78,
       );
       addTearDown(() => _removeCanvasHost(canvas));
-      final compressor = WebImageCompressor(
+      final compressor = WebRenderedSurfaceCapture(
         logger: MixpanelLogger(LogLevel.none),
       );
       addTearDown(compressor.dispose);
       await compressor.initialize();
 
-      final portrait = await compressor.captureRenderedSurface(
+      final portrait = await _captureAndEncode(
+        compressor,
         logicalSize: const Size(53, 39),
         outputWidth: 27,
         outputHeight: 20,
@@ -295,7 +302,8 @@ void main() {
         ..height = 106
         ..style.width = '39px'
         ..style.height = '53px';
-      final landscape = await compressor.captureRenderedSurface(
+      final landscape = await _captureAndEncode(
+        compressor,
         logicalSize: const Size(39, 53),
         outputWidth: 20,
         outputHeight: 27,
@@ -311,13 +319,14 @@ void main() {
   test(
     'rendered surface capture fails closed when no canvas matches',
     () async {
-      final compressor = WebImageCompressor(
+      final compressor = WebRenderedSurfaceCapture(
         logger: MixpanelLogger(LogLevel.none),
       );
       addTearDown(compressor.dispose);
       await compressor.initialize();
 
-      final result = await compressor.captureRenderedSurface(
+      final result = await _captureAndEncode(
+        compressor,
         logicalSize: const Size(8765, 4321),
         outputWidth: 10,
         outputHeight: 10,
@@ -343,13 +352,14 @@ void main() {
       backingHeight: 41,
     );
     addTearDown(() => _removeCanvasHost(canvas));
-    final compressor = WebImageCompressor(
+    final compressor = WebRenderedSurfaceCapture(
       logger: MixpanelLogger(LogLevel.none),
     );
     addTearDown(compressor.dispose);
     await compressor.initialize();
 
-    final result = await compressor.captureRenderedSurface(
+    final result = await _captureAndEncode(
+      compressor,
       logicalSize: const Size(59, 41),
       outputWidth: 59,
       outputHeight: 41,
@@ -359,7 +369,7 @@ void main() {
   });
 
   test(
-    'captures the canvas normally when a platform view is present',
+    'captures a platform-view page when it still has a single canvas',
     () async {
       // GIVEN - a platform view's pixels live in a DOM node, so they are never
       // in the canvas backing store; its presence must not alter the capture
@@ -376,14 +386,15 @@ void main() {
       final context = canvas.getContext('2d')! as web.CanvasRenderingContext2D;
       context.fillStyle = '#ff0000'.toJS;
       context.fillRect(0, 0, canvas.width, canvas.height);
-      final compressor = WebImageCompressor(
+      final compressor = WebRenderedSurfaceCapture(
         logger: MixpanelLogger(LogLevel.none),
         jpegQuality: 1,
       );
       addTearDown(compressor.dispose);
       await compressor.initialize();
 
-      final result = await compressor.captureRenderedSurface(
+      final result = await _captureAndEncode(
+        compressor,
         logicalSize: const Size(63, 45),
         outputWidth: 63,
         outputHeight: 45,
@@ -396,6 +407,79 @@ void main() {
     },
   );
 
+  test(
+    'skips a platform-view composition split across canvases and recovers',
+    () async {
+      // GIVEN one Flutter engine host with two full-size rendering surfaces.
+      final first = _appendCanvas(
+        logicalWidth: 65,
+        logicalHeight: 47,
+        backingWidth: 65,
+        backingHeight: 47,
+      );
+      addTearDown(() => _removeCanvasHost(first));
+      final second = _createCanvas(
+        logicalWidth: 65,
+        logicalHeight: 47,
+        backingWidth: 65,
+        backingHeight: 47,
+      );
+      first.parentNode!.appendChild(second);
+      final platformView = web.document.createElement('flt-platform-view');
+      first.parentNode!.appendChild(platformView);
+      final capture = WebRenderedSurfaceCapture(
+        logger: MixpanelLogger(LogLevel.none),
+      );
+      await capture.initialize();
+      addTearDown(capture.dispose);
+
+      // WHEN the platform view forces an ambiguous composition.
+      expect(
+        await capture.capture(
+          logicalSize: const Size(65, 47),
+          outputWidth: 65,
+          outputHeight: 47,
+        ),
+        isNull,
+      );
+
+      // THEN capture becomes available again when the extra surface is removed.
+      second.remove();
+      final snapshot = await capture.capture(
+        logicalSize: const Size(65, 47),
+        outputWidth: 65,
+        outputHeight: 47,
+      );
+      expect(snapshot, isNotNull);
+      snapshot!.dispose();
+      expect(await snapshot.encode(maskRects: const []), isNull);
+    },
+  );
+
+  test('a captured frame can be encoded only once', () async {
+    final canvas = _appendCanvas(
+      logicalWidth: 69,
+      logicalHeight: 47,
+      backingWidth: 69,
+      backingHeight: 47,
+    );
+    addTearDown(() => _removeCanvasHost(canvas));
+    final capture = WebRenderedSurfaceCapture(
+      logger: MixpanelLogger(LogLevel.none),
+    );
+    await capture.initialize();
+    addTearDown(capture.dispose);
+    final snapshot = await capture.capture(
+      logicalSize: const Size(69, 47),
+      outputWidth: 69,
+      outputHeight: 47,
+    );
+    expect(snapshot, isNotNull);
+    expect(await snapshot!.encode(maskRects: const []), isNotNull);
+    expect(await snapshot.encode(maskRects: const []), isNull);
+    snapshot.dispose();
+  });
+
   test('ImageBitmap is immutable before snapshot validation runs', () async {
     final canvas = _appendCanvas(
       logicalWidth: 67,
@@ -407,14 +491,15 @@ void main() {
     final context = canvas.getContext('2d')! as web.CanvasRenderingContext2D;
     context.fillStyle = '#ff0000'.toJS;
     context.fillRect(0, 0, canvas.width, canvas.height);
-    final compressor = WebImageCompressor(
+    final compressor = WebRenderedSurfaceCapture(
       logger: MixpanelLogger(LogLevel.none),
       jpegQuality: 1,
     );
     addTearDown(compressor.dispose);
     await compressor.initialize();
 
-    final result = await compressor.captureRenderedSurface(
+    final result = await _captureAndEncode(
+      compressor,
       logicalSize: const Size(67, 45),
       outputWidth: 50,
       outputHeight: 34,
@@ -439,14 +524,15 @@ void main() {
       backingHeight: 49,
     );
     addTearDown(() => _removeCanvasHost(canvas));
-    final compressor = WebImageCompressor(
+    final compressor = WebRenderedSurfaceCapture(
       logger: MixpanelLogger(LogLevel.none),
     );
     addTearDown(compressor.dispose);
     await compressor.initialize();
     var validationCalls = 0;
 
-    final result = await compressor.captureRenderedSurface(
+    final result = await _captureAndEncode(
+      compressor,
       logicalSize: const Size(71, 49),
       outputWidth: 53,
       outputHeight: 37,
@@ -497,3 +583,25 @@ web.HTMLCanvasElement _createCanvas({
   ..style.width = '${logicalWidth}px'
   ..style.height = '${logicalHeight}px'
   ..style.position = 'absolute';
+
+Future<Uint8List?> _captureAndEncode(
+  WebRenderedSurfaceCapture capture, {
+  required Size logicalSize,
+  required int outputWidth,
+  required int outputHeight,
+  List<Rect> maskRects = const [],
+  bool Function()? validateSnapshot,
+}) async {
+  final snapshot = await capture.capture(
+    logicalSize: logicalSize,
+    outputWidth: outputWidth,
+    outputHeight: outputHeight,
+  );
+  if (snapshot == null) return null;
+  try {
+    if (validateSnapshot != null && !validateSnapshot()) return null;
+    return await snapshot.encode(maskRects: maskRects);
+  } finally {
+    snapshot.dispose();
+  }
+}

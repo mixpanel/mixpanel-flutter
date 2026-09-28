@@ -1,5 +1,6 @@
 import 'package:clock/clock.dart';
 import 'package:flutter/gestures.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
 import '../internal/widget_coordinator.dart';
@@ -57,12 +58,43 @@ class _InteractionDetectorState extends State<InteractionDetector> {
   Duration _timeStampAnchor = Duration.zero;
 
   @override
+  void initState() {
+    super.initState();
+    // Observe even keys consumed by a focused text field or shortcut, without
+    // taking focus or recording the key's contents.
+    HardwareKeyboard.instance.addHandler(_handleKeyEvent);
+  }
+
+  @override
+  void dispose() {
+    HardwareKeyboard.instance.removeHandler(_handleKeyEvent);
+    super.dispose();
+  }
+
+  bool _handleKeyEvent(KeyEvent event) {
+    // Synthesized events reconcile keyboard state after focus changes and do
+    // not represent fresh user activity.
+    if (!event.synthesized &&
+        (event is KeyDownEvent || event is KeyRepeatEvent)) {
+      widget.coordinator.onUserActivity();
+    }
+    return false;
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Listener(
       onPointerDown: _handlePointerDown,
       onPointerMove: _handlePointerMove,
       onPointerUp: _handlePointerUp,
       onPointerCancel: _handlePointerCancel,
+      onPointerSignal: (event) {
+        if (event is PointerScrollEvent) {
+          widget.coordinator.onUserActivity();
+        }
+      },
+      onPointerPanZoomStart: (_) => widget.coordinator.onUserActivity(),
+      onPointerPanZoomUpdate: (_) => widget.coordinator.onUserActivity(),
       child: widget.child,
     );
   }

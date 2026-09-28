@@ -14,13 +14,13 @@ DebugOverlayHost? createDebugOverlayHost() => _DomDebugOverlayHost();
 /// are never composited into a capture. The overlay can therefore stay visible
 /// for the whole session instead of blinking off around every frame.
 ///
-/// Deliberately built from `<div>` elements: `WebImageCompressor` collects
+/// Deliberately built from `<div>` elements: `WebRenderedSurfaceCapture` collects
 /// every `<canvas>` under a Flutter engine host and skips the frame when more
 /// than one matches the viewport, so a debug canvas there would stop capture.
 /// `<flt-platform-view>` is likewise avoided — it would trip the
 /// platform-view policy and mask the entire frame.
 class _DomDebugOverlayHost implements DebugOverlayHost {
-  /// Same engine hosts `WebImageCompressor` searches for the capture surface.
+  /// Same engine hosts `WebRenderedSurfaceCapture` searches for the capture surface.
   static const _viewHostSelector =
       'flutter-view, flt-glass-pane, flt-scene-host, flt-renderer';
 
