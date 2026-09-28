@@ -19,6 +19,15 @@ dependencies:
   image: ^4.3.0
   mixpanel_flutter: ^2.14.0
 
+# Web replay relies on analytics plugin changes that ship with this repository
+# (per-tab `$mp_replay_id` registration and the event bridge). Build against the
+# local packages so the example and CI exercise the same code that is released.
+dependency_overrides:
+  mixpanel_flutter:
+    path: ../../mixpanel_flutter
+  mixpanel_flutter_common:
+    path: ../../mixpanel_flutter_common
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
