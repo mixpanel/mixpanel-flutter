@@ -1446,7 +1446,7 @@ class Autocapture {
   /// painting. An unobservable response must not be assumed to be a dead click.
   /// This method emits only the supplied signal; it does not inspect the UI or
   /// start an automatic detector. Automatic detection must skip unknown or
-  /// failed response observations (see context/AUTOCAPTURE.md).
+  /// failed response observations.
   /// Validation and property precedence are the same as [trackClick].
   Future<void> trackDeadClick(ClickEvent clickEvent,
       {Map<String, dynamic>? properties}) async {
