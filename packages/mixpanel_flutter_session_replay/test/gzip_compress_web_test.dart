@@ -62,6 +62,17 @@ void main() {
     });
 
     test(
+      'dispose releases the worker and a later compress recreates it',
+      () async {
+        disposeGzipCompression();
+
+        final compressed = await gzipCompressAsync('after dispose'.codeUnits);
+
+        expect(compressed.take(2), [0x1f, 0x8b]);
+      },
+    );
+
+    test(
       'serializes concurrent compression requests through the worker',
       () async {
         final outputs = await Future.wait(

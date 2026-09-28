@@ -53,6 +53,16 @@ Future<void> _initializeGzipCompression() async {
   }
 }
 
+/// Terminate the shared worker and release its Blob URL.
+///
+/// Called when the SDK instance is disposed. The worker is recreated lazily
+/// by the next upload, so a later re-initialization keeps working.
+void disposeGzipCompression() {
+  _worker?.dispose();
+  _worker = null;
+  _workerInitialized = false;
+}
+
 /// Gzip compress using CompressionStream inside a dedicated Web Worker.
 Future<List<int>> gzipCompressAsync(List<int> bytes) async {
   if (_workerUnavailable) {

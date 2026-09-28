@@ -50,7 +50,14 @@ class WebGzipWorker {
         web.BlobPropertyBag(type: 'text/javascript'),
       );
       final blobUrl = web.URL.createObjectURL(blob);
-      final worker = web.Worker(blobUrl.toJS);
+      final web.Worker worker;
+      try {
+        worker = web.Worker(blobUrl.toJS);
+      } catch (_) {
+        // A CSP that blocks blob: workers throws here; do not leak the URL.
+        web.URL.revokeObjectURL(blobUrl);
+        return null;
+      }
       return WebGzipWorker._(worker, blobUrl);
     } catch (_) {
       return null;
