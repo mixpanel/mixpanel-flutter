@@ -123,9 +123,11 @@ class WebOptions {
 
   /// Duration of user inactivity before the session is ended (default: 30 min).
   ///
-  /// Reset on every user interaction or screenshot capture.
-  /// When the timeout fires, recording stops and a new session starts
-  /// on the next user interaction.
+  /// Reset on every user interaction or screenshot capture, so a screen that
+  /// keeps repainting (an animation or live data) does not idle out.
+  /// When the timeout fires, recording stops. With `autoRecordSessionsPercent`
+  /// above zero, the next user interaction starts a newly sampled session;
+  /// with manual recording, call `startRecording()` again.
   /// Overridden by a valid remote `record_idle_timeout_ms` when remote
   /// settings are enabled.
   ///

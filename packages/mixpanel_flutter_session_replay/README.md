@@ -757,6 +757,8 @@ Without any masking directive, auto-masking applies based on `autoMaskedViews` c
 - `onBackground` (`ReplayBackgroundBehavior`, default: `stop`) - Pause or stop when the app leaves the foreground
 
 **WebOptions**
+- `idleTimeout` (Duration, default: 30 minutes) - Inactivity after which a web replay ends; `Duration.zero` disables it
+- `maxSessionDuration` (Duration, default: 24 hours) - Hard cap on one web replay
 - `onBackground` (`ReplayBackgroundBehavior`, default: `pause(idleTimeout: 30 minutes)`) - Pause or stop when the page is hidden
 
 ## Development
