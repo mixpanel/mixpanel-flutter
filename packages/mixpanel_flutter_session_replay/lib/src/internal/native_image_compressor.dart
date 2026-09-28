@@ -8,7 +8,12 @@ import 'capture/image_compressor.dart';
 ///
 /// Uses MethodChannel to call Android's Bitmap.compress() (libjpeg-turbo)
 /// or iOS/macOS's UIImage.jpegData for hardware-optimized encoding.
-/// Falls back to pure Dart encoding via isolate if native fails.
+///
+/// There is deliberately no pure-Dart fallback. Encoding a full-resolution
+/// frame in Dart takes far longer than the capture interval, so a persistently
+/// failing channel would turn every capture into a CPU-bound isolate job
+/// instead of a dropped frame. A failure returns null and the frame is
+/// skipped.
 class NativeImageCompressor extends ImageCompressor {
   static const _channel = MethodChannel('com.mixpanel.flutter_session_replay');
 
@@ -37,39 +42,12 @@ class NativeImageCompressor extends ImageCompressor {
     required int quality,
   }) async {
     try {
-      final result = await _channel.invokeMethod<Uint8List>('compressImage', {
+      return await _channel.invokeMethod<Uint8List>('compressImage', {
         'rgbaBytes': rgbaBytes,
         'width': width,
         'height': height,
         'quality': quality,
       });
-      if (result != null) return result;
-    } catch (_) {
-      // Fall through to Dart fallback.
-    }
-
-    try {
-      return await compute(_compressInIsolate, (
-        rgbaBytes,
-        width,
-        height,
-        quality,
-      ));
-    } catch (_) {
-      return null;
-    }
-  }
-
-  static Uint8List? _compressInIsolate((Uint8List, int, int, int) args) {
-    final (rgbaBytes, width, height, quality) = args;
-    try {
-      final image = img.Image.fromBytes(
-        width: width,
-        height: height,
-        bytes: rgbaBytes.buffer,
-        order: img.ChannelOrder.rgba,
-      );
-      return Uint8List.fromList(img.encodeJpg(image, quality: quality));
     } catch (_) {
       return null;
     }
