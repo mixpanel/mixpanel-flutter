@@ -30,12 +30,14 @@ bool isFeedbackControl(Widget w) =>
     w is CupertinoSlider ||
     w is CupertinoPicker ||
     w is CupertinoDatePicker ||
-    w is CupertinoSegmentedControl ||
-    w is CupertinoSlidingSegmentedControl ||
+    isSegmentedControl(w) ||
     w is DropdownButton ||
     w is CheckboxListTile ||
     w is SwitchListTile ||
     w is RadioListTile;
+
+bool isSegmentedControl(Widget w) =>
+    w is CupertinoSegmentedControl || w is CupertinoSlidingSegmentedControl;
 
 bool deadEligible(Widget w) {
   if (isFeedbackControl(w)) return false;

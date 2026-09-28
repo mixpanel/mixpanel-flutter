@@ -129,6 +129,19 @@ void main() {
     expect(sliding, isNotNull);
     expect(sliding!.differsFrom(slid!), isTrue);
   });
+  testWidgets('segment content changes respond without a selection change',
+      (tester) async {
+    Widget control(String label) => CupertinoSegmentedControl<int>(
+        children: {0: Text(label), 1: const Text('b')},
+        groupValue: 0,
+        onValueChanged: (_) {});
+    final first = await capture(tester, control('a'));
+    final same = await capture(tester, control('a'));
+    final relabeled = await capture(tester, control('c'));
+    expect(first, isNotNull);
+    expect(first!.differsFrom(same!), isFalse);
+    expect(first.differsFrom(relabeled!), isTrue);
+  });
   testWidgets('budget exhaustion and empty viewport are unknown',
       (tester) async {
     expect(

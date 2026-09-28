@@ -73,7 +73,8 @@ class _SnapshotBuilder {
       addControlState(element, w);
       // Never descend into editable text, its decoration, cursor or controller.
       // Other feedback controls also have paint-only animation internals.
-      return;
+      // Segment children are app content that can change independently.
+      if (!isSegmentedControl(w)) return;
     }
     // Only meaningful public widgets contribute. Framework paint/rebuild
     // machinery and Ink ripple/highlight state are intentionally omitted.
