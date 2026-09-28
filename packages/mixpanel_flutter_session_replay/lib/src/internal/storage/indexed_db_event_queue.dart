@@ -313,9 +313,10 @@ class IndexedDbEventQueue
     final store = txn.objectStore(_eventsStore);
     final request = store.openCursor();
 
-    final completer = Completer<PersistedSessionReplayEvent?>();
-    request.onsuccess = (web.Event event) {
-      final result = (event.target as web.IDBRequest).result;
+    return _completeFromRequest(txn, request, 'Failed to fetch oldest event', (
+      result,
+      completer,
+    ) {
       if (_isNullish(result)) {
         completer.complete(null);
         return;
@@ -324,12 +325,7 @@ class IndexedDbEventQueue
       final row = _jsToRow(cursor.value);
       row['id'] = (cursor.key as JSNumber).toDartInt;
       completer.complete(PersistedSessionReplayEvent.fromDbRow(row));
-    }.toJS;
-    request.onerror = (web.Event event) {
-      completer.completeError(StateError('Failed to fetch oldest event'));
-    }.toJS;
-
-    return completer.future;
+    });
   }
 
   @override
@@ -340,9 +336,10 @@ class IndexedDbEventQueue
     final store = txn.objectStore(_eventsStore);
     final request = store.openCursor(null, 'prev');
 
-    final completer = Completer<PersistedSessionReplayEvent?>();
-    request.onsuccess = (web.Event event) {
-      final result = (event.target as web.IDBRequest).result;
+    return _completeFromRequest(txn, request, 'Failed to fetch newest event', (
+      result,
+      completer,
+    ) {
       if (_isNullish(result)) {
         completer.complete(null);
         return;
@@ -351,12 +348,7 @@ class IndexedDbEventQueue
       final row = _jsToRow(cursor.value);
       row['id'] = (cursor.key as JSNumber).toDartInt;
       completer.complete(PersistedSessionReplayEvent.fromDbRow(row));
-    }.toJS;
-    request.onerror = (web.Event event) {
-      completer.completeError(StateError('Failed to fetch newest event'));
-    }.toJS;
-
-    return completer.future;
+    });
   }
 
   @override
@@ -371,10 +363,11 @@ class IndexedDbEventQueue
     final txn = _transaction(_eventsStore.toJS, 'readonly');
     final index = txn.objectStore(_eventsStore).index(_eventHeaderIndex);
     final request = index.openKeyCursor(null, direction);
-    final completer = Completer<QueuedEventHeader?>();
 
-    request.onsuccess = (web.Event event) {
-      final result = (event.target as web.IDBRequest).result;
+    return _completeFromRequest(txn, request, 'Failed to fetch event header', (
+      result,
+      completer,
+    ) {
       if (_isNullish(result)) {
         completer.complete(null);
         return;
@@ -393,12 +386,7 @@ class IndexedDbEventQueue
           ),
         ),
       );
-    }.toJS;
-    request.onerror = (web.Event event) {
-      completer.completeError(StateError('Failed to fetch event header'));
-    }.toJS;
-
-    return completer.future;
+    });
   }
 
   @override
@@ -418,10 +406,10 @@ class IndexedDbEventQueue
     final batch = <PersistedSessionReplayEvent>[];
     int totalBytes = 0;
 
-    final completer = Completer<List<PersistedSessionReplayEvent>>();
-
-    request.onsuccess = (web.Event event) {
-      final result = (event.target as web.IDBRequest).result;
+    return _completeFromRequest(txn, request, 'Failed to fetch batch', (
+      result,
+      completer,
+    ) {
       if (_isNullish(result)) {
         completer.complete(batch);
         return;
@@ -452,13 +440,7 @@ class IndexedDbEventQueue
       totalBytes += dataSize;
 
       cursor.continue_();
-    }.toJS;
-
-    request.onerror = (web.Event event) {
-      completer.completeError(StateError('Failed to fetch batch'));
-    }.toJS;
-
-    return completer.future;
+    });
   }
 
   @override
@@ -832,44 +814,38 @@ class IndexedDbEventQueue
     final store = txn.objectStore(_metadataStore);
     final request = store.index(_metadataStartIndex).openCursor(null, 'prev');
 
-    final completer = Completer<Map<String, dynamic>?>();
+    return _completeFromRequest(
+      txn,
+      request,
+      'Failed to read latest session metadata',
+      (result, completer) {
+        if (_isNullish(result)) {
+          completer.complete(null);
+          return;
+        }
 
-    request.onsuccess = (web.Event event) {
-      final result = (event.target as web.IDBRequest).result;
-      if (_isNullish(result)) {
-        completer.complete(null);
-        return;
-      }
-
-      final cursor = result as web.IDBCursorWithValue;
-      final map = (cursor.value.dartify()! as Map).cast<String, dynamic>();
-      for (final key in const [
-        'session_start_time',
-        'last_sequence_number',
-        'idle_expires',
-        'max_expires',
-        'background_expires',
-      ]) {
-        final value = map[key];
-        if (value != null) map[key] = _asInt(value);
-      }
-      final recordOwner = map['owner_id'] as String?;
-      if (ownedBy != null &&
-          recordOwner != ownedBy &&
-          !(includeUnowned && recordOwner == null)) {
-        cursor.continue_();
-        return;
-      }
-      completer.complete(map);
-    }.toJS;
-
-    request.onerror = (web.Event event) {
-      completer.completeError(
-        StateError('Failed to read latest session metadata'),
-      );
-    }.toJS;
-
-    return completer.future;
+        final cursor = result as web.IDBCursorWithValue;
+        final map = (cursor.value.dartify()! as Map).cast<String, dynamic>();
+        for (final key in const [
+          'session_start_time',
+          'last_sequence_number',
+          'idle_expires',
+          'max_expires',
+          'background_expires',
+        ]) {
+          final value = map[key];
+          if (value != null) map[key] = _asInt(value);
+        }
+        final recordOwner = map['owner_id'] as String?;
+        if (ownedBy != null &&
+            recordOwner != ownedBy &&
+            !(includeUnowned && recordOwner == null)) {
+          cursor.continue_();
+          return;
+        }
+        completer.complete(map);
+      },
+    );
   }
 
   /// Atomically adopts legacy unowned metadata, or confirms ownership of a
@@ -1048,6 +1024,52 @@ class IndexedDbEventQueue
       map['payload_binary'] = binary.asUint8List();
     }
     return map;
+  }
+
+  /// Completes a read whose result is produced inside the request's `success`
+  /// callback rather than at transaction completion.
+  ///
+  /// A Dart exception thrown from that callback (for example a stored row this
+  /// SDK version cannot parse) settles the request without an `error` event,
+  /// and the browser then aborts the transaction silently. Without listening to
+  /// the transaction's abort and error events the awaiting caller would never
+  /// complete, and an upload that hit the row would stay "in flight" for the
+  /// rest of the page's lifetime. [onSuccess] may be invoked once per cursor
+  /// step; it completes [completer] when the read is done.
+  Future<T> _completeFromRequest<T>(
+    web.IDBTransaction txn,
+    web.IDBRequest request,
+    String failureMessage,
+    void Function(JSAny? result, Completer<T> completer) onSuccess,
+  ) {
+    final completer = Completer<T>();
+    void fail(Object error, [StackTrace? stackTrace]) {
+      if (!completer.isCompleted) completer.completeError(error, stackTrace);
+    }
+
+    request.onsuccess = (web.Event event) {
+      if (completer.isCompleted) return;
+      try {
+        onSuccess((event.target as web.IDBRequest).result, completer);
+      } catch (error, stackTrace) {
+        fail(error, stackTrace);
+        try {
+          txn.abort();
+        } catch (_) {
+          // The transaction may already have finished.
+        }
+      }
+    }.toJS;
+    request.onerror = (web.Event event) {
+      fail(StateError('$failureMessage: ${request.error}'));
+    }.toJS;
+    txn.onabort = (web.Event event) {
+      fail(StateError('$failureMessage: transaction aborted'));
+    }.toJS;
+    txn.onerror = (web.Event event) {
+      fail(StateError('$failureMessage: ${txn.error}'));
+    }.toJS;
+    return completer.future;
   }
 
   Future<JSAny?> _awaitRequest(web.IDBRequest request) {

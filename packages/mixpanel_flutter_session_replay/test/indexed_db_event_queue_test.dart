@@ -32,6 +32,30 @@ Future<void> _deleteDatabase(String name) {
   return completer.future;
 }
 
+/// Write a raw event row, bypassing the queue's serialization, so tests can
+/// store data the current SDK version cannot parse.
+Future<void> _insertRawEventRow(String dbName, Map<String, dynamic> row) {
+  final completer = Completer<void>();
+  final request = web.window.indexedDB.open(dbName);
+  request.onsuccess = (web.Event event) {
+    final db = (event.target as web.IDBRequest).result as web.IDBDatabase;
+    final txn = db.transaction('events'.toJS, 'readwrite');
+    txn.objectStore('events').add(row.jsify()!);
+    txn.oncomplete = (web.Event _) {
+      db.close();
+      completer.complete();
+    }.toJS;
+    txn.onerror = (web.Event _) {
+      db.close();
+      completer.completeError(StateError('Failed to insert raw event row'));
+    }.toJS;
+  }.toJS;
+  request.onerror = (web.Event event) {
+    completer.completeError(StateError('Failed to open $dbName'));
+  }.toJS;
+  return completer.future;
+}
+
 Future<void> _createVersionTwoDatabase(String name) {
   final completer = Completer<void>();
   final request = web.window.indexedDB.open(name, 2);
@@ -168,6 +192,57 @@ void main() {
 
     // Shared contract tests (identical assertions for all EventQueue impls)
     runEventQueueContractTests(() => storage);
+
+    group('Unparseable rows', () {
+      // A row whose event type this SDK version does not know. Parsing it
+      // throws inside the cursor's success callback.
+      final unknownTypeRow = <String, dynamic>{
+        'session_id': 'future-session',
+        'distinct_id': 'user-1',
+        'timestamp': 1000,
+        'type': 999,
+        'payload_metadata': '{}',
+        'payload_binary': null,
+        'data_size': 2,
+      };
+
+      Future<void> expectFailsPromptly(Future<Object?> read) => expectLater(
+        read.timeout(const Duration(seconds: 5)),
+        throwsA(isNot(isA<TimeoutException>())),
+      );
+
+      test('fetchOldest fails instead of hanging', () async {
+        // GIVEN a stored row the current SDK cannot deserialize
+        await _insertRawEventRow(_dbNameForToken(token), unknownTypeRow);
+
+        // WHEN / THEN the read completes with an error rather than never
+        // completing, which would otherwise wedge the upload service.
+        await expectFailsPromptly(storage.fetchOldest());
+        await expectFailsPromptly(storage.fetchNewest());
+      });
+
+      test('fetchBatch fails instead of hanging', () async {
+        await _insertRawEventRow(_dbNameForToken(token), unknownTypeRow);
+
+        await expectFailsPromptly(
+          storage.fetchBatch(
+            sessionId: 'future-session',
+            distinctId: 'user-1',
+            maxBytes: 1024,
+            maxCount: 10,
+          ),
+        );
+      });
+
+      test('the queue stays usable after a failed read', () async {
+        await _insertRawEventRow(_dbNameForToken(token), unknownTypeRow);
+        await expectFailsPromptly(storage.fetchOldest());
+
+        // Header reads never touch the payload and keep working.
+        final header = await storage.fetchOldestHeader();
+        expect(header?.sessionId, 'future-session');
+      });
+    });
 
     group('Session Expiry Methods', () {
       test('updateSessionExpiry stores expiry timestamps', () async {
