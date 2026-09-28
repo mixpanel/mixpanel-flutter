@@ -6,6 +6,12 @@ import '../../models/session_event.dart';
 /// The upload service uses this lease to ensure only one runtime reads,
 /// uploads, removes, and advances sequence numbers for a batch at a time.
 abstract interface class UploadLease {
+  /// Identity this runtime holds the lease under.
+  ///
+  /// Stable across page reloads so a tab that reloads mid-upload can take its
+  /// own lease straight back instead of waiting for the TTL to expire.
+  String get uploadLeaseOwnerId;
+
   Future<bool> acquireUploadLease({
     required String ownerId,
     required Duration ttl,

@@ -45,6 +45,11 @@ class IndexedDbEventQueue
   final MixpanelLogger _logger;
   final String ownerId;
   final int quotaMB;
+
+  /// The tab owner id doubles as the upload lease owner so a reload can
+  /// resume its own lease instead of waiting out the TTL.
+  @override
+  String get uploadLeaseOwnerId => ownerId;
   web.IDBDatabase? _db;
   bool _disposed = false;
   bool _initialized = false;

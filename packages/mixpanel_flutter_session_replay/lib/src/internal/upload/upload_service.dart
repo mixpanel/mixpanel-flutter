@@ -4,7 +4,6 @@ import 'dart:math';
 import 'package:clock/clock.dart';
 import 'package:http/http.dart' as http;
 import 'package:connectivity_plus/connectivity_plus.dart';
-import 'package:uuid/uuid.dart';
 
 import '../endpoints.dart';
 import '../storage/event_queue_interface.dart';
@@ -83,9 +82,6 @@ class UploadService {
 
   /// Full `/record` endpoint, derived from the configured base URL.
   final String _endpoint;
-
-  /// Stable for this SDK instance and unique across browser tabs.
-  final String _uploadLeaseOwnerId = const Uuid().v4();
 
   static const Duration _uploadLeaseTtl = Duration(minutes: 2);
 
@@ -369,7 +365,7 @@ class UploadService {
     var acquired = false;
     try {
       acquired = await uploadLease.acquireUploadLease(
-        ownerId: _uploadLeaseOwnerId,
+        ownerId: uploadLease.uploadLeaseOwnerId,
         ttl: _uploadLeaseTtl,
       );
       if (!acquired) {
@@ -383,7 +379,9 @@ class UploadService {
     } finally {
       if (acquired) {
         try {
-          await uploadLease.releaseUploadLease(ownerId: _uploadLeaseOwnerId);
+          await uploadLease.releaseUploadLease(
+            ownerId: uploadLease.uploadLeaseOwnerId,
+          );
         } catch (e) {
           _logger.warning('Failed to release replay upload lease: $e');
         }

@@ -19,6 +19,7 @@ import 'package:mixpanel_flutter_session_replay/src/models/session_event.dart';
 import 'helpers/fake_http_client.dart';
 import 'helpers/fake_connectivity.dart';
 import 'helpers/in_memory_event_queue.dart';
+import 'helpers/lease_event_queue.dart';
 
 void main() {
   group('UploadService', () {
@@ -1184,6 +1185,66 @@ void main() {
           service.dispose();
         },
       );
+    });
+
+    group('upload lease', () {
+      test('acquires and releases the lease as the queue owner', () async {
+        // GIVEN a shared queue whose owner id survives page reloads
+        final leaseQueue = LeaseEventQueue(uploadLeaseOwnerId: 'tab-42');
+        await leaseQueue.initialize();
+        final session = Session(
+          id: testSessionId,
+          startTime: DateTime.fromMillisecondsSinceEpoch(1000, isUtc: true),
+          status: SessionStatus.active,
+        );
+        await leaseQueue.createSessionMetadata(session);
+        await leaseQueue.add(
+          SessionReplayEvent(
+            sessionId: testSessionId,
+            distinctId: testDistinctId,
+            timestamp: DateTime.fromMillisecondsSinceEpoch(2000, isUtc: true),
+            type: EventType.interaction,
+            payload: InteractionPayload(interactionType: 7, x: 1, y: 2),
+          ),
+        );
+        final service = createService(eventQueue: leaseQueue);
+
+        // WHEN one batch is uploaded
+        await service.flushOneBatch();
+
+        // THEN the lease was taken and released under the queue's identity,
+        // not a per-service one that a reload would lose
+        expect(leaseQueue.acquireOwnerIds, contains('tab-42'));
+        expect(leaseQueue.acquireOwnerIds.toSet(), {'tab-42'});
+        expect(leaseQueue.releaseOwnerIds, ['tab-42']);
+        expect(leaseQueue.eventCount, 0);
+      });
+
+      test('reports busy when another owner holds the lease', () async {
+        final leaseQueue = LeaseEventQueue()..acquireResults.add(false);
+        await leaseQueue.initialize();
+        final session = Session(
+          id: testSessionId,
+          startTime: DateTime.fromMillisecondsSinceEpoch(1000, isUtc: true),
+          status: SessionStatus.active,
+        );
+        await leaseQueue.createSessionMetadata(session);
+        await leaseQueue.add(
+          SessionReplayEvent(
+            sessionId: testSessionId,
+            distinctId: testDistinctId,
+            timestamp: DateTime.fromMillisecondsSinceEpoch(2000, isUtc: true),
+            type: EventType.interaction,
+            payload: InteractionPayload(interactionType: 7, x: 1, y: 2),
+          ),
+        );
+        final service = createService(eventQueue: leaseQueue);
+
+        await service.flushOneBatch();
+
+        expect(leaseQueue.eventCount, 1, reason: 'nothing uploaded');
+        expect(leaseQueue.releaseOwnerIds, isEmpty);
+      });
     });
 
     group('storage failures', () {
