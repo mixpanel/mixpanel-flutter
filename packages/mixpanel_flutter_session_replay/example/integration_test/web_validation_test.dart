@@ -187,8 +187,14 @@ void main() {
       await firstQueue.dispose();
 
       // Closing and reopening the actual IndexedDB connection models the
-      // storage boundary crossed by a reload or an abruptly closed tab.
-      final reopenedQueue = IndexedDbEventQueue(token: token, logger: logger);
+      // storage boundary crossed by a reload. The owner id survives a reload
+      // in sessionStorage, and only the owning tab may upload a live session,
+      // so the reopened queue must carry the same owner.
+      final reopenedQueue = IndexedDbEventQueue(
+        token: token,
+        ownerId: firstQueue.ownerId,
+        logger: logger,
+      );
       await reopenedQueue.initialize();
       addTearDown(reopenedQueue.dispose);
       expect(await reopenedQueue.fetchOldestHeader(), isNotNull);
