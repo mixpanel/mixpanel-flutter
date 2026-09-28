@@ -11,6 +11,7 @@ import '../models/results.dart';
 import '../models/session_event.dart' show TouchPosition;
 import '../models/session.dart';
 import 'background_task_manager.dart';
+import 'capture/capture_invalidation.dart';
 import 'event_recorder.dart';
 import 'screenshot_capturer.dart';
 import 'triggers/trigger_service.dart';
@@ -58,16 +59,8 @@ class SessionReplayCoordinator implements WidgetCoordinator {
   bool _isAppInForeground = false;
   bool _isDisposed = false;
 
-  /// Incremented when a background pause invalidates captures that started
-  /// while recording was active. A frame that crosses a pause is discarded
-  /// even if its pixels were already acquired.
-  int _captureGeneration = 0;
-
-  /// Incremented whenever recording stops or pauses. Polled by the capturer
-  /// so a frame still waiting for a browser presentation when recording ends
-  /// never acquires pixels. A frame acquired before a stop is still recorded
-  /// under the identity pinned when it began, matching the native SDKs.
-  int _captureEpoch = 0;
+  /// What a pause or stop means for captures already in flight.
+  final CaptureInvalidation _captureInvalidation = CaptureInvalidation();
 
   @override
   bool get capturesRenderedSurface =>
@@ -254,8 +247,7 @@ class SessionReplayCoordinator implements WidgetCoordinator {
     // Check max session duration (web only)
     if (_checkMaxSessionExpired()) return;
 
-    final captureGeneration = _captureGeneration;
-    final captureEpoch = _captureEpoch;
+    final ticket = _captureInvalidation.begin();
     _logger.debug('Capturing snapshot', tag: 'coordinator');
 
     // Get JPG bytes from screenshot capturer. The capturer polls the probe
@@ -266,14 +258,14 @@ class SessionReplayCoordinator implements WidgetCoordinator {
       getCurrentSession: _sessionManager.getCurrentSession,
       getDistinctId: _eventRecorder.getDistinctId,
       boundaryElement: boundaryElement,
-      isCancelled: () => _captureEpoch != captureEpoch,
+      isCancelled: () => _captureInvalidation.isCancelled(ticket),
     );
 
     // A pause may have happened while the asynchronous image capture was in
     // flight, followed by a resume before it completed. Checking only the
     // current recording state would let that stale frame cross the pause
-    // boundary, so use the generation captured when the work began.
-    if (_captureGeneration != captureGeneration) {
+    // boundary, so ask about the ticket taken when the work began.
+    if (_captureInvalidation.discardsAcquired(ticket)) {
       _logger.debug(
         'Discarding snapshot captured across a background pause',
         tag: 'coordinator',
@@ -904,8 +896,7 @@ class SessionReplayCoordinator implements WidgetCoordinator {
     }
 
     _logger.debug('Pausing recording for background', tag: 'coordinator');
-    _captureGeneration++;
-    _captureEpoch++;
+    _captureInvalidation.notePause();
     _recordingState = RecordingState.paused;
     _lifetime.pause(idleTimeout);
 
@@ -1026,7 +1017,7 @@ class SessionReplayCoordinator implements WidgetCoordinator {
 
     // Transition to notRecording state. A frame still waiting to acquire
     // pixels must not do so now; one already acquired stays with its replay.
-    _captureEpoch++;
+    _captureInvalidation.noteStop();
     _recordingState = RecordingState.notRecording;
     _isIdledOut = false;
 
