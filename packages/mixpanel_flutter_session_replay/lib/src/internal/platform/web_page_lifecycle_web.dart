@@ -14,7 +14,12 @@ void Function() registerWebPageLifecycle({
     }
   }).toJS;
   final pageHideListener = ((web.Event _) => onHidden()).toJS;
-  final pageShowListener = ((web.Event _) => onVisible()).toJS;
+  // pageshow also fires for background tabs and prerendered pages, where it
+  // does not mean the page is visible. Forward it only when the document is;
+  // a hidden page is reported by visibilitychange once it is shown.
+  final pageShowListener = ((web.Event _) {
+    if (web.document.visibilityState == 'visible') onVisible();
+  }).toJS;
   web.document.addEventListener('visibilitychange', visibilityListener);
   web.window.addEventListener('pagehide', pageHideListener);
   web.window.addEventListener('pageshow', pageShowListener);
