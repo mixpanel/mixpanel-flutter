@@ -414,6 +414,113 @@ void main() {
       });
     });
 
+    group('Upload scope', () {
+      Future<void> addEvent(IndexedDbEventQueue queue, String sessionId) =>
+          queue.add(
+            SessionReplayEvent(
+              sessionId: sessionId,
+              distinctId: 'user-1',
+              timestamp: DateTime.utc(2025),
+              type: EventType.interaction,
+              payload: InteractionPayload(interactionType: 1, x: 1, y: 2),
+            ),
+          );
+
+      Future<IndexedDbEventQueue> openOtherTab() async {
+        final otherTab = IndexedDbEventQueue(
+          token: token,
+          ownerId: 'other-tab',
+          logger: MixpanelLogger(LogLevel.none),
+        );
+        await otherTab.initialize();
+        addTearDown(otherTab.dispose);
+        return otherTab;
+      }
+
+      test('skips events of a live session recorded by another tab', () async {
+        // GIVEN another tab recording a live session whose events are the
+        // oldest in the shared store, followed by this tab's own event
+        final otherTab = await openOtherTab();
+        await otherTab.createSessionMetadata(
+          Session(
+            id: 'other-live',
+            startTime: DateTime.utc(2025),
+            status: SessionStatus.active,
+          ),
+        );
+        final future = DateTime.now().millisecondsSinceEpoch + 3600000;
+        await otherTab.updateSessionExpiry(
+          sessionId: 'other-live',
+          idleExpiresMs: future,
+          maxExpiresMs: future,
+        );
+        await addEvent(otherTab, 'other-live');
+        await storage.createSessionMetadata(
+          Session(
+            id: 'mine',
+            startTime: DateTime.utc(2025),
+            status: SessionStatus.active,
+          ),
+        );
+        await addEvent(storage, 'mine');
+
+        // THEN this tab only sees its own session, like mixpanel-js where a
+        // tab never drains another tab's live replay
+        expect((await storage.fetchOldestHeader())?.sessionId, 'mine');
+        expect((await storage.fetchNewestHeader())?.sessionId, 'mine');
+        expect((await storage.fetchOldest())?.sessionId, 'mine');
+        // AND the other tab sees only its own
+        expect((await otherTab.fetchOldestHeader())?.sessionId, 'other-live');
+      });
+
+      test('another tab may drain a session once it has expired', () async {
+        // GIVEN a session another tab recorded whose deadlines have passed
+        final otherTab = await openOtherTab();
+        await otherTab.createSessionMetadata(
+          Session(
+            id: 'other-expired',
+            startTime: DateTime.utc(2025),
+            status: SessionStatus.active,
+          ),
+        );
+        final past = DateTime.now().millisecondsSinceEpoch - 1000;
+        await otherTab.updateSessionExpiry(
+          sessionId: 'other-expired',
+          idleExpiresMs: past,
+          maxExpiresMs: past,
+        );
+        await addEvent(otherTab, 'other-expired');
+
+        // THEN its leftovers are eligible for this tab
+        expect((await storage.fetchOldestHeader())?.sessionId, 'other-expired');
+      });
+
+      test('orphaned events without metadata are always eligible', () async {
+        await addEvent(storage, 'no-metadata');
+
+        expect((await storage.fetchOldestHeader())?.sessionId, 'no-metadata');
+      });
+
+      test(
+        'a young session with no deadlines yet stays with its tab',
+        () async {
+          // GIVEN another tab created metadata moments ago and has not yet
+          // written its first deadline
+          final otherTab = await openOtherTab();
+          await otherTab.createSessionMetadata(
+            Session(
+              id: 'other-fresh',
+              startTime: DateTime.now().toUtc(),
+              status: SessionStatus.active,
+            ),
+          );
+          await addEvent(otherTab, 'other-fresh');
+
+          expect(await storage.fetchOldestHeader(), isNull);
+        },
+      );
+    });
+
     group('Cross-tab upload lease', () {
       test('allows only one queue instance to own the lease', () async {
         final secondTab = IndexedDbEventQueue(
@@ -426,6 +533,7 @@ void main() {
         expect(
           await storage.acquireUploadLease(
             ownerId: 'tab-1',
+            sessionId: 'shared-session',
             ttl: const Duration(minutes: 1),
           ),
           isTrue,
@@ -433,16 +541,47 @@ void main() {
         expect(
           await secondTab.acquireUploadLease(
             ownerId: 'tab-2',
+            sessionId: 'shared-session',
             ttl: const Duration(minutes: 1),
           ),
           isFalse,
         );
 
-        await storage.releaseUploadLease(ownerId: 'tab-1');
+        await storage.releaseUploadLease(
+          ownerId: 'tab-1',
+          sessionId: 'shared-session',
+        );
 
         expect(
           await secondTab.acquireUploadLease(
             ownerId: 'tab-2',
+            sessionId: 'shared-session',
+            ttl: const Duration(minutes: 1),
+          ),
+          isTrue,
+        );
+      });
+
+      test('leases for different sessions do not block each other', () async {
+        final secondTab = IndexedDbEventQueue(
+          token: token,
+          logger: MixpanelLogger(LogLevel.none),
+        );
+        await secondTab.initialize();
+        addTearDown(secondTab.dispose);
+
+        expect(
+          await storage.acquireUploadLease(
+            ownerId: 'tab-1',
+            sessionId: 'session-a',
+            ttl: const Duration(minutes: 1),
+          ),
+          isTrue,
+        );
+        expect(
+          await secondTab.acquireUploadLease(
+            ownerId: 'tab-2',
+            sessionId: 'session-b',
             ttl: const Duration(minutes: 1),
           ),
           isTrue,
@@ -462,6 +601,7 @@ void main() {
           expect(
             await storage.acquireUploadLease(
               ownerId: 'stale-tab',
+              sessionId: 'shared-session',
               ttl: Duration.zero,
             ),
             isTrue,
@@ -469,6 +609,7 @@ void main() {
           expect(
             await secondTab.acquireUploadLease(
               ownerId: 'replacement-tab',
+              sessionId: 'shared-session',
               ttl: const Duration(minutes: 1),
             ),
             isTrue,
@@ -637,6 +778,7 @@ void main() {
       expect(
         await secondTab.acquireUploadLease(
           ownerId: secondTab.uploadLeaseOwnerId,
+          sessionId: sessionId,
           ttl: const Duration(minutes: 1),
         ),
         isTrue,

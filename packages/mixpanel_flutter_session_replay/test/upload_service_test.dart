@@ -1217,6 +1217,9 @@ void main() {
         expect(leaseQueue.acquireOwnerIds, contains('tab-42'));
         expect(leaseQueue.acquireOwnerIds.toSet(), {'tab-42'});
         expect(leaseQueue.releaseOwnerIds, ['tab-42']);
+        // AND the lease is scoped to the session being uploaded
+        expect(leaseQueue.acquireSessionIds.toSet(), {testSessionId});
+        expect(leaseQueue.releaseSessionIds, [testSessionId]);
         expect(leaseQueue.eventCount, 0);
       });
 

@@ -356,9 +356,23 @@ class UploadService {
 
   /// Upload a single batch of events
   Future<UploadResult> _uploadBatch() async {
+    // The queue decides which events this runtime may upload: on web that is
+    // its own sessions plus expired ones, matching mixpanel-js. FIFO within
+    // that scope prevents abandoned events.
+    final QueuedEventHeader? oldestEvent;
+    try {
+      oldestEvent = await eventQueue.fetchOldestHeader();
+    } catch (e) {
+      _logger.error('Failed to read the upload queue: $e');
+      return UploadResult.networkError;
+    }
+    if (oldestEvent == null) {
+      return UploadResult.success; // No events to upload
+    }
+
     final queue = eventQueue;
     if (queue is! UploadLease) {
-      return _uploadNextBatch();
+      return _uploadNextBatch(oldestEvent);
     }
     final uploadLease = queue as UploadLease;
 
@@ -366,13 +380,16 @@ class UploadService {
     try {
       acquired = await uploadLease.acquireUploadLease(
         ownerId: uploadLease.uploadLeaseOwnerId,
+        sessionId: oldestEvent.sessionId,
         ttl: _uploadLeaseTtl,
       );
       if (!acquired) {
-        _logger.debug('Another browser tab owns the upload lease');
+        _logger.debug(
+          'Another browser tab is uploading session ${oldestEvent.sessionId}',
+        );
         return UploadResult.busy;
       }
-      return await _uploadNextBatch(lease: uploadLease);
+      return await _uploadNextBatch(oldestEvent, lease: uploadLease);
     } catch (e) {
       _logger.error('Failed to coordinate replay upload: $e');
       return UploadResult.networkError;
@@ -381,6 +398,7 @@ class UploadService {
         try {
           await uploadLease.releaseUploadLease(
             ownerId: uploadLease.uploadLeaseOwnerId,
+            sessionId: oldestEvent.sessionId,
           );
         } catch (e) {
           _logger.warning('Failed to release replay upload lease: $e');
@@ -389,18 +407,13 @@ class UploadService {
     }
   }
 
-  /// Uploads the head-of-queue batch. [lease] is the shared lease this
-  /// runtime holds for the upload, or null for single-runtime storage.
-  Future<UploadResult> _uploadNextBatch({UploadLease? lease}) async {
+  /// Uploads the batch starting at [oldestEvent]. [lease] is the per-session
+  /// lease this runtime holds for it, or null for single-runtime storage.
+  Future<UploadResult> _uploadNextBatch(
+    QueuedEventHeader oldestEvent, {
+    UploadLease? lease,
+  }) async {
     try {
-      // Get the oldest event to determine which session/user to upload
-      // This ensures FIFO order and prevents abandoned events
-      final oldestEvent = await eventQueue.fetchOldestHeader();
-
-      if (oldestEvent == null) {
-        return UploadResult.success; // No events to upload
-      }
-
       final sessionId = oldestEvent.sessionId;
       final distinctId = oldestEvent.distinctId;
 
@@ -480,6 +493,7 @@ class UploadService {
       if (lease != null) {
         final renewed = await lease.acquireUploadLease(
           ownerId: lease.uploadLeaseOwnerId,
+          sessionId: sessionId,
           ttl: _uploadLeaseTtl,
         );
         if (!renewed) {

@@ -13,7 +13,9 @@ class LeaseEventQueue extends InMemoryEventQueue
   final String uploadLeaseOwnerId;
 
   final List<String> acquireOwnerIds = [];
+  final List<String> acquireSessionIds = [];
   final List<String> releaseOwnerIds = [];
+  final List<String> releaseSessionIds = [];
 
   /// Results returned by successive acquire calls; `true` once exhausted.
   final List<bool> acquireResults = [];
@@ -29,16 +31,22 @@ class LeaseEventQueue extends InMemoryEventQueue
   @override
   Future<bool> acquireUploadLease({
     required String ownerId,
+    required String sessionId,
     required Duration ttl,
   }) async {
     acquireOwnerIds.add(ownerId);
+    acquireSessionIds.add(sessionId);
     onAcquire?.call(acquireOwnerIds.length);
     return acquireResults.isEmpty ? true : acquireResults.removeAt(0);
   }
 
   @override
-  Future<void> releaseUploadLease({required String ownerId}) async {
+  Future<void> releaseUploadLease({
+    required String ownerId,
+    required String sessionId,
+  }) async {
     releaseOwnerIds.add(ownerId);
+    releaseSessionIds.add(sessionId);
   }
 
   @override

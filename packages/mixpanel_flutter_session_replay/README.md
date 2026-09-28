@@ -74,8 +74,10 @@ in production (localhost remains suitable for development).
 
 Web replay events and session metadata are stored together in IndexedDB; JPEG
 bytes are stored as binary values rather than base64 strings. The queue is
-bounded by `storageQuotaMB`, coordinates uploads across tabs, and removes
-unuploaded events and abandoned session metadata after five days. The
+bounded by `storageQuotaMB` and removes unuploaded events and abandoned
+session metadata after five days. Like mixpanel-js, each browser tab uploads
+only the replay it recorded plus leftovers of expired replays; a live replay in
+another tab is never touched. The
 `mobile.wifiOnly` option does not apply on web.
 
 ### Capture resolution

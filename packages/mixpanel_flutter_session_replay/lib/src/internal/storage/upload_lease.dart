@@ -3,8 +3,11 @@ import '../../models/session_event.dart';
 /// Optional capability implemented by persistent queues that can be shared by
 /// multiple runtimes, such as browser tabs.
 ///
-/// The upload service uses this lease to ensure only one runtime reads,
-/// uploads, removes, and advances sequence numbers for a batch at a time.
+/// Leases are per session, like mixpanel-js's per-replay lock. A tab only
+/// uploads sessions it recorded and sessions no live tab owns, so contention
+/// arises only when several tabs drain the same expired session; the lease
+/// ensures one runtime at a time reads, uploads, removes, and advances the
+/// sequence number for that session.
 abstract interface class UploadLease {
   /// Identity this runtime holds the lease under.
   ///
@@ -14,10 +17,14 @@ abstract interface class UploadLease {
 
   Future<bool> acquireUploadLease({
     required String ownerId,
+    required String sessionId,
     required Duration ttl,
   });
 
-  Future<void> releaseUploadLease({required String ownerId});
+  Future<void> releaseUploadLease({
+    required String ownerId,
+    required String sessionId,
+  });
 }
 
 /// Optional capability for queues that can atomically delete an acknowledged

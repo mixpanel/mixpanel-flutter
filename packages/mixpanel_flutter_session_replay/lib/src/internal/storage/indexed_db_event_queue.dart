@@ -9,6 +9,7 @@ import 'event_queue_interface.dart';
 import '../../models/session_event.dart';
 import '../../models/session.dart';
 import '../logger.dart';
+import '../session/recording_limits.dart';
 import 'upload_lease.dart';
 
 const _eventsStore = 'events';
@@ -19,7 +20,7 @@ const _eventHeaderIndex = 'by_id_header';
 const _eventTimestampIndex = 'by_timestamp';
 const _metadataStartIndex = 'by_start_time';
 const _coordinationStore = 'coordination';
-const _uploadLeaseKey = 'upload_lease';
+const _uploadLeaseKeyPrefix = 'upload_lease:';
 const _storageSizeKey = 'storage_size';
 const _isWasm = bool.fromEnvironment('dart.tool.dart2wasm');
 
@@ -310,9 +311,46 @@ class IndexedDbEventQueue
     }
   }
 
+  /// Sessions whose events this tab must leave alone: recorded by another tab
+  /// and not yet expired.
+  ///
+  /// Mirrors mixpanel-js, where a tab uploads only its own replay plus the
+  /// leftovers of expired ones. Orphaned events with no metadata have no live
+  /// owner and are always eligible. A record with no deadlines yet is treated
+  /// as live until it is older than the longest possible recording.
+  Future<Set<String>> _foreignLiveSessionIds() async {
+    final txn = _transaction(_metadataStore.toJS, 'readonly');
+    final result = await _awaitRequest(
+      txn.objectStore(_metadataStore).getAll(),
+    );
+    final blocked = <String>{};
+    if (_isNullish(result)) return blocked;
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    for (final record in (result.dartify()! as List)) {
+      final map = (record as Map).cast<String, dynamic>();
+      if (map['owner_id'] == ownerId) continue;
+      if (_isSessionLive(map, nowMs)) blocked.add(map['session_id'] as String);
+    }
+    return blocked;
+  }
+
+  static bool _isSessionLive(Map<String, dynamic> metadata, int nowMs) {
+    final deadlines = [
+      _asNullableInt(metadata['idle_expires']),
+      _asNullableInt(metadata['max_expires']),
+      _asNullableInt(metadata['background_expires']),
+    ].nonNulls.toList();
+    if (deadlines.isEmpty) {
+      final startMs = _asNullableInt(metadata['session_start_time']) ?? 0;
+      return nowMs - startMs < maxRecordingDuration.inMilliseconds;
+    }
+    return deadlines.every((deadline) => nowMs < deadline);
+  }
+
   @override
   Future<PersistedSessionReplayEvent?> fetchOldest() async {
     await _ensureOpen();
+    final blocked = await _foreignLiveSessionIds();
 
     final txn = _transaction(_eventsStore.toJS, 'readonly');
     final store = txn.objectStore(_eventsStore);
@@ -328,6 +366,10 @@ class IndexedDbEventQueue
       }
       final cursor = result as web.IDBCursorWithValue;
       final row = _jsToRow(cursor.value);
+      if (blocked.contains(row['session_id'])) {
+        cursor.continue_();
+        return;
+      }
       row['id'] = (cursor.key as JSNumber).toDartInt;
       completer.complete(PersistedSessionReplayEvent.fromDbRow(row));
     });
@@ -336,6 +378,7 @@ class IndexedDbEventQueue
   @override
   Future<PersistedSessionReplayEvent?> fetchNewest() async {
     await _ensureOpen();
+    final blocked = await _foreignLiveSessionIds();
 
     final txn = _transaction(_eventsStore.toJS, 'readonly');
     final store = txn.objectStore(_eventsStore);
@@ -351,6 +394,10 @@ class IndexedDbEventQueue
       }
       final cursor = result as web.IDBCursorWithValue;
       final row = _jsToRow(cursor.value);
+      if (blocked.contains(row['session_id'])) {
+        cursor.continue_();
+        return;
+      }
       row['id'] = (cursor.key as JSNumber).toDartInt;
       completer.complete(PersistedSessionReplayEvent.fromDbRow(row));
     });
@@ -364,6 +411,7 @@ class IndexedDbEventQueue
 
   Future<QueuedEventHeader?> _fetchHeader(String direction) async {
     await _ensureOpen();
+    final blocked = await _foreignLiveSessionIds();
 
     final txn = _transaction(_eventsStore.toJS, 'readonly');
     final index = txn.objectStore(_eventsStore).index(_eventHeaderIndex);
@@ -380,6 +428,10 @@ class IndexedDbEventQueue
 
       final cursor = result as web.IDBCursor;
       final key = (cursor.key.dartify()! as List).cast<Object?>();
+      if (blocked.contains(key[1])) {
+        cursor.continue_();
+        return;
+      }
       completer.complete(
         QueuedEventHeader(
           id: _asInt(key[0]),
@@ -592,16 +644,21 @@ class IndexedDbEventQueue
     }
   }
 
+  static String _leaseKey(String sessionId) =>
+      '$_uploadLeaseKeyPrefix$sessionId';
+
   @override
   Future<bool> acquireUploadLease({
     required String ownerId,
+    required String sessionId,
     required Duration ttl,
   }) async {
     await _ensureOpen();
 
     final txn = _transaction(_coordinationStore.toJS, 'readwrite');
     final store = txn.objectStore(_coordinationStore);
-    final request = store.get(_uploadLeaseKey.toJS);
+    final leaseKey = _leaseKey(sessionId);
+    final request = store.get(leaseKey.toJS);
     final nowMs = DateTime.now().millisecondsSinceEpoch;
     var acquired = false;
 
@@ -619,7 +676,7 @@ class IndexedDbEventQueue
       acquired = true;
       store.put(
         <String, dynamic>{
-          'name': _uploadLeaseKey,
+          'name': leaseKey,
           'owner_id': ownerId,
           'expires_at': nowMs + ttl.inMilliseconds,
         }.jsify()!,
@@ -631,19 +688,23 @@ class IndexedDbEventQueue
   }
 
   @override
-  Future<void> releaseUploadLease({required String ownerId}) async {
+  Future<void> releaseUploadLease({
+    required String ownerId,
+    required String sessionId,
+  }) async {
     await _ensureOpen();
 
     final txn = _transaction(_coordinationStore.toJS, 'readwrite');
     final store = txn.objectStore(_coordinationStore);
-    final request = store.get(_uploadLeaseKey.toJS);
+    final leaseKey = _leaseKey(sessionId);
+    final request = store.get(leaseKey.toJS);
 
     request.onsuccess = (web.Event event) {
       final result = (event.target as web.IDBRequest).result;
       if (_isNullish(result)) return;
       final current = (result.dartify()! as Map).cast<String, dynamic>();
       if (current['owner_id'] == ownerId) {
-        store.delete(_uploadLeaseKey.toJS);
+        store.delete(leaseKey.toJS);
       }
     }.toJS;
 
@@ -676,7 +737,7 @@ class IndexedDbEventQueue
     // frozen past its lease TTL can resume with a batch another tab already
     // uploaded; committing would advance the sequence past a number that tab
     // may still be about to use.
-    final leaseRequest = coordinationStore.get(_uploadLeaseKey.toJS);
+    final leaseRequest = coordinationStore.get(_leaseKey(sessionId).toJS);
     final nowMs = DateTime.now().millisecondsSinceEpoch;
     var leaseLost = false;
     leaseRequest.onsuccess = (web.Event event) {
