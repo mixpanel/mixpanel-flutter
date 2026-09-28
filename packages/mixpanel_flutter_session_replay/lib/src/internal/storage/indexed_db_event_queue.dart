@@ -666,9 +666,28 @@ class IndexedDbEventQueue
     final eventsStore = txn.objectStore(_eventsStore);
     final metadataStore = txn.objectStore(_metadataStore);
     final coordinationStore = txn.objectStore(_coordinationStore);
-    final metadataRequest = metadataStore.get(sessionId.toJS);
     var remainingSize = _currentSizeBytes;
 
+    // Issued first so a lost lease aborts before any delete is queued. A tab
+    // frozen past its lease TTL can resume with a batch another tab already
+    // uploaded; committing would advance the sequence past a number that tab
+    // may still be about to use.
+    final leaseRequest = coordinationStore.get(_uploadLeaseKey.toJS);
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    var leaseLost = false;
+    leaseRequest.onsuccess = (web.Event event) {
+      final result = (event.target as web.IDBRequest).result;
+      if (_isNullish(result)) return;
+      final lease = (result.dartify()! as Map).cast<String, dynamic>();
+      final owner = lease['owner_id'] as String?;
+      final expiresAt = _asNullableInt(lease['expires_at']) ?? 0;
+      if (owner != null && owner != ownerId && expiresAt > nowMs) {
+        leaseLost = true;
+        txn.abort();
+      }
+    }.toJS;
+
+    final metadataRequest = metadataStore.get(sessionId.toJS);
     metadataRequest.onsuccess = (web.Event event) {
       final result = (event.target as web.IDBRequest).result;
       if (_isNullish(result)) {
@@ -694,7 +713,16 @@ class IndexedDbEventQueue
       onComputed: (size) => remainingSize = size,
     );
 
-    await _awaitTransaction(txn);
+    try {
+      await _awaitTransaction(txn);
+    } on StateError {
+      if (leaseLost) {
+        throw UploadLeaseLostException(
+          'Upload lease for $_dbName is held by another tab; batch left queued',
+        );
+      }
+      rethrow;
+    }
     _currentSizeBytes = remainingSize;
   }
 

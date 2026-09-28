@@ -29,3 +29,19 @@ abstract interface class AtomicUploadCommit {
     required int sequenceNumber,
   });
 }
+
+/// Thrown by [AtomicUploadCommit.commitUploadedBatch] when another runtime
+/// holds an unexpired upload lease at commit time.
+///
+/// The batch stays queued and the sequence number is untouched; the current
+/// lease holder uploads it. A TTL lease cannot rule out the acknowledged POST
+/// having been a duplicate, but refusing the commit keeps the sequence from
+/// advancing past a number another tab may still be about to use.
+class UploadLeaseLostException implements Exception {
+  const UploadLeaseLostException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
+}
