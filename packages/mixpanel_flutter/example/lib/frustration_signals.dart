@@ -20,6 +20,10 @@ class _FrustrationSignalsScreenState extends State<FrustrationSignalsScreen> {
   int _idCase = 0;
   bool _switch = false;
   bool _checkbox = false;
+  bool _cupertinoCheckbox = false;
+  int _cupertinoRadio = 0;
+  int _segment = 0;
+  int _slidingSegment = 0;
   double _slider = 0.5;
   String _response = 'AAAA';
   static const _sections = [
@@ -321,6 +325,71 @@ class _FrustrationSignalsScreenState extends State<FrustrationSignalsScreen> {
                     value: _checkbox,
                     onChanged: (value) =>
                         setState(() => _checkbox = value ?? false)))),
+        _fixture(
+            'Cupertino checkbox feedback',
+            'Toggle it: expected click (Checkbox), no dead click. Then tap the '
+                'no-op button beside it: expected one dead click, proving the '
+                'visible checkbox no longer suppresses detection.',
+            Row(mainAxisSize: MainAxisSize.min, children: [
+              _identified(
+                  'dead_cupertino_checkbox',
+                  CupertinoCheckbox(
+                      value: _cupertinoCheckbox,
+                      onChanged: (value) =>
+                          setState(() => _cupertinoCheckbox = value ?? false))),
+              const SizedBox(width: 12),
+              _identified('dead_beside_cupertino_checkbox',
+                  _button(const Text('No-op button'))),
+            ])),
+        _fixture(
+            'Cupertino radio feedback',
+            'Select either radio. Expected click (Radio); no dead click.',
+            Row(mainAxisSize: MainAxisSize.min, children: [
+              for (final value in [0, 1])
+                Padding(
+                    padding: const EdgeInsets.all(8),
+                    child: _identified(
+                        'dead_cupertino_radio_$value',
+                        // Legacy API keeps the fixture compatible with Flutter 3.19.
+                        // ignore: deprecated_member_use
+                        CupertinoRadio<int>(
+                            value: value,
+                            // ignore: deprecated_member_use
+                            groupValue: _cupertinoRadio,
+                            // ignore: deprecated_member_use
+                            onChanged: (value) =>
+                                setState(() => _cupertinoRadio = value ?? 0)))),
+            ])),
+        _fixture(
+            'Segmented control feedback',
+            'Tap each segment, including the selected one. Expected click '
+                '(Picker); never a dead click.',
+            _identified(
+                'dead_segmented',
+                CupertinoSegmentedControl<int>(
+                    groupValue: _segment,
+                    children: const {
+                      0: Padding(
+                          padding: EdgeInsets.all(8), child: Text('First')),
+                      1: Padding(
+                          padding: EdgeInsets.all(8), child: Text('Second')),
+                    },
+                    onValueChanged: (value) =>
+                        setState(() => _segment = value)))),
+        _fixture(
+            'Sliding segmented control feedback',
+            'Tap each segment, including the selected one. Expected click '
+                '(Picker); never a dead click.',
+            _identified(
+                'dead_sliding_segmented',
+                CupertinoSlidingSegmentedControl<int>(
+                    groupValue: _slidingSegment,
+                    children: const {
+                      0: Text('First'),
+                      1: Text('Second'),
+                    },
+                    onValueChanged: (value) =>
+                        setState(() => _slidingSegment = value ?? 0)))),
         _fixture(
             'Slider feedback',
             'Tap the track. Expected no dead click. Dragging is not a click.',
