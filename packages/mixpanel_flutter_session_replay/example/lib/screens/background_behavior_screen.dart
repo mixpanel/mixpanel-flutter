@@ -48,7 +48,8 @@ class _BackgroundBehaviorScreenState extends State<BackgroundBehaviorScreen> {
                 kIsWeb
                     ? 'Web defaults to pause so temporary tab switches keep '
                           'the same replay.'
-                    : 'Mobile defaults to stop for backward compatibility.',
+                    : 'Native platforms default to stop for backward '
+                          'compatibility.',
               ),
               const SizedBox(height: 16),
               DropdownButtonFormField<BackgroundBehaviorSelection>(

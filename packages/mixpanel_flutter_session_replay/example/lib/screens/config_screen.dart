@@ -35,6 +35,10 @@ class _ConfigScreenState extends State<ConfigScreen> {
       (defaultTargetPlatform == TargetPlatform.android ||
           defaultTargetPlatform == TargetPlatform.iOS);
 
+  /// `MobileOptions.onBackground` governs every native platform, including
+  /// macOS, so the background behavior card is shown there too.
+  bool get _isNativePlatform => !kIsWeb;
+
   @override
   void initState() {
     super.initState();
@@ -248,7 +252,7 @@ class _ConfigScreenState extends State<ConfigScreen> {
                     _buildLogLevelDropdown(configVm, _isInitializing),
                     const SizedBox(height: 16),
                     _buildRemoteSettingsModeDropdown(configVm, _isInitializing),
-                    if (_isWebPlatform || _isMobilePlatform) ...[
+                    if (_isWebPlatform || _isNativePlatform) ...[
                       const SizedBox(height: 16),
                       Card(
                         child: ListTile(

@@ -45,11 +45,15 @@ class MixpanelAnalytics {
   /// Track an event with optional properties.
   void track(String eventName, {Map<String, dynamic>? properties}) {
     _mixpanel?.track(eventName, properties: properties);
-    if (!kIsWeb) _mixpanel?.flush(); // no-op on web; JS SDK sends immediately
+    // The web plugin does not implement flush; mixpanel-js batches on its own
+    // schedule.
+    if (!kIsWeb) _mixpanel?.flush();
   }
 
   /// Flush queued events.
   void flush() {
-    if (!kIsWeb) _mixpanel?.flush(); // no-op on web; JS SDK sends immediately
+    // The web plugin does not implement flush; mixpanel-js batches on its own
+    // schedule.
+    if (!kIsWeb) _mixpanel?.flush();
   }
 }
