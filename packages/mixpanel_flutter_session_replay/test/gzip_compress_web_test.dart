@@ -73,6 +73,32 @@ void main() {
     );
 
     test(
+      'a request pending on a disposed worker leaves its replacement intact',
+      () async {
+        // GIVEN a compression that has been queued but not yet posted when
+        // the SDK instance owning the worker is disposed and a new instance
+        // initializes a replacement
+        final pending = gzipCompressAsync('pending payload'.codeUnits);
+        // Listen before the stale request fails so its expected error is
+        // observed rather than reported as unhandled.
+        final staleFailure = expectLater(
+          pending,
+          throwsA(isA<UnsupportedError>()),
+        );
+        disposeGzipCompression();
+
+        // WHEN the replacement initializes and the stale request fails
+        await initializeGzipCompression();
+        await staleFailure;
+
+        // THEN the replacement still serves uploads; the stale failure did
+        // not tear it down or mark compression unavailable
+        final compressed = await gzipCompressAsync('after replace'.codeUnits);
+        expect(compressed.take(2), [0x1f, 0x8b]);
+      },
+    );
+
+    test(
       'serializes concurrent compression requests through the worker',
       () async {
         final outputs = await Future.wait(

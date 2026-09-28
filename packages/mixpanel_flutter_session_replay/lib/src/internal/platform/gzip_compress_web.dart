@@ -35,16 +35,20 @@ Future<void> initializeGzipCompression() {
 }
 
 Future<void> _initializeGzipCompression() async {
+  WebGzipWorker? worker;
   try {
-    _worker ??= WebGzipWorker.create();
-    final worker = _worker;
+    worker = _worker ??= WebGzipWorker.create();
     if (worker == null) throw UnsupportedError('Web Worker creation failed');
     await worker.compress(Uint8List(0)).timeout(_workerTimeout);
-    _workerInitialized = true;
+    if (identical(_worker, worker)) _workerInitialized = true;
   } catch (error) {
-    _workerUnavailable = true;
-    _worker?.dispose();
-    _worker = null;
+    // Only judge the worker this attempt used. If dispose() replaced it
+    // meanwhile, a failure here says nothing about the replacement.
+    if (worker == null || identical(_worker, worker)) {
+      _workerUnavailable = true;
+      _worker = null;
+    }
+    worker?.dispose();
     throw UnsupportedError(
       'Web Worker gzip compression is required for Session Replay: $error',
     );
@@ -61,6 +65,7 @@ void disposeGzipCompression() {
   _worker?.dispose();
   _worker = null;
   _workerInitialized = false;
+  _workerUnavailable = false;
 }
 
 /// Gzip compress using CompressionStream inside a dedicated Web Worker.
@@ -68,17 +73,21 @@ Future<List<int>> gzipCompressAsync(List<int> bytes) async {
   if (_workerUnavailable) {
     throw UnsupportedError('Web Worker gzip compression is unavailable');
   }
+  WebGzipWorker? worker;
   try {
-    _worker ??= WebGzipWorker.create();
-    final worker = _worker;
+    worker = _worker ??= WebGzipWorker.create();
     if (worker == null) throw UnsupportedError('Web Worker creation failed');
     return await worker
         .compress(Uint8List.fromList(bytes))
         .timeout(_workerTimeout);
   } catch (error) {
-    _workerInitialized = false;
-    _worker?.dispose();
-    _worker = null;
+    // A request that started on a since-disposed worker must not tear down
+    // the worker that replaced it.
+    if (identical(_worker, worker)) {
+      _workerInitialized = false;
+      _worker = null;
+    }
+    worker?.dispose();
     throw UnsupportedError(
       'Web Worker gzip compression failed; the worker will restart on the '
       'next upload attempt: $error',
