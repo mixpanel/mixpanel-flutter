@@ -76,12 +76,8 @@ void main() {
       );
 
       expect(result.sessionPersistence.takeResumable(), isNull);
-      expect(result.backgroundBehavior, isA<ReplayBackgroundPauseBehavior>());
-      expect(
-        (result.backgroundBehavior as ReplayBackgroundPauseBehavior)
-            .idleTimeout,
-        const Duration(minutes: 30),
-      );
+      // A hidden page keeps recording, as in mixpanel-js.
+      expect(result.backgroundBehavior, isNull);
       expect(queue.eventCount, 1);
 
       await result.screenshotCapturer.dispose();

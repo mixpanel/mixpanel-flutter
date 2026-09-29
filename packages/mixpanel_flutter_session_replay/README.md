@@ -256,9 +256,6 @@ final result = await MixpanelSessionReplay.initialize(
       ),
       web: WebOptions(
         idleTimeout: Duration(minutes: 30),
-        onBackground: const ReplayBackgroundBehavior.pause(
-          idleTimeout: Duration(minutes: 30),
-        ),
       ),
     ),
   ),
@@ -278,11 +275,10 @@ continues but analytics events cannot be linked to the replay automatically.
 |--------|-------------|---------|
 | `mobile` | Mobile-specific options (iOS/Android). See properties below | `MobileOptions()` |
 | `mobile.wifiOnly` | When `true`, replay events will only be flushed when the device has WiFi. When `false`, replay events will be flushed with any network connection including cellular | `true` |
-| `mobile.onBackground` | Whether leaving the foreground pauses or stops the replay. Capture never continues in the background | `ReplayBackgroundBehavior.stop` |
+| `mobile.onBackground` | Whether leaving the foreground pauses or stops the replay on native platforms. Capture never continues in the background | `ReplayBackgroundBehavior.stop` |
 | `web` | Flutter web-specific options. See properties below | `WebOptions()` |
 | `web.idleTimeout` | Inactivity duration after which a web replay session ends. `Duration.zero` disables it | `30 minutes` |
 | `web.maxSessionDuration` | Maximum duration of one web replay session | `24 hours` |
-| `web.onBackground` | Whether hiding the page pauses or stops the replay. Capture never continues while hidden | `ReplayBackgroundBehavior.pause(idleTimeout: Duration(minutes: 30))` |
 
 When `remoteSettingsMode` is `strict` or `fallback`, valid remote
 `record_idle_timeout_ms` and `record_max_ms` values override the corresponding
@@ -293,13 +289,17 @@ After a web replay ends due to inactivity, a pointer press, wheel scroll,
 trackpad gesture, or keyboard input triggers a fresh sampling decision to start
 a new replay. Keyboard activity detection does not record the keys or typed text.
 
-`ReplayBackgroundBehavior.pause(idleTimeout: ...)` flushes pending replay data,
-unregisters `$mp_replay_id`, and resumes the same replay when the app or page
-returns before the idle timeout. After that duration, returning starts a newly
-sampled replay. On web, the background deadline survives page reloads and
-is enforced even when activity idle timeout is disabled. Returning before the
-deadline clears it without extending the activity idle window.
-`ReplayBackgroundBehavior.stop` ends the replay immediately.
+On web, as in Mixpanel JS, a replay is not affected by the page being hidden
+or the window losing focus. It continues across tab switches, keeps
+`$mp_replay_id` registered, and ends only through `idleTimeout` or
+`maxSessionDuration`. Nothing is captured while the page is hidden, and pending
+replay data is flushed when it is hidden.
+
+On native platforms, `ReplayBackgroundBehavior.pause(idleTimeout: ...)` flushes
+pending replay data, unregisters `$mp_replay_id`, and resumes the same replay
+when the app returns before the idle timeout. After that duration, returning
+starts a newly sampled replay. `ReplayBackgroundBehavior.stop` ends the replay
+immediately.
 
 #### Platform views are not recorded on web
 
@@ -761,7 +761,6 @@ Without any masking directive, auto-masking applies based on `autoMaskedViews` c
 **WebOptions**
 - `idleTimeout` (Duration, default: 30 minutes) - Inactivity after which a web replay ends; `Duration.zero` disables it
 - `maxSessionDuration` (Duration, default: 24 hours) - Hard cap on one web replay
-- `onBackground` (`ReplayBackgroundBehavior`, default: `pause(idleTimeout: 30 minutes)`) - Pause or stop when the page is hidden
 
 ## Development
 

@@ -745,6 +745,71 @@ void main() {
       },
     );
 
+    group('on web', () {
+      Future<FakeWidgetCoordinator> pumpWebObserver(WidgetTester tester) async {
+        final fake = FakeWidgetCoordinator();
+        await tester.pumpWidget(
+          MaterialApp(
+            home: LifecycleObserver(
+              coordinator: fake,
+              leavesForegroundWhenInactive: false,
+              child: const SizedBox(),
+            ),
+          ),
+        );
+        tester.binding.handleAppLifecycleStateChanged(
+          AppLifecycleState.resumed,
+        );
+        await tester.pump();
+        return fake;
+      }
+
+      testWidgets(
+        'should keep the replay in the foreground when the window loses focus',
+        (tester) async {
+          // GIVEN a visible page
+          final fake = await pumpWebObserver(tester);
+
+          // WHEN focus moves to an iframe, the address bar or devtools, and
+          // back
+          tester.binding.handleAppLifecycleStateChanged(
+            AppLifecycleState.inactive,
+          );
+          await tester.pump();
+          tester.binding.handleAppLifecycleStateChanged(
+            AppLifecycleState.resumed,
+          );
+          await tester.pump();
+
+          // THEN nothing leaves or re-enters the foreground, as in mixpanel-js
+          expect(fake.onAppBackgroundedCallCount, 0);
+          expect(fake.onAppForegroundedCallCount, 1);
+        },
+      );
+
+      testWidgets(
+        'should leave the foreground once when the page is hidden after a '
+        'blur',
+        (tester) async {
+          // GIVEN a page whose window lost focus
+          final fake = await pumpWebObserver(tester);
+          tester.binding.handleAppLifecycleStateChanged(
+            AppLifecycleState.inactive,
+          );
+          await tester.pump();
+
+          // WHEN the page is then hidden
+          tester.binding.handleAppLifecycleStateChanged(
+            AppLifecycleState.hidden,
+          );
+          await tester.pump();
+
+          // THEN it leaves the foreground exactly once
+          expect(fake.onAppBackgroundedCallCount, 1);
+        },
+      );
+    });
+
     testWidgets('calls onAppForegrounded when resuming from inactive', (
       tester,
     ) async {

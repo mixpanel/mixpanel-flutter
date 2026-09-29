@@ -99,8 +99,9 @@ class SessionReplayCoordinator implements WidgetCoordinator {
   /// True when recording was stopped due to idle timeout (awaiting next interaction)
   bool _isIdledOut = false;
 
-  /// Configured behavior when the app or page leaves the foreground.
-  final ReplayBackgroundBehavior _backgroundBehavior;
+  /// Configured behavior when the app leaves the foreground. Null on web,
+  /// where a hidden page keeps recording, as in mixpanel-js.
+  final ReplayBackgroundBehavior? _backgroundBehavior;
 
   /// Stores deadlines and offers a replay a previous page load left
   /// recording. A no-op on native platforms.
@@ -118,7 +119,7 @@ class SessionReplayCoordinator implements WidgetCoordinator {
     required DebugOptions? debugOptions,
     BackgroundTaskManager? backgroundTaskManager,
     RecordingDurationLimits? durationLimits,
-    required ReplayBackgroundBehavior backgroundBehavior,
+    required ReplayBackgroundBehavior? backgroundBehavior,
     DebugMaskOverlayFactory debugMaskOverlayFactory =
         InTreeDebugMaskOverlay.new,
     SessionPersistence? sessionPersistence,
@@ -433,6 +434,11 @@ class SessionReplayCoordinator implements WidgetCoordinator {
         _pauseForBackground(idleTimeout);
       case ReplayBackgroundStopBehavior():
         stopRecording(cancelPendingResume: false);
+      case null:
+        // Web: the replay keeps recording while the page is hidden, and its
+        // idle and maximum deadlines keep running. The page may be frozen or
+        // discarded from here, so store the latest deadlines for a reload.
+        if (_recordingState == RecordingState.recording) _writeDeadlinesNow();
     }
 
     // Call flush() to join the in-progress flush via the completer,
@@ -569,6 +575,11 @@ class SessionReplayCoordinator implements WidgetCoordinator {
   }
 
   void _resumeBackgroundPauseOrStart() {
+    // A replay that kept recording while hidden (web) has nothing to resume.
+    if (_recordingState == RecordingState.initializing ||
+        _recordingState == RecordingState.recording) {
+      return;
+    }
     if (_recordingState == RecordingState.paused) {
       if (_lifetime.isBackgroundExpired) {
         _logger.info(

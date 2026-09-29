@@ -252,7 +252,9 @@ class _ConfigScreenState extends State<ConfigScreen> {
                     _buildLogLevelDropdown(configVm, _isInitializing),
                     const SizedBox(height: 16),
                     _buildRemoteSettingsModeDropdown(configVm, _isInitializing),
-                    if (_isWebPlatform || _isNativePlatform) ...[
+                    // Web has no background option: a hidden page keeps its
+                    // replay, as in mixpanel-js.
+                    if (_isNativePlatform) ...[
                       const SizedBox(height: 16),
                       Card(
                         child: ListTile(

@@ -108,7 +108,6 @@ Future<PlatformInitResult> platformInit({
         idle: web.idleTimeout,
       ),
       sessionPersistence: sessionPersistence,
-      backgroundBehavior: web.onBackground,
       // Capture reads the presented Flutter canvas, which would include
       // anything painted in-tree.
       debugMaskOverlayFactory: OutOfSurfaceDebugMaskOverlay.new,

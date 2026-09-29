@@ -28,7 +28,6 @@ void validateOptions(String token, SessionReplayOptions options) {
   }
 
   _requirePositivePause(platformOptions.mobile.onBackground, 'mobile');
-  _requirePositivePause(platformOptions.web.onBackground, 'web');
 
   if (platformOptions.web.maxSessionDuration <= Duration.zero) {
     throw ArgumentError('web maxSessionDuration must be positive');
@@ -71,11 +70,6 @@ PlatformOptions capPlatformOptions(
     maxSessionDuration: capRecordingDuration(
       options.web.maxSessionDuration,
       name: 'web maxSessionDuration',
-      logger: logger,
-    ),
-    onBackground: _capBackgroundBehavior(
-      options.web.onBackground,
-      name: 'web background pause idleTimeout',
       logger: logger,
     ),
   ),

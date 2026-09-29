@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/widgets.dart';
 
 import '../internal/widget_coordinator.dart';
@@ -18,6 +19,7 @@ class LifecycleObserver extends StatefulWidget {
     super.key,
     required this.coordinator,
     required this.child,
+    this.leavesForegroundWhenInactive = !kIsWeb,
   });
 
   /// The session replay coordinator that manages event flushing
@@ -25,6 +27,14 @@ class LifecycleObserver extends StatefulWidget {
 
   /// The child widget to wrap
   final Widget child;
+
+  /// Whether [AppLifecycleState.inactive] counts as leaving the foreground.
+  ///
+  /// On mobile, inactive is the first step of backgrounding. On web it only
+  /// means the window lost focus while the page may still be visible (an
+  /// iframe, the address bar, devtools, another window), and mixpanel-js
+  /// keeps recording through it, so web waits for the page to be hidden.
+  final bool leavesForegroundWhenInactive;
 
   @override
   State<LifecycleObserver> createState() => _LifecycleObserverState();
@@ -85,12 +95,19 @@ class _LifecycleObserverState extends State<LifecycleObserver>
         ? _getVisibilityLevel(_lastState!)
         : null;
 
-    // Detect the first transition away from fully visible. Flutter web may
-    // report resumed -> hidden directly, while mobile commonly passes through
-    // inactive. Restricting this to a previous resumed state produces exactly
-    // one background callback for either lifecycle shape.
-    if (lastLevel == _getVisibilityLevel(AppLifecycleState.resumed) &&
-        currentLevel < lastLevel!) {
+    // Detect the first transition into a background state. Mobile commonly
+    // passes resumed -> inactive -> hidden, and inactive is where it leaves.
+    // Web leaves only when the page is hidden, which may come straight from
+    // resumed or after a blur (inactive). Crossing the threshold, rather than
+    // any drop, produces exactly one background callback for each shape.
+    final backgroundLevel = _getVisibilityLevel(
+      widget.leavesForegroundWhenInactive
+          ? AppLifecycleState.inactive
+          : AppLifecycleState.hidden,
+    );
+    if (lastLevel != null &&
+        lastLevel > backgroundLevel &&
+        currentLevel <= backgroundLevel) {
       widget.coordinator.logger.info(
         'LifecycleObserver detected app leaving the foreground',
       );

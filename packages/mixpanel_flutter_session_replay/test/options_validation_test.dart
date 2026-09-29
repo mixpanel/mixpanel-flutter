@@ -19,10 +19,6 @@ void main() {
       expect(capped.mobile.onBackground, ReplayBackgroundBehavior.stop);
       expect(capped.web.idleTimeout, const Duration(minutes: 30));
       expect(capped.web.maxSessionDuration, const Duration(hours: 24));
-      expect(
-        (capped.web.onBackground as ReplayBackgroundPauseBehavior).idleTimeout,
-        const Duration(minutes: 30),
-      );
     });
 
     test('caps every timing above 24 hours', () {
@@ -33,11 +29,7 @@ void main() {
           wifiOnly: false,
           onBackground: ReplayBackgroundBehavior.pause(idleTimeout: days),
         ),
-        web: WebOptions(
-          idleTimeout: days,
-          maxSessionDuration: days,
-          onBackground: ReplayBackgroundBehavior.pause(idleTimeout: days),
-        ),
+        web: WebOptions(idleTimeout: days, maxSessionDuration: days),
       );
 
       // WHEN the options are capped
@@ -51,10 +43,6 @@ void main() {
       expect(
         (capped.mobile.onBackground as ReplayBackgroundPauseBehavior)
             .idleTimeout,
-        cap,
-      );
-      expect(
-        (capped.web.onBackground as ReplayBackgroundPauseBehavior).idleTimeout,
         cap,
       );
       expect(capped.mobile.wifiOnly, isFalse);

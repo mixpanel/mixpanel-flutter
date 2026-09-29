@@ -66,7 +66,7 @@ void main() {
       RemoteSettingsMode remoteSettingsMode = RemoteSettingsMode.disabled,
       Duration? idleTimeout,
       Duration? maxSessionDuration,
-      ReplayBackgroundBehavior backgroundBehavior =
+      ReplayBackgroundBehavior? backgroundBehavior =
           ReplayBackgroundBehavior.stop,
       Future<void> Function(String, int, int, int?)? persistIdleExpiry,
       EventRecorder? recorder,
@@ -1219,13 +1219,11 @@ void main() {
         return calls;
       }
 
-      test('web pauses recording while hidden', () async {
+      test('web keeps recording while hidden', () async {
         // GIVEN a web coordinator recording a session
         final coordinator = createCoordinator(
           autoRecordSessionsPercent: 100,
-          backgroundBehavior: const ReplayBackgroundBehavior.pause(
-            idleTimeout: Duration(minutes: 30),
-          ),
+          backgroundBehavior: null,
         );
         coordinator.startRecording(sessionsPercent: 100);
         await pumpEventQueue();
@@ -1236,18 +1234,18 @@ void main() {
         coordinator.onAppBackgrounded();
         await pumpEventQueue();
 
-        // THEN capture pauses without ending the replay
-        expect(coordinator.recordingState, RecordingState.paused);
-        expect(coordinator.replayId, isNull);
+        // THEN the replay continues, as in mixpanel-js; only its idle and
+        // maximum deadlines can end it
+        expect(coordinator.recordingState, RecordingState.recording);
+        expect(coordinator.replayId, replayId);
+        expect(coordinator.isAppInForeground, isFalse);
       });
 
       test('web keeps the same session after the tab is shown again', () async {
         // GIVEN a web coordinator recording a session
         final coordinator = createCoordinator(
           autoRecordSessionsPercent: 100,
-          backgroundBehavior: const ReplayBackgroundBehavior.pause(
-            idleTimeout: Duration(minutes: 30),
-          ),
+          backgroundBehavior: null,
         );
         coordinator.startRecording(sessionsPercent: 100);
         await pumpEventQueue();
@@ -1299,9 +1297,7 @@ void main() {
           // GIVEN recording started explicitly while auto-recording is disabled
           final coordinator = createCoordinator(
             autoRecordSessionsPercent: 0,
-            backgroundBehavior: const ReplayBackgroundBehavior.pause(
-              idleTimeout: Duration(minutes: 30),
-            ),
+            backgroundBehavior: null,
           );
           coordinator.startRecording(sessionsPercent: 100);
           await pumpEventQueue();
@@ -1319,14 +1315,39 @@ void main() {
         },
       );
 
-      test('web unregisters \$mp_replay_id while hidden', () async {
+      test('should store the deadlines when the page is hidden right after '
+          'activity', () async {
+        // GIVEN a recording web session that just stored its deadlines
+        final writes = <String>[];
+        final coordinator = createCoordinator(
+          autoRecordSessionsPercent: 100,
+          backgroundBehavior: null,
+          idleTimeout: const Duration(minutes: 30),
+          maxSessionDuration: const Duration(hours: 24),
+          persistIdleExpiry: (id, idle, max, background) async {
+            writes.add(id);
+          },
+        );
+        coordinator.startRecording(sessionsPercent: 100);
+        await pumpEventQueue();
+        coordinator.captureInteraction(0, Offset.zero, DateTime.now());
+        final before = writes.length;
+
+        // WHEN the page is hidden inside the activity-write debounce
+        coordinator.onAppBackgrounded();
+        await pumpEventQueue();
+
+        // THEN the latest deadlines are written at once, since a hidden page
+        // may be frozen or discarded before the next write
+        expect(writes.length, before + 1);
+      });
+
+      test('web keeps \$mp_replay_id registered while hidden', () async {
         // GIVEN a recording web session, with sender traffic captured
         final calls = recordSenderCalls();
         final coordinator = createCoordinator(
           autoRecordSessionsPercent: 100,
-          backgroundBehavior: const ReplayBackgroundBehavior.pause(
-            idleTimeout: Duration(minutes: 30),
-          ),
+          backgroundBehavior: null,
         );
         coordinator.startRecording(sessionsPercent: 100);
         await pumpEventQueue();
@@ -1342,9 +1363,9 @@ void main() {
         coordinator.onAppBackgrounded();
         await pumpEventQueue();
 
-        // THEN analytics events emitted while hidden are not associated with
-        // a replay interval that has no captured frames.
-        expect(calls, contains('unregisterSuperProperty'));
+        // THEN events tracked while hidden still carry the replay ID, as in
+        // mixpanel-js, whose replay continues across tab switches
+        expect(calls, isNot(contains('unregisterSuperProperty')));
       });
 
       test('native ends the session on background', () async {
@@ -1370,9 +1391,7 @@ void main() {
           // GIVEN a web session hidden with its idle timer still running
           final coordinator = createCoordinator(
             autoRecordSessionsPercent: 100,
-            backgroundBehavior: const ReplayBackgroundBehavior.pause(
-              idleTimeout: Duration(minutes: 30),
-            ),
+            backgroundBehavior: null,
           );
           coordinator.startRecording(sessionsPercent: 100);
           await pumpEventQueue();
@@ -1396,9 +1415,7 @@ void main() {
         // GIVEN a web session recording under a 24h cap
         final coordinator = createCoordinator(
           autoRecordSessionsPercent: 100,
-          backgroundBehavior: const ReplayBackgroundBehavior.pause(
-            idleTimeout: Duration(minutes: 30),
-          ),
+          backgroundBehavior: null,
           maxSessionDuration: const Duration(hours: 24),
         );
         final startedAt = DateTime.utc(2026, 1, 1, 12);
@@ -1433,9 +1450,7 @@ void main() {
           // advance even though wall-clock time passes.
           final coordinator = createCoordinator(
             autoRecordSessionsPercent: 100,
-            backgroundBehavior: const ReplayBackgroundBehavior.pause(
-              idleTimeout: Duration(minutes: 30),
-            ),
+            backgroundBehavior: null,
             idleTimeout: const Duration(minutes: 30),
           );
           final hiddenAt = DateTime.utc(2026, 1, 1, 12);
@@ -1446,8 +1461,8 @@ void main() {
             replayId = coordinator.replayId;
             coordinator.onAppBackgrounded();
             await pumpEventQueue();
-            // Paused, but the replay session is still retained.
-            expect(coordinator.recordingState, RecordingState.paused);
+            // Hidden, and the replay keeps recording, as in mixpanel-js.
+            expect(coordinator.recordingState, RecordingState.recording);
           });
 
           // WHEN the page is restored 45 minutes later
@@ -1471,9 +1486,7 @@ void main() {
           // GIVEN the same setup, restored before the window elapses
           final coordinator = createCoordinator(
             autoRecordSessionsPercent: 100,
-            backgroundBehavior: const ReplayBackgroundBehavior.pause(
-              idleTimeout: Duration(minutes: 30),
-            ),
+            backgroundBehavior: null,
             idleTimeout: const Duration(minutes: 30),
           );
           final hiddenAt = DateTime.utc(2026, 1, 1, 12);
@@ -1505,9 +1518,7 @@ void main() {
         // GIVEN a hidden web session
         final coordinator = createCoordinator(
           autoRecordSessionsPercent: 0,
-          backgroundBehavior: const ReplayBackgroundBehavior.pause(
-            idleTimeout: Duration(minutes: 30),
-          ),
+          backgroundBehavior: null,
         );
         coordinator.startRecording(sessionsPercent: 100);
         await pumpEventQueue();
@@ -1527,7 +1538,7 @@ void main() {
     group('resume before metadata exists', () {
       test('the first deadline write lands once metadata exists', () async {
         // GIVEN a session whose metadata write is still pending when the page
-        // is hidden and shown again, so the replay resumes to recording first
+        // is hidden and shown again
         final gated = _GatedMetadataQueue();
         await gated.initialize();
         addTearDown(gated.dispose);
@@ -1543,9 +1554,7 @@ void main() {
           recorder: recorder,
           idleTimeout: const Duration(minutes: 30),
           maxSessionDuration: const Duration(hours: 24),
-          backgroundBehavior: const ReplayBackgroundBehavior.pause(
-            idleTimeout: Duration(minutes: 30),
-          ),
+          backgroundBehavior: null,
           persistIdleExpiry: (sessionId, idle, max, background) async {
             // Mirrors IndexedDB, where a deadline write for a session with no
             // metadata record is a silent no-op.
@@ -1559,7 +1568,7 @@ void main() {
         coordinator.onAppBackgrounded();
         coordinator.onAppForegrounded();
         await pumpEventQueue();
-        expect(coordinator.recordingState, RecordingState.recording);
+        expect(coordinator.recordingState, RecordingState.initializing);
         expect(writesWithMetadata, isEmpty, reason: 'no record to update yet');
 
         // WHEN the metadata write finally completes

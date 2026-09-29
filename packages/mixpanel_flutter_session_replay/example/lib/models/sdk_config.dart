@@ -64,11 +64,7 @@ class SdkConfig {
       enableWireframes: false,
       enableWireframeDebugEmitter: true,
       useAccessibilityLabelFallback: false,
-      backgroundBehavior: kIsWeb
-          ? const ReplayBackgroundBehavior.pause(
-              idleTimeout: Duration(minutes: 30),
-            )
-          : ReplayBackgroundBehavior.stop,
+      backgroundBehavior: ReplayBackgroundBehavior.stop,
       webIdleTimeoutSeconds: 1800,
       webMaxSessionSeconds: 86400,
     );
@@ -114,7 +110,6 @@ class SdkConfig {
         web: WebOptions(
           idleTimeout: Duration(seconds: webIdleTimeoutSeconds),
           maxSessionDuration: Duration(seconds: webMaxSessionSeconds),
-          onBackground: backgroundBehavior,
         ),
       ),
       debugOptions: (showDebugMaskOverlay || wantsEmitter)

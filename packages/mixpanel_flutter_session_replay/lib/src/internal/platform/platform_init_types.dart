@@ -32,8 +32,9 @@ class PlatformInitResult {
   /// Carries replays across page loads on web; a no-op elsewhere.
   final SessionPersistence sessionPersistence;
 
-  /// Configured behavior when the app or page leaves the foreground.
-  final ReplayBackgroundBehavior backgroundBehavior;
+  /// Configured behavior when the app leaves the foreground. Null on web,
+  /// where a hidden page keeps recording, as in mixpanel-js.
+  final ReplayBackgroundBehavior? backgroundBehavior;
 
   /// Draws the debug mask overlay where [screenshotCapturer] cannot see it.
   final DebugMaskOverlayFactory debugMaskOverlayFactory;
@@ -45,7 +46,7 @@ class PlatformInitResult {
     required this.wifiOnly,
     this.durationLimits,
     required this.sessionPersistence,
-    required this.backgroundBehavior,
+    this.backgroundBehavior,
     required this.debugMaskOverlayFactory,
   });
 

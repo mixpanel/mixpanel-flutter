@@ -20,9 +20,8 @@ class ConfigModel extends ChangeNotifier {
   bool _enableWireframes = false;
   bool _enableWireframeDebugEmitter = true;
   bool _useAccessibilityLabelFallback = false;
-  BackgroundBehaviorSelection _backgroundBehavior = kIsWeb
-      ? BackgroundBehaviorSelection.pause
-      : BackgroundBehaviorSelection.stop;
+  BackgroundBehaviorSelection _backgroundBehavior =
+      BackgroundBehaviorSelection.stop;
   String _backgroundPauseIdleSeconds = '1800';
   // Overridable at launch so integration tests and manual runs can reach the
   // idle-out and max-duration paths without retyping the fields each time:

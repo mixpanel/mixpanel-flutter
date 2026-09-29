@@ -761,12 +761,6 @@ void main() {
         // THEN
         expect(options.web.idleTimeout, expectedIdleTimeout);
         expect(options.web.maxSessionDuration, expectedMaxSessionDuration);
-        expect(options.web.onBackground, isA<ReplayBackgroundPauseBehavior>());
-        expect(
-          (options.web.onBackground as ReplayBackgroundPauseBehavior)
-              .idleTimeout,
-          const Duration(minutes: 30),
-        );
       });
 
       test('allows custom web options', () {
@@ -779,14 +773,12 @@ void main() {
           web: WebOptions(
             idleTimeout: Duration(minutes: 15),
             maxSessionDuration: Duration(hours: 8),
-            onBackground: ReplayBackgroundBehavior.stop,
           ),
         );
 
         // THEN
         expect(options.web.idleTimeout, expectedIdleTimeout);
         expect(options.web.maxSessionDuration, expectedMaxSessionDuration);
-        expect(options.web.onBackground, ReplayBackgroundBehavior.stop);
       });
 
       test('allows disabling idle timeout with Duration.zero', () {

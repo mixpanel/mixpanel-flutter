@@ -58,10 +58,11 @@ enum LogLevel {
   debug,
 }
 
-/// Controls what happens to an active replay when the app or page leaves the
-/// foreground.
+/// Controls what happens to an active replay when a native app leaves the
+/// foreground. Set through [MobileOptions.onBackground].
 ///
-/// No replay capture occurs while the app or page is in the background.
+/// No replay capture occurs while the app is in the background. Web has no
+/// equivalent option: see [WebOptions].
 sealed class ReplayBackgroundBehavior {
   const ReplayBackgroundBehavior();
 
@@ -70,11 +71,11 @@ sealed class ReplayBackgroundBehavior {
     required Duration idleTimeout,
   }) = ReplayBackgroundPauseBehavior;
 
-  /// Stop the current replay when the app or page leaves the foreground.
+  /// Stop the current replay when the app leaves the foreground.
   static const stop = ReplayBackgroundStopBehavior();
 }
 
-/// Retains the current replay while the app or page is backgrounded.
+/// Retains the current replay while the app is backgrounded.
 final class ReplayBackgroundPauseBehavior extends ReplayBackgroundBehavior {
   const ReplayBackgroundPauseBehavior({required this.idleTimeout});
 
@@ -82,7 +83,7 @@ final class ReplayBackgroundPauseBehavior extends ReplayBackgroundBehavior {
   final Duration idleTimeout;
 }
 
-/// Stops the current replay when the app or page is backgrounded.
+/// Stops the current replay when the app is backgrounded.
 final class ReplayBackgroundStopBehavior extends ReplayBackgroundBehavior {
   const ReplayBackgroundStopBehavior();
 }
@@ -112,13 +113,15 @@ class MobileOptions {
 /// Web-specific configuration options
 ///
 /// These options only apply to the web platform (Flutter web).
+///
+/// As in mixpanel-js, a replay is not affected by the page being hidden or
+/// the window losing focus: it continues across tab switches and ends only
+/// through [idleTimeout] or [maxSessionDuration]. Nothing is captured while
+/// the page is hidden, because Flutter does not render then.
 class WebOptions {
   const WebOptions({
     this.idleTimeout = const Duration(minutes: 30),
     this.maxSessionDuration = const Duration(hours: 24),
-    this.onBackground = const ReplayBackgroundBehavior.pause(
-      idleTimeout: Duration(minutes: 30),
-    ),
   });
 
   /// Duration of user inactivity before the session is ended (default: 30 min).
@@ -142,13 +145,6 @@ class WebOptions {
   /// Overridden by a valid remote `record_max_ms` when remote settings are
   /// enabled.
   final Duration maxSessionDuration;
-
-  /// Behavior when the page leaves the foreground (default: pause with a
-  /// 30-minute idle timeout).
-  ///
-  /// Pausing preserves the replay across tab switches, popups, and other
-  /// temporary visibility changes while still preventing background capture.
-  final ReplayBackgroundBehavior onBackground;
 }
 
 /// Platform-specific configuration options

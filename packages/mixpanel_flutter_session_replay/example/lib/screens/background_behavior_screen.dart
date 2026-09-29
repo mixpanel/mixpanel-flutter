@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -44,12 +43,9 @@ class _BackgroundBehaviorScreenState extends State<BackgroundBehaviorScreen> {
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              Text(
-                kIsWeb
-                    ? 'Web defaults to pause so temporary tab switches keep '
-                          'the same replay.'
-                    : 'Native platforms default to stop for backward '
-                          'compatibility.',
+              const Text(
+                'Native platforms default to stop for backward '
+                'compatibility.',
               ),
               const SizedBox(height: 16),
               DropdownButtonFormField<BackgroundBehaviorSelection>(
@@ -120,11 +116,8 @@ class _BackgroundBehaviorScreenState extends State<BackgroundBehaviorScreen> {
             ')',
       BackgroundBehaviorSelection.stop => 'ReplayBackgroundBehavior.stop',
     };
-    final optionsType = kIsWeb ? 'WebOptions' : 'MobileOptions';
-    final optionsName = kIsWeb ? 'web' : 'mobile';
-
     return 'PlatformOptions(\n'
-        '  $optionsName: $optionsType(\n'
+        '  mobile: MobileOptions(\n'
         '    onBackground: $behavior,\n'
         '  ),\n'
         ')';
