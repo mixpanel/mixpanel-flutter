@@ -1306,7 +1306,8 @@ void main() {
         },
       );
       test(
-        'does not upload past the flush cutoff while skipping a leased session',
+        'should stop at the flush cutoff when skipping a session another tab '
+        'has leased',
         () async {
           // GIVEN a contended session another tab is draining ahead of this
           // tab's own session, which keeps recording while the flush runs

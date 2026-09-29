@@ -57,7 +57,9 @@ void main() {
     return mixpanel;
   }
 
-  test('ordinary super properties retain the JS persistence default', () async {
+  test(
+      'should keep the JS persistence default when registering ordinary '
+      'super properties', () async {
     // GIVEN the public SDK initialized on web.
     final mixpanel = await initMixpanel();
 
@@ -76,8 +78,9 @@ void main() {
     ]);
   });
 
-  test('replay properties use page-local JS registration and removal',
-      () async {
+  test(
+      'should register and remove page-locally when the replay ID is '
+      'marked non-persistent', () async {
     // GIVEN the public SDK initialized on web and a replay ID owned by this
     // page.
     await initMixpanel();
