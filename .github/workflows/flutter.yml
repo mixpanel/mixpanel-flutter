@@ -174,7 +174,8 @@ jobs:
           test/indexed_db_event_queue_test.dart
           test/web_session_resume_test.dart
           test/platform_init_web_test.dart
-          test/web_image_compressor_test.dart
+          test/web_jpeg_encoder_test.dart
+          test/web_rendered_surface_capture_test.dart
           test/debug_overlay_host_web_test.dart
           test/session_replay_sender_web_test.dart
           test/event_queue_factory_web_test.dart

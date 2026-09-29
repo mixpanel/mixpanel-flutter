@@ -6,7 +6,7 @@ import 'dart:ui' show Rect, Size;
 import 'package:web/web.dart' as web;
 import '../capture/rendered_surface_capture.dart';
 import '../logger.dart';
-import 'web_image_compressor.dart';
+import 'web_jpeg_encoder.dart';
 
 /// Discovers Flutter's single rendering surface and acquires immutable frames.
 /// Ambiguous multi-canvas/multi-view compositions are skipped in their entirety.
@@ -14,7 +14,7 @@ class WebRenderedSurfaceCapture extends RenderedSurfaceCapture {
   static const _engineSurfaceHostSelector =
       'flutter-view, flt-glass-pane, flt-scene-host, flt-renderer';
   final MixpanelLogger _logger;
-  final WebImageCompressor _encoder;
+  final WebJpegEncoder _encoder;
   WebImageCaptureTimings? lastCaptureTimings;
 
   /// Browser frames to wait for a surface that has not been published yet.
@@ -34,7 +34,7 @@ class WebRenderedSurfaceCapture extends RenderedSurfaceCapture {
     required MixpanelLogger logger,
     double jpegQuality = 0.8,
   }) : _logger = logger,
-       _encoder = WebImageCompressor(logger: logger, jpegQuality: jpegQuality);
+       _encoder = WebJpegEncoder(logger: logger, jpegQuality: jpegQuality);
 
   Future<void> initialize() => _encoder.initialize();
   @override
@@ -268,7 +268,7 @@ class _SurfaceLookup {
 
 class _WebCapturedSurface implements CapturedSurface {
   web.ImageBitmap? _bitmap;
-  final WebImageCompressor _encoder;
+  final WebJpegEncoder _encoder;
   final int _width;
   final int _height;
   final void Function(Duration) _onEncoded;
@@ -287,7 +287,7 @@ class _WebCapturedSurface implements CapturedSurface {
     if (bitmap == null) return null;
     _bitmap = null;
     final watch = Stopwatch()..start();
-    final result = await _encoder.compressBitmap(
+    final result = await _encoder.encode(
       imageBitmap: bitmap,
       width: _width,
       height: _height,

@@ -9,7 +9,7 @@ import 'web_image_worker.dart';
 /// Worker-backed JPEG encoding of browser surface snapshots. Surface
 /// discovery and acquisition belong to WebRenderedSurfaceCapture; this encoder
 /// owns only worker resources.
-class WebImageCompressor {
+class WebJpegEncoder {
   static const _workerTimeout = Duration(seconds: 5);
   final MixpanelLogger _logger;
   final double jpegQuality;
@@ -17,7 +17,7 @@ class WebImageCompressor {
   bool _workerUnavailable = false;
   bool _disposed = false;
 
-  WebImageCompressor({required MixpanelLogger logger, this.jpegQuality = 0.8})
+  WebJpegEncoder({required MixpanelLogger logger, this.jpegQuality = 0.8})
     : _logger = logger;
 
   bool get isAvailable => !_disposed && !_workerUnavailable;
@@ -53,7 +53,7 @@ class WebImageCompressor {
   }
 
   /// Takes ownership of [imageBitmap], including on encoding failure.
-  Future<Uint8List?> compressBitmap({
+  Future<Uint8List?> encode({
     required web.ImageBitmap imageBitmap,
     required int width,
     required int height,

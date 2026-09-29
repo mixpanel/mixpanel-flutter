@@ -160,7 +160,7 @@ capture result. It delegates pixels to a `FrameAcquirer`:
   `RenderedSurfaceCapture`, and encodes it only after the `MaskLayoutFence`
   confirms the masks still hold. It always disposes the snapshot.
   `WebRenderedSurfaceCapture` owns DOM discovery and presentation waits, while
-  `WebImageCompressor` owns the JPEG worker. Encoding consumes a bitmap once;
+  `WebJpegEncoder` owns the JPEG worker. Encoding consumes a bitmap once;
   rejected snapshots are closed without encoding.
 
 The existing web presentation barriers and endpoint mask comparison remain in
