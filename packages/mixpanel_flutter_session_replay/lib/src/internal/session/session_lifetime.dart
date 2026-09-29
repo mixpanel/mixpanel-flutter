@@ -2,6 +2,9 @@ import 'dart:async';
 import 'package:clock/clock.dart';
 import 'idle_timeout_timer.dart';
 
+/// A replay deadline that ends the recording when it passes.
+enum ExpiredDeadline { maximum, idle }
+
 /// Owns a replay's deadlines and their timers across initialization, activity,
 /// background pauses and reloads. Deadlines also use wall-clock checks because
 /// browser timers can be frozen while the page is suspended.
@@ -33,6 +36,14 @@ class SessionLifetime {
   bool get isIdleExpired => expired(_idleExpiry);
   bool get isMaximumExpired => expired(_maximumExpiry);
   bool get isBackgroundExpired => expired(_backgroundExpiry);
+
+  /// The deadline that has passed by wall clock, if any. The maximum wins
+  /// when both have. [includeIdle] false checks only the maximum.
+  ExpiredDeadline? expiredDeadline({bool includeIdle = true}) {
+    if (isMaximumExpired) return ExpiredDeadline.maximum;
+    if (includeIdle && isIdleExpired) return ExpiredDeadline.idle;
+    return null;
+  }
 
   static bool expired(DateTime? deadline) =>
       deadline != null && !clock.now().isBefore(deadline);

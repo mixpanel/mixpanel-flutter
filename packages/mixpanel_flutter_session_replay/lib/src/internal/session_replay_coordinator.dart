@@ -142,9 +142,7 @@ class SessionReplayCoordinator implements WidgetCoordinator {
       idleTimer: idleTimer,
       maximumDuration: maxSessionDuration,
       onIdleExpired: handleIdleTimeout,
-      onMaximumExpired: () {
-        _checkMaxSessionExpired();
-      },
+      onMaximumExpired: () => _endIfExpired(includeIdle: false),
     );
     // Note: We do NOT auto-start recording in constructor
     // Recording will be started by LifecycleObserver when it detects app is resumed
@@ -237,8 +235,9 @@ class SessionReplayCoordinator implements WidgetCoordinator {
       return;
     }
 
-    // Check max session duration (web only)
-    if (_checkMaxSessionExpired()) return;
+    // A capture is not activity, so only the maximum is checked here; the
+    // idle timer is authoritative while the page is live.
+    if (_endIfExpired(includeIdle: false)) return;
 
     final ticket = _captureInvalidation.begin();
     _logger.debug('Capturing snapshot', tag: 'coordinator');
@@ -337,9 +336,6 @@ class SessionReplayCoordinator implements WidgetCoordinator {
   ) {
     if (!_canRecordTouch('interaction')) return;
 
-    // Check max session duration (web only)
-    if (_checkMaxSessionExpired()) return;
-
     _logger.debug(
       'recordInteraction called with type: $interactionType, position: $position',
       tag: 'coordinator',
@@ -388,7 +384,9 @@ class SessionReplayCoordinator implements WidgetCoordinator {
       return false;
     }
 
-    return true;
+    // Input extends the idle window, so only the maximum can end the replay
+    // here.
+    return !_endIfExpired(includeIdle: false);
   }
 
   /// Flush queued events to server
@@ -475,20 +473,13 @@ class SessionReplayCoordinator implements WidgetCoordinator {
     _isAppInForeground = true;
 
     // A session carried across a hidden interval may have outlived either
-    // window while away. Both are checked against wall clock: the idle timer
-    // does not advance while the page is frozen in bfcache or suspended by
-    // the OS, so it cannot be trusted on its own here. Either check stops
-    // recording and marks the session idled out, so the branches below start
-    // a fresh one.
-    if ((_recordingState == RecordingState.recording ||
-            _recordingState == RecordingState.paused) &&
-        !_checkMaxSessionExpired() &&
-        _lifetime.isIdleExpired) {
-      _logger.info(
-        'Idle window elapsed while the page was away, ending session',
-        tag: 'coordinator',
-      );
-      handleIdleTimeout();
+    // window while away. The idle timer does not advance while the page is
+    // frozen in bfcache or suspended by the OS, so it cannot be trusted on its
+    // own here. An expired session is marked idled out, so the branches below
+    // start a fresh one.
+    if (_recordingState == RecordingState.recording ||
+        _recordingState == RecordingState.paused) {
+      _endIfExpired();
     }
 
     switch (_remoteEnablementState) {
@@ -704,11 +695,7 @@ class SessionReplayCoordinator implements WidgetCoordinator {
           : null,
       initializing: _recordingState == RecordingState.initializing,
     );
-    if (!active || _checkMaxSessionExpired()) return;
-    if (_lifetime.isIdleExpired) {
-      handleIdleTimeout();
-      return;
-    }
+    if (!active || _endIfExpired()) return;
     _writeDeadlinesNow();
   }
 
@@ -844,7 +831,7 @@ class SessionReplayCoordinator implements WidgetCoordinator {
         }
         // Persistence can complete after a timer deadline. Recheck at the
         // transition instead of relying on timer callback ordering.
-        if (_checkMaxSessionExpired()) return;
+        if (_endIfExpired()) return;
         _recordingState = RecordingState.recording;
         _uploadService.startAutoFlush();
         _lifetime.recordActivity();
@@ -939,11 +926,7 @@ class SessionReplayCoordinator implements WidgetCoordinator {
 
     // Web sessions still obey their idle and maximum-duration boundaries
     // while paused. Native platforms have neither deadline configured.
-    if (_checkMaxSessionExpired()) return;
-    if (_lifetime.isIdleExpired) {
-      handleIdleTimeout();
-      return;
-    }
+    if (_endIfExpired()) return;
 
     final session = _sessionManager.getCurrentSession();
     _logger.debug(
@@ -977,7 +960,10 @@ class SessionReplayCoordinator implements WidgetCoordinator {
   ///
   /// Called automatically on app backgrounding to end the current replay session.
   /// Also flushes pending events to ensure data is uploaded (matches iOS behavior).
-  void stopRecording({bool cancelPendingResume = true}) {
+  void stopRecording({bool cancelPendingResume = true}) =>
+      _stop(_StopReason.requested, cancelPendingResume: cancelPendingResume);
+
+  void _stop(_StopReason reason, {bool cancelPendingResume = true}) {
     // Check if disposed first
     if (_isDisposed) {
       _logger.debug(
@@ -1000,7 +986,7 @@ class SessionReplayCoordinator implements WidgetCoordinator {
     // pixels must not do so now; one already acquired stays with its replay.
     _captureInvalidation.noteStop();
     _recordingState = RecordingState.notRecording;
-    _isIdledOut = false;
+    _isIdledOut = reason.restartsOnActivity;
 
     // Clear debug overlay regions — no captures are happening, so the
     // previously-rendered mask outlines should disappear immediately.
@@ -1058,15 +1044,14 @@ class SessionReplayCoordinator implements WidgetCoordinator {
 
   /// Handle idle timeout expiry.
   ///
-  /// Called by [IdleTimeoutTimer] when the idle timeout fires.
-  /// Stops recording and sets [_isIdledOut] so the next user interaction
-  /// triggers a new session via [onUserActivity].
+  /// Called by [IdleTimeoutTimer] when the idle timeout fires. Stops
+  /// recording so the next user interaction starts a new session via
+  /// [onUserActivity].
   void handleIdleTimeout() {
     if (_isDisposed || _recordingState == RecordingState.notRecording) return;
 
     _logger.info('Idle timeout fired, stopping recording', tag: 'coordinator');
-    stopRecording();
-    _isIdledOut = true;
+    _stop(_StopReason.idle);
   }
 
   /// Resume a previously persisted session (web only).
@@ -1083,7 +1068,7 @@ class SessionReplayCoordinator implements WidgetCoordinator {
     _isIdledOut = false;
     _sessionManager.resumeSession(session);
     _lifetime.begin(session.startTime);
-    if (_checkMaxSessionExpired()) return;
+    if (_endIfExpired()) return;
 
     // Register replay ID as super property
     SessionReplaySender.register({'\$mp_replay_id': session.id});
@@ -1111,20 +1096,31 @@ class SessionReplayCoordinator implements WidgetCoordinator {
   @visibleForTesting
   bool get hasMaxSessionTimerForTest => _lifetime.hasMaximumTimer;
 
-  /// Check if max session duration has been exceeded.
-  /// Returns true if expired (and triggers idle-out flow).
-  bool _checkMaxSessionExpired() {
+  /// Ends the replay if one of its deadlines has passed by wall clock, and
+  /// returns whether it did.
+  ///
+  /// Checked at transitions as well as by the timers, since browser
+  /// suspension can delay timer callbacks. An ended replay restarts on the
+  /// next user activity. [includeIdle] false checks only the maximum.
+  bool _endIfExpired({bool includeIdle = true}) {
     if (_isDisposed) return false;
-    if (_lifetime.isMaximumExpired) {
-      _logger.info(
-        'Max session duration exceeded, stopping recording',
-        tag: 'coordinator',
-      );
-      stopRecording();
-      _isIdledOut = true;
-      return true;
+    switch (_lifetime.expiredDeadline(includeIdle: includeIdle)) {
+      case null:
+        return false;
+      case ExpiredDeadline.maximum:
+        _logger.info(
+          'Max session duration exceeded, stopping recording',
+          tag: 'coordinator',
+        );
+        _stop(_StopReason.maximumDuration);
+      case ExpiredDeadline.idle:
+        _logger.info(
+          'Idle window elapsed, stopping recording',
+          tag: 'coordinator',
+        );
+        _stop(_StopReason.idle);
     }
-    return false;
+    return true;
   }
 
   /// Dispose resources
@@ -1160,4 +1156,21 @@ class SessionReplayCoordinator implements WidgetCoordinator {
 
     _logger.debug('Coordinator disposed', tag: 'coordinator');
   }
+}
+
+/// Why a replay stopped.
+enum _StopReason {
+  /// Stopped by the app, remote settings, or leaving the foreground.
+  requested(restartsOnActivity: false),
+
+  /// The idle window elapsed.
+  idle(restartsOnActivity: true),
+
+  /// The maximum session duration elapsed.
+  maximumDuration(restartsOnActivity: true);
+
+  const _StopReason({required this.restartsOnActivity});
+
+  /// Whether the next user activity starts a new replay.
+  final bool restartsOnActivity;
 }

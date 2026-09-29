@@ -1803,6 +1803,49 @@ void main() {
           now.millisecondsSinceEpoch + dayMs,
         ));
       });
+
+      for (final (name, record)
+          in <(String, void Function(SessionReplayCoordinator))>[
+            (
+              'tap',
+              (coordinator) =>
+                  coordinator.captureInteraction(0, Offset.zero, clock.now()),
+            ),
+            (
+              'drag',
+              (coordinator) => coordinator.captureTouchMove([
+                const TouchPosition(x: 1, y: 2, timeOffset: 0),
+              ], clock.now()),
+            ),
+          ]) {
+        test('a $name past the maximum ends the replay even before the '
+            'timer fires', () async {
+          // GIVEN a recording whose maximum passes while its timer is held
+          // back, as browser suspension can do
+          final start = DateTime.utc(2026, 1, 1);
+          final coordinator = createCoordinator(
+            maxSessionDuration: const Duration(minutes: 1),
+          );
+          addTearDown(coordinator.dispose);
+          await withClock(Clock.fixed(start), () async {
+            coordinator.startRecording(sessionsPercent: 100);
+            await pumpEventQueue();
+          });
+          final expiredReplayId = coordinator.replayId;
+          expect(coordinator.recordingState, RecordingState.recording);
+
+          // WHEN input arrives after the maximum by wall clock
+          withClock(
+            Clock.fixed(start.add(const Duration(minutes: 2))),
+            () => record(coordinator),
+          );
+
+          // THEN the replay ends and the next activity starts a new one
+          expect(coordinator.recordingState, RecordingState.notRecording);
+          coordinator.onUserActivity();
+          expect(coordinator.replayId, isNot(expiredReplayId));
+        });
+      }
     });
   });
 }
