@@ -21,6 +21,7 @@ import 'settings/settings_service.dart';
 import 'session/session_manager.dart';
 import 'session/session_lifetime.dart';
 import 'session/session_persistence.dart';
+import 'session/replay_lifecycle_policy.dart';
 import 'session/recording_limits.dart';
 import 'widget_coordinator.dart';
 import 'session_replay_sender.dart';
@@ -99,9 +100,12 @@ class SessionReplayCoordinator implements WidgetCoordinator {
   /// True when recording was stopped due to idle timeout (awaiting next interaction)
   bool _isIdledOut = false;
 
-  /// Configured behavior when the app leaves the foreground. Null on web,
-  /// where a hidden page keeps recording, as in mixpanel-js.
-  final ReplayBackgroundBehavior? _backgroundBehavior;
+  /// How the replay responds to leaving and re-entering the foreground.
+  final ReplayLifecyclePolicy _lifecyclePolicy;
+
+  /// Whether a foreground has applied the auto-record decision yet. Under a
+  /// policy that does not resample, later foregrounds leave it as it is.
+  bool _hasAppliedAutoRecord = false;
 
   /// Stores deadlines and offers a replay a previous page load left
   /// recording. A no-op on native platforms.
@@ -119,7 +123,7 @@ class SessionReplayCoordinator implements WidgetCoordinator {
     required DebugOptions? debugOptions,
     BackgroundTaskManager? backgroundTaskManager,
     RecordingDurationLimits? durationLimits,
-    required ReplayBackgroundBehavior? backgroundBehavior,
+    required ReplayLifecyclePolicy lifecyclePolicy,
     DebugMaskOverlayFactory debugMaskOverlayFactory =
         InTreeDebugMaskOverlay.new,
     SessionPersistence? sessionPersistence,
@@ -134,7 +138,7 @@ class SessionReplayCoordinator implements WidgetCoordinator {
        _autoRecordSessionsPercent = autoRecordSessionsPercent,
        _remoteSettingsMode = remoteSettingsMode,
        _debugOptions = debugOptions,
-       _backgroundBehavior = backgroundBehavior,
+       _lifecyclePolicy = lifecyclePolicy,
        _debugMaskOverlayFactory = debugMaskOverlayFactory,
        _persistence = sessionPersistence ?? SessionPersistence.none() {
     _lifetime = SessionLifetime(
@@ -165,6 +169,10 @@ class SessionReplayCoordinator implements WidgetCoordinator {
   /// Whether app is currently in foreground (used by FrameMonitor to stop captures when backgrounded)
   @override
   bool get isAppInForeground => _isAppInForeground;
+
+  @override
+  bool get leavesForegroundWhenInactive =>
+      _lifecyclePolicy.leavesForegroundWhenInactive;
 
   /// Remote settings state (pending, enabled, or disabled)
   @override
@@ -429,14 +437,14 @@ class SessionReplayCoordinator implements WidgetCoordinator {
   void _applyBackgroundBehaviorWithBackgroundTask() {
     _backgroundTaskManager.beginBackgroundTask();
 
-    switch (_backgroundBehavior) {
-      case ReplayBackgroundPauseBehavior(:final idleTimeout):
+    switch (_lifecyclePolicy) {
+      case PauseOnBackground(:final idleTimeout):
         _pauseForBackground(idleTimeout);
-      case ReplayBackgroundStopBehavior():
+      case StopOnBackground():
         stopRecording(cancelPendingResume: false);
-      case null:
-        // Web: the replay keeps recording while the page is hidden, and its
-        // idle and maximum deadlines keep running. The page may be frozen or
+      case RecordThroughBackground():
+        // The replay keeps recording while the page is hidden, and its idle
+        // and maximum deadlines keep running. The page may be frozen or
         // discarded from here, so store the latest deadlines for a reload.
         if (_recordingState == RecordingState.recording) _writeDeadlinesNow();
     }
@@ -575,6 +583,9 @@ class SessionReplayCoordinator implements WidgetCoordinator {
   }
 
   void _resumeBackgroundPauseOrStart() {
+    final isFirstApplication = !_hasAppliedAutoRecord;
+    _hasAppliedAutoRecord = true;
+
     // A replay that kept recording while hidden (web) has nothing to resume.
     if (_recordingState == RecordingState.initializing ||
         _recordingState == RecordingState.recording) {
@@ -591,6 +602,15 @@ class SessionReplayCoordinator implements WidgetCoordinator {
         _resumeFromBackground();
         return;
       }
+    }
+    if (!isFirstApplication && !_lifecyclePolicy.resamplesOnForeground) {
+      // As in mixpanel-js, auto-record was decided when the page loaded. A
+      // replay that ended since then restarts on user activity instead.
+      _logger.debug(
+        'Auto-record already applied, foreground does not resample',
+        tag: 'coordinator',
+      );
+      return;
     }
     _startOrResumeRecording();
   }
@@ -734,8 +754,9 @@ class SessionReplayCoordinator implements WidgetCoordinator {
   /// Uses random sampling to determine if this session should be recorded.
   ///
   /// Called automatically on app foregrounding if autoStartRecording is enabled.
-  /// Each foreground creates a new replay session with a fresh sampling decision.
-  /// This matches the iOS and Android SDK behavior.
+  /// Whether each foreground applies a fresh sampling decision is up to the
+  /// [ReplayLifecyclePolicy]: on native it does, matching the iOS and Android
+  /// SDKs; on web it is decided once per page load, matching mixpanel-js.
   void startRecording({double sessionsPercent = 100.0}) {
     // Check if disposed first
     if (_isDisposed) {
@@ -861,7 +882,8 @@ class SessionReplayCoordinator implements WidgetCoordinator {
     }
   }
 
-  /// Pause the current replay while the app or page is backgrounded.
+  /// Pause the current replay while the app is backgrounded, under
+  /// [PauseOnBackground]. Web never pauses: it records through a hidden page.
   void _pauseForBackground(Duration idleTimeout) {
     if (_isDisposed) {
       _logger.debug(
@@ -885,8 +907,8 @@ class SessionReplayCoordinator implements WidgetCoordinator {
     _recordingState = RecordingState.paused;
     _lifetime.pause(idleTimeout);
 
-    // Preserve the latest web idle deadline before the page may be frozen or
-    // discarded. Native platforms do not provide this callback.
+    // Stores the paused replay's deadlines. A no-op with native persistence,
+    // kept so pausing stays correct for any persistence it is given.
     _writeDeadlinesNow();
 
     if (_maskRegions.value.isNotEmpty) {
@@ -934,8 +956,8 @@ class SessionReplayCoordinator implements WidgetCoordinator {
       return;
     }
 
-    // Web sessions still obey their idle and maximum-duration boundaries
-    // while paused. Native platforms have neither deadline configured.
+    // A replay with duration limits still obeys them while paused. Native
+    // replays have none, so this only matters if limits are configured.
     if (_endIfExpired()) return;
 
     final session = _sessionManager.getCurrentSession();
@@ -952,12 +974,14 @@ class SessionReplayCoordinator implements WidgetCoordinator {
     _uploadService.startAutoFlush();
 
     // If backgrounding interrupted initial session setup, the metadata callback
-    // did not start the web idle window because the state was paused. Initialize
-    // it now. Existing sessions retain their original idle deadline.
+    // did not start the idle window because the state was paused. Start it now.
+    // Existing sessions retain their original idle deadline. Without an idle
+    // timeout, as on native, there is no window to start.
     if (_lifetime.needsIdleWindow) {
       _lifetime.recordActivity();
     }
-    // Clear the persisted background deadline even without fresh activity.
+    // Store the resumed replay's deadlines even without fresh activity. A
+    // no-op with native persistence.
     _writeDeadlinesNow();
 
     _logger.debug('Recording resumed', tag: 'coordinator');
@@ -1040,7 +1064,9 @@ class SessionReplayCoordinator implements WidgetCoordinator {
         tag: 'coordinator',
       );
       _isIdledOut = false;
-      startRecording(sessionsPercent: _autoRecordSessionsPercent);
+      // The replay that ended already passed sampling, or was started
+      // explicitly. As in mixpanel-js, its successor is not sampled again.
+      startRecording();
       return;
     }
     // Keyboard, wheel, and trackpad input reach the idle window only here;

@@ -28,6 +28,10 @@ abstract class WidgetCoordinator {
   /// Whether app is currently in foreground
   bool get isAppInForeground;
 
+  /// Whether [AppLifecycleState.inactive] counts as leaving the foreground,
+  /// or only [AppLifecycleState.hidden] does.
+  bool get leavesForegroundWhenInactive;
+
   /// Creates the debug mask overlay for a capture boundary, drawn wherever
   /// this coordinator's capture cannot see it.
   DebugMaskOverlay createDebugMaskOverlay({

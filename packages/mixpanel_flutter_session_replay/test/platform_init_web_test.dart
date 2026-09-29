@@ -7,6 +7,7 @@ import 'dart:js_interop';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/logger.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/platform/platform_init.dart';
+import 'package:mixpanel_flutter_session_replay/src/internal/session/replay_lifecycle_policy.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/storage/indexed_db_event_queue.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/configuration.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/masking_directive.dart';
@@ -77,7 +78,7 @@ void main() {
 
       expect(result.sessionPersistence.takeResumable(), isNull);
       // A hidden page keeps recording, as in mixpanel-js.
-      expect(result.backgroundBehavior, isNull);
+      expect(result.lifecyclePolicy, isA<RecordThroughBackground>());
       expect(queue.eventCount, 1);
 
       await result.screenshotCapturer.dispose();

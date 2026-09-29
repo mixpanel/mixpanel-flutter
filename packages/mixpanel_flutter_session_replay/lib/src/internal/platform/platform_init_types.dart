@@ -1,6 +1,6 @@
 import '../session/recording_limits.dart';
+import '../session/replay_lifecycle_policy.dart';
 import '../session/session_persistence.dart';
-import '../../models/configuration.dart';
 import '../debug_mask_overlay.dart';
 import '../screenshot_capturer.dart';
 import '../storage/event_queue_interface.dart';
@@ -32,9 +32,8 @@ class PlatformInitResult {
   /// Carries replays across page loads on web; a no-op elsewhere.
   final SessionPersistence sessionPersistence;
 
-  /// Configured behavior when the app leaves the foreground. Null on web,
-  /// where a hidden page keeps recording, as in mixpanel-js.
-  final ReplayBackgroundBehavior? backgroundBehavior;
+  /// How a replay responds to leaving and re-entering the foreground.
+  final ReplayLifecyclePolicy lifecyclePolicy;
 
   /// Draws the debug mask overlay where [screenshotCapturer] cannot see it.
   final DebugMaskOverlayFactory debugMaskOverlayFactory;
@@ -46,7 +45,7 @@ class PlatformInitResult {
     required this.wifiOnly,
     this.durationLimits,
     required this.sessionPersistence,
-    this.backgroundBehavior,
+    required this.lifecyclePolicy,
     required this.debugMaskOverlayFactory,
   });
 

@@ -13,6 +13,7 @@ import '../wireframe/wireframe_emitter.dart';
 import '../../models/masking_directive.dart';
 import '../../models/configuration.dart';
 import '../session/recording_limits.dart';
+import '../session/replay_lifecycle_policy.dart';
 import '../session/resumable_session.dart';
 import '../session/session_persistence.dart';
 import '../session/web_session_resume.dart';
@@ -108,6 +109,7 @@ Future<PlatformInitResult> platformInit({
         idle: web.idleTimeout,
       ),
       sessionPersistence: sessionPersistence,
+      lifecyclePolicy: ReplayLifecyclePolicy.recordThroughBackground,
       // Capture reads the presented Flutter canvas, which would include
       // anything painted in-tree.
       debugMaskOverlayFactory: OutOfSurfaceDebugMaskOverlay.new,

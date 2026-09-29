@@ -726,14 +726,10 @@ void main() {
 
     group('on web', () {
       Future<FakeWidgetCoordinator> pumpWebObserver(WidgetTester tester) async {
-        final fake = FakeWidgetCoordinator();
+        final fake = FakeWidgetCoordinator(leavesForegroundWhenInactive: false);
         await tester.pumpWidget(
           MaterialApp(
-            home: LifecycleObserver(
-              coordinator: fake,
-              leavesForegroundWhenInactive: false,
-              child: const SizedBox(),
-            ),
+            home: LifecycleObserver(coordinator: fake, child: const SizedBox()),
           ),
         );
         tester.binding.handleAppLifecycleStateChanged(

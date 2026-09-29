@@ -1,3 +1,4 @@
+import 'package:clock/clock.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/capture/to_image_frame_acquirer.dart';
 import 'dart:async';
 import 'dart:convert';
@@ -16,6 +17,7 @@ import 'package:mixpanel_flutter_session_replay/src/internal/upload/upload_servi
 import 'package:mixpanel_flutter_session_replay/src/internal/settings/settings_service.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/settings/settings_storage_provider.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/upload/payload_serializer.dart';
+import 'package:mixpanel_flutter_session_replay/src/internal/session/replay_lifecycle_policy.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/session/session_manager.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/logger.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/wireframe/wireframe_emitter.dart';
@@ -51,8 +53,8 @@ void main() {
       double autoRecordSessionsPercent = 0,
       RemoteSettingsMode remoteSettingsMode = RemoteSettingsMode.disabled,
       DebugOptions? debugOptions,
-      ReplayBackgroundBehavior backgroundBehavior =
-          ReplayBackgroundBehavior.stop,
+      ReplayLifecyclePolicy lifecyclePolicy =
+          ReplayLifecyclePolicy.stopOnBackground,
     }) {
       return SessionReplayCoordinator(
         screenshotCapturer: screenshotCapturer,
@@ -64,7 +66,7 @@ void main() {
         autoRecordSessionsPercent: autoRecordSessionsPercent,
         remoteSettingsMode: remoteSettingsMode,
         debugOptions: debugOptions,
-        backgroundBehavior: backgroundBehavior,
+        lifecyclePolicy: lifecyclePolicy,
       );
     }
 
@@ -290,7 +292,7 @@ void main() {
           autoRecordSessionsPercent: 0,
           remoteSettingsMode: RemoteSettingsMode.disabled,
           debugOptions: null,
-          backgroundBehavior: ReplayBackgroundBehavior.stop,
+          lifecyclePolicy: ReplayLifecyclePolicy.stopOnBackground,
         );
 
         // Trigger settings check via foreground
@@ -497,7 +499,7 @@ void main() {
       test('pauses recording when app goes to background', () async {
         // GIVEN
         final coordinator = createCoordinator(
-          backgroundBehavior: const ReplayBackgroundBehavior.pause(
+          lifecyclePolicy: const PauseOnBackground(
             idleTimeout: Duration(minutes: 30),
           ),
         );
@@ -524,7 +526,7 @@ void main() {
           // completed its asynchronous callback.
           final coordinator = createCoordinator(
             autoRecordSessionsPercent: 100,
-            backgroundBehavior: const ReplayBackgroundBehavior.pause(
+            lifecyclePolicy: const PauseOnBackground(
               idleTimeout: Duration(minutes: 30),
             ),
           );
@@ -588,6 +590,27 @@ void main() {
         },
       );
 
+      test('should resample auto-record when returning after a background '
+          'stop', () async {
+        // GIVEN a native replay started by auto-record, then ended by
+        // backgrounding under the default stop policy
+        final coordinator = createCoordinator(autoRecordSessionsPercent: 100.0);
+        coordinator.onAppForegrounded();
+        await pumpEventQueue();
+        final firstReplayId = coordinator.replayId;
+        coordinator.onAppBackgrounded();
+        expect(coordinator.recordingState, RecordingState.notRecording);
+
+        // WHEN the app returns to the foreground
+        coordinator.onAppForegrounded();
+        await pumpEventQueue();
+
+        // THEN auto-record applies again and starts a new replay, matching
+        // the iOS and Android SDKs
+        expect(coordinator.recordingState, RecordingState.recording);
+        expect(coordinator.replayId, isNot(firstReplayId));
+      });
+
       test('does not auto-start when autoRecordSessionsPercent is 0', () async {
         // GIVEN
         final coordinator = createCoordinator(autoRecordSessionsPercent: 0);
@@ -642,7 +665,7 @@ void main() {
             autoRecordSessionsPercent: 100.0,
             remoteSettingsMode: RemoteSettingsMode.disabled,
             debugOptions: null,
-            backgroundBehavior: ReplayBackgroundBehavior.stop,
+            lifecyclePolicy: ReplayLifecyclePolicy.stopOnBackground,
           );
 
           // WHEN
@@ -765,7 +788,7 @@ void main() {
           autoRecordSessionsPercent: 0,
           remoteSettingsMode: RemoteSettingsMode.disabled,
           debugOptions: null,
-          backgroundBehavior: ReplayBackgroundBehavior.stop,
+          lifecyclePolicy: ReplayLifecyclePolicy.stopOnBackground,
         );
 
         // WHEN
@@ -800,7 +823,7 @@ void main() {
             autoRecordSessionsPercent: 100.0,
             remoteSettingsMode: RemoteSettingsMode.strict,
             debugOptions: null,
-            backgroundBehavior: ReplayBackgroundBehavior.stop,
+            lifecyclePolicy: ReplayLifecyclePolicy.stopOnBackground,
           );
 
           // WHEN - foreground triggers settings check which falls back to cache
@@ -838,7 +861,7 @@ void main() {
             autoRecordSessionsPercent: 0,
             remoteSettingsMode: RemoteSettingsMode.disabled,
             debugOptions: null,
-            backgroundBehavior: ReplayBackgroundBehavior.stop,
+            lifecyclePolicy: ReplayLifecyclePolicy.stopOnBackground,
           );
 
           // Trigger settings check (in-flight)
@@ -931,7 +954,7 @@ void main() {
         autoRecordSessionsPercent: 100.0,
         remoteSettingsMode: remoteSettingsMode,
         debugOptions: null,
-        backgroundBehavior: ReplayBackgroundBehavior.stop,
+        lifecyclePolicy: ReplayLifecyclePolicy.stopOnBackground,
       );
 
       test('stops wireframe capture when the server disables it', () async {
@@ -1079,7 +1102,7 @@ void main() {
           autoRecordSessionsPercent: 100.0, // local config
           remoteSettingsMode: RemoteSettingsMode.disabled,
           debugOptions: null,
-          backgroundBehavior: ReplayBackgroundBehavior.stop,
+          lifecyclePolicy: ReplayLifecyclePolicy.stopOnBackground,
         );
 
         // WHEN - foreground triggers settings check
@@ -1117,7 +1140,7 @@ void main() {
           autoRecordSessionsPercent: 100.0, // local config
           remoteSettingsMode: RemoteSettingsMode.fallback,
           debugOptions: null,
-          backgroundBehavior: ReplayBackgroundBehavior.stop,
+          lifecyclePolicy: ReplayLifecyclePolicy.stopOnBackground,
         );
 
         // WHEN - foreground triggers settings check, then auto-start
@@ -1151,7 +1174,7 @@ void main() {
           autoRecordSessionsPercent: 100.0,
           remoteSettingsMode: RemoteSettingsMode.strict,
           debugOptions: null,
-          backgroundBehavior: ReplayBackgroundBehavior.stop,
+          lifecyclePolicy: ReplayLifecyclePolicy.stopOnBackground,
         );
 
         // WHEN - foreground triggers settings check
@@ -1189,7 +1212,7 @@ void main() {
             autoRecordSessionsPercent: 0, // no auto-start
             remoteSettingsMode: RemoteSettingsMode.strict,
             debugOptions: null,
-            backgroundBehavior: ReplayBackgroundBehavior.stop,
+            lifecyclePolicy: ReplayLifecyclePolicy.stopOnBackground,
           );
 
           // Trigger settings check (in-flight, not yet resolved)
@@ -1242,7 +1265,7 @@ void main() {
           autoRecordSessionsPercent: 100.0,
           remoteSettingsMode: RemoteSettingsMode.strict,
           debugOptions: null,
-          backgroundBehavior: ReplayBackgroundBehavior.stop,
+          lifecyclePolicy: ReplayLifecyclePolicy.stopOnBackground,
         );
 
         // WHEN - foreground triggers settings check + auto-start
@@ -1276,7 +1299,7 @@ void main() {
           autoRecordSessionsPercent: 100.0,
           remoteSettingsMode: RemoteSettingsMode.fallback,
           debugOptions: null,
-          backgroundBehavior: ReplayBackgroundBehavior.stop,
+          lifecyclePolicy: ReplayLifecyclePolicy.stopOnBackground,
         );
 
         // WHEN - foreground triggers settings check
@@ -1347,7 +1370,7 @@ void main() {
         // GIVEN
         final coordinator = createCoordinator(
           autoRecordSessionsPercent: 100,
-          backgroundBehavior: const ReplayBackgroundBehavior.pause(
+          lifecyclePolicy: const PauseOnBackground(
             idleTimeout: Duration(minutes: 30),
           ),
         );
@@ -1486,7 +1509,7 @@ void main() {
           // GIVEN
           final coordinator = createCoordinator(
             autoRecordSessionsPercent: 100,
-            backgroundBehavior: const ReplayBackgroundBehavior.pause(
+            lifecyclePolicy: const PauseOnBackground(
               idleTimeout: Duration(minutes: 30),
             ),
           );
@@ -1561,7 +1584,7 @@ void main() {
         // GIVEN - first foreground resolves settings and starts recording
         final coordinator = createCoordinator(
           autoRecordSessionsPercent: 100.0,
-          backgroundBehavior: const ReplayBackgroundBehavior.pause(
+          lifecyclePolicy: const PauseOnBackground(
             idleTimeout: Duration(minutes: 30),
           ),
         );
@@ -1579,6 +1602,39 @@ void main() {
         final secondSession = sessionManager.getCurrentSession();
         expect(secondSession.id, firstSession.id);
         expect(coordinator.recordingState, RecordingState.recording);
+      });
+
+      test('should start a new replay when returning after the pause '
+          'timeout', () async {
+        // GIVEN a replay paused in the background with a 5 minute timeout
+        final coordinator = createCoordinator(
+          autoRecordSessionsPercent: 100,
+          lifecyclePolicy: const PauseOnBackground(
+            idleTimeout: Duration(minutes: 5),
+          ),
+        );
+        final backgroundedAt = DateTime.utc(2026, 1, 1, 12);
+        String? replayId;
+        await withClock(Clock.fixed(backgroundedAt), () async {
+          coordinator.startRecording(sessionsPercent: 100);
+          await pumpEventQueue();
+          replayId = coordinator.replayId;
+          coordinator.onAppBackgrounded();
+          await pumpEventQueue();
+        });
+
+        // WHEN the app returns after 6 minutes
+        await withClock(
+          Clock.fixed(backgroundedAt.add(const Duration(minutes: 6))),
+          () async {
+            coordinator.onAppForegrounded();
+            await pumpEventQueue();
+          },
+        );
+
+        // THEN the expired replay is replaced by a newly sampled one
+        expect(coordinator.recordingState, RecordingState.recording);
+        expect(coordinator.replayId, isNot(replayId));
       });
     });
 
@@ -1718,7 +1774,7 @@ void main() {
         // GIVEN - a capture is in flight for a replay that pauses in the
         // background instead of ending.
         final coordinator = createCoordinator(
-          backgroundBehavior: const ReplayBackgroundBehavior.pause(
+          lifecyclePolicy: const PauseOnBackground(
             idleTimeout: Duration(minutes: 30),
           ),
         );

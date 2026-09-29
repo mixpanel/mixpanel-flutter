@@ -3,8 +3,9 @@ import 'package:provider/provider.dart';
 
 import '../models/config_model.dart';
 
-/// Demonstrates configuring replay behavior when the app or page leaves the
-/// foreground.
+/// Demonstrates configuring replay behavior when a native app leaves the
+/// foreground. Web has no equivalent: a replay continues while the page is
+/// hidden.
 class BackgroundBehaviorScreen extends StatefulWidget {
   const BackgroundBehaviorScreen({super.key});
 

@@ -39,9 +39,11 @@ enum RecordingState {
 
   /// Recording is temporarily paused
   ///
-  /// The current replay is retained while the app or page is backgrounded and
+  /// The current replay is retained while a native app is backgrounded and
   /// continues with the same replay ID on foreground. Screenshots and
-  /// interactions are not captured while paused.
+  /// interactions are not captured while paused. Only reached when
+  /// `MobileOptions.onBackground` is `ReplayBackgroundBehavior.pause`. Web
+  /// never pauses: a replay keeps recording while the page is hidden.
   paused,
 }
 

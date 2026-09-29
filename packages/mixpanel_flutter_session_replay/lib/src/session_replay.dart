@@ -290,7 +290,7 @@ class MixpanelSessionReplay {
           remoteSettingsMode: options.remoteSettingsMode,
           debugOptions: options.debugOptions,
           durationLimits: platformResult.durationLimits,
-          backgroundBehavior: platformResult.backgroundBehavior,
+          lifecyclePolicy: platformResult.lifecyclePolicy,
           sessionPersistence: platformResult.sessionPersistence,
           debugMaskOverlayFactory: platformResult.debugMaskOverlayFactory,
         );
