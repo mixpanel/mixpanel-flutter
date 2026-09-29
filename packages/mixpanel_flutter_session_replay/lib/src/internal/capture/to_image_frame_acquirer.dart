@@ -1,3 +1,4 @@
+import 'dart:typed_data' show ByteData;
 import 'dart:ui' as ui;
 
 import 'package:clock/clock.dart';
@@ -86,10 +87,21 @@ class ToImageFrameAcquirer extends FrameAcquirer {
 
     final width = maskedImage.width;
     final height = maskedImage.height;
-    final byteData = await maskedImage.toByteData(
-      format: ui.ImageByteFormat.rawRgba,
-    );
-    maskedImage.dispose();
+    final ByteData? byteData;
+    try {
+      byteData = await maskedImage.toByteData(
+        format: ui.ImageByteFormat.rawRgba,
+      );
+    } catch (e) {
+      return FrameRejected(
+        CaptureFailure(
+          CaptureError.insufficientMemory,
+          'Failed to get image bytes: $e',
+        ),
+      );
+    } finally {
+      maskedImage.dispose();
+    }
     if (byteData == null) {
       return const FrameRejected(
         CaptureFailure(
