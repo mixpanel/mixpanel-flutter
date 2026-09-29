@@ -8,26 +8,17 @@ import 'package:web/web.dart' as web;
 
 /// Inline JavaScript source for the image processing Web Worker.
 ///
-/// Receives RGBA pixel data, draws it onto an OffscreenCanvas,
-/// encodes to JPEG via convertToBlob, and transfers the result
-/// back as an ArrayBuffer (zero-copy).
+/// Receives a transferred ImageBitmap, draws it onto an OffscreenCanvas at the
+/// requested size, paints mask rectangles, encodes to JPEG via convertToBlob,
+/// and transfers the result back as an ArrayBuffer (zero-copy).
 const String _workerScript = '''
 self.onmessage = async function(e) {
   try {
-    const {
-      rgbaBuffer, imageBitmap, width, height, jpegQuality, maskRects
-    } = e.data;
+    const { imageBitmap, width, height, jpegQuality, maskRects } = e.data;
     const canvas = new OffscreenCanvas(width, height);
     const ctx = canvas.getContext('2d');
-    if (imageBitmap) {
-      ctx.drawImage(imageBitmap, 0, 0, width, height);
-      imageBitmap.close();
-    } else {
-      const imageData = new ImageData(
-        new Uint8ClampedArray(rgbaBuffer), width, height
-      );
-      ctx.putImageData(imageData, 0, 0);
-    }
+    ctx.drawImage(imageBitmap, 0, 0, width, height);
+    imageBitmap.close();
 
     ctx.fillStyle = '#cccccc';
     for (let i = 0; i < maskRects.length; i += 4) {
@@ -54,17 +45,6 @@ extension type _WorkerResponse._(JSObject _) implements JSObject {
   external JSString? get error;
 }
 
-/// Extension type for the message payload sent to the worker.
-extension type _WorkerMessage._(JSObject _) implements JSObject {
-  external factory _WorkerMessage({
-    JSArrayBuffer rgbaBuffer,
-    JSNumber width,
-    JSNumber height,
-    JSNumber jpegQuality,
-    JSArray<JSNumber> maskRects,
-  });
-}
-
 /// Message payload for a GPU/browser-backed surface snapshot.
 extension type _WorkerBitmapMessage._(JSObject _) implements JSObject {
   external factory _WorkerBitmapMessage({
@@ -79,7 +59,7 @@ extension type _WorkerBitmapMessage._(JSObject _) implements JSObject {
 /// Manages a Web Worker for off-main-thread image compression.
 ///
 /// Created once and reused for all captures. The worker paints privacy masks
-/// and compresses RGBA pixels using browser-native OffscreenCanvas and
+/// and encodes surface snapshots using browser-native OffscreenCanvas and
 /// convertToBlob APIs.
 class WebImageWorker {
   final web.Worker _worker;
@@ -114,50 +94,6 @@ class WebImageWorker {
     } catch (_) {
       return null;
     }
-  }
-
-  /// Compresses raw RGBA pixel data into a JPEG image.
-  ///
-  /// The [rgbaBytes] ArrayBuffer is transferred to the worker (zero-copy)
-  /// and cannot be used after this call. The JPEG result is transferred
-  /// back (also zero-copy).
-  Future<Uint8List> processImage({
-    required Uint8List rgbaBytes,
-    required int width,
-    required int height,
-    required double jpegQuality,
-    required List<Rect> maskRects,
-  }) {
-    if (_disposed) {
-      return Future.error(StateError('WebImageWorker is disposed'));
-    }
-    if (_pending != null) {
-      return Future.error(StateError('Worker is already processing an image'));
-    }
-
-    // Construct the complete message before recording an in-flight request.
-    // A synchronous interop error must not leave [_pending] stranded and then
-    // get obscured by the error raised when the compressor disposes the worker.
-    final rgbaArrayBuffer = rgbaBytes.buffer.toJS;
-    final jsMaskRects = _maskRectsToJs(maskRects);
-    final message = _WorkerMessage(
-      rgbaBuffer: rgbaArrayBuffer,
-      width: width.toJS,
-      height: height.toJS,
-      jpegQuality: jpegQuality.toJS,
-      maskRects: jsMaskRects,
-    );
-
-    final completer = Completer<Uint8List>();
-    _pending = completer;
-    try {
-      _worker.postMessage(message, [rgbaArrayBuffer].toJS);
-    } catch (error, stackTrace) {
-      _pending = null;
-      completer.completeError(error, stackTrace);
-    }
-
-    return completer.future;
   }
 
   /// Scales, masks, and encodes a transferable browser surface snapshot.

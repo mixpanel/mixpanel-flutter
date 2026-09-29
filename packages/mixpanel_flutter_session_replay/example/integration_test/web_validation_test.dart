@@ -1,6 +1,7 @@
 @TestOn('browser')
 library;
 
+import 'package:mixpanel_flutter_session_replay/src/internal/capture/rendered_surface_frame_acquirer.dart';
 import 'dart:async';
 import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
@@ -72,7 +73,7 @@ void main() {
         directive: MaskingDirective(autoMaskTypes: const {AutoMaskedView.text}),
         logger: MixpanelLogger(LogLevel.none),
         debugOverlayEnabled: false,
-        surfaceCapture: compressor,
+        frameAcquirer: RenderedSurfaceFrameAcquirer(compressor),
       );
 
       final boundary = await _pumpScene(tester, complexity: 48);
@@ -255,7 +256,7 @@ void main() {
       directive: MaskingDirective(autoMaskTypes: const {}),
       logger: MixpanelLogger(LogLevel.none),
       debugOverlayEnabled: true,
-      surfaceCapture: compressor,
+      frameAcquirer: RenderedSurfaceFrameAcquirer(compressor),
     );
 
     final boundaryKey = GlobalKey();
@@ -356,13 +357,14 @@ void main() {
     );
     await compressor.initialize();
     addTearDown(compressor.dispose);
+    final acquirer = RenderedSurfaceFrameAcquirer(compressor);
     final capturer = ScreenshotCapturer(
       directive: MaskingDirective(
         autoMaskTypes: const {AutoMaskedView.text, AutoMaskedView.image},
       ),
       logger: MixpanelLogger(LogLevel.none),
       debugOverlayEnabled: false,
-      surfaceCapture: compressor,
+      frameAcquirer: acquirer,
     );
 
     final results = <String, Object?>{
@@ -394,6 +396,7 @@ void main() {
       final metrics = await _measureCaptures(
         tester,
         capturer,
+        acquirer,
         compressor,
         boundary,
         baselineMaxGapMs: math.max(baseline.maxGapMs, control.maxGapMs),
@@ -606,6 +609,7 @@ Future<_FrameMetrics> _measureWorkerOnly({
 Future<_FrameMetrics> _measureCaptures(
   WidgetTester tester,
   ScreenshotCapturer capturer,
+  RenderedSurfaceFrameAcquirer acquirer,
   WebRenderedSurfaceCapture compressor,
   _BoundaryHandle boundary, {
   required double baselineMaxGapMs,
@@ -624,8 +628,7 @@ Future<_FrameMetrics> _measureCaptures(
     capturePhases.add({
       'mask_detection_ms': capturer.lastMaskDetectionTime?.inMilliseconds ?? -1,
       'presentation_barrier_ms':
-          capturer.lastRenderedSurfaceStabilityValidationTime?.inMilliseconds ??
-          -1,
+          acquirer.lastPresentationWaitTime?.inMilliseconds ?? -1,
       'post_snapshot_validation_ms':
           capturer.lastPostSnapshotMaskValidationTime?.inMilliseconds ?? -1,
       ...?compressor.lastCaptureTimings?.toMillisecondsJson(),

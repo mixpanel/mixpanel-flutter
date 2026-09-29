@@ -3,6 +3,7 @@ export 'platform_init_types.dart';
 import '../../models/masking_directive.dart';
 import '../../models/configuration.dart';
 import '../logger.dart';
+import '../capture/to_image_frame_acquirer.dart';
 import '../native_image_compressor.dart';
 import '../screenshot_capturer.dart';
 import '../storage/event_queue_interface.dart';
@@ -33,7 +34,10 @@ Future<PlatformInitResult> platformInit({
     directive: directive,
     logger: logger,
     debugOverlayEnabled: debugOverlayEnabled,
-    compressor: NativeImageCompressor(),
+    frameAcquirer: ToImageFrameAcquirer(
+      NativeImageCompressor(),
+      logger: logger,
+    ),
     wireframeEmitter: wireframeEmitter,
     useAccessibilityLabelFallback: useAccessibilityLabelFallback,
   );

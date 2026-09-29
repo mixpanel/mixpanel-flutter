@@ -1,3 +1,4 @@
+import 'package:mixpanel_flutter_session_replay/src/internal/capture/to_image_frame_acquirer.dart';
 import 'dart:math';
 import 'dart:ui' as ui;
 
@@ -35,7 +36,10 @@ Future<void> runBenchmark(
     directive: MaskingDirective(autoMaskTypes: {}),
     logger: logger,
     debugOverlayEnabled: false,
-    compressor: NativeImageCompressor(),
+    frameAcquirer: ToImageFrameAcquirer(
+      NativeImageCompressor(),
+      logger: MixpanelLogger(LogLevel.none),
+    ),
   );
 
   final times = <int>[];

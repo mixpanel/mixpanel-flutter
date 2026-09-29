@@ -1,3 +1,4 @@
+import 'package:mixpanel_flutter_session_replay/src/internal/capture/to_image_frame_acquirer.dart';
 import 'dart:async';
 import 'dart:convert';
 
@@ -116,7 +117,10 @@ void main() {
         directive: MaskingDirective(autoMaskTypes: {}),
         logger: logger,
         debugOverlayEnabled: false,
-        compressor: DartPngCompressor(),
+        frameAcquirer: ToImageFrameAcquirer(
+          DartPngCompressor(),
+          logger: MixpanelLogger(LogLevel.none),
+        ),
       );
     });
 
@@ -203,7 +207,10 @@ void main() {
           directive: MaskingDirective(autoMaskTypes: {}),
           logger: logger,
           debugOverlayEnabled: false,
-          compressor: DartPngCompressor(),
+          frameAcquirer: ToImageFrameAcquirer(
+            DartPngCompressor(),
+            logger: MixpanelLogger(LogLevel.none),
+          ),
           wireframeEmitter: emitter,
         );
 
@@ -899,7 +906,10 @@ void main() {
         directive: MaskingDirective(autoMaskTypes: {}),
         logger: logger,
         debugOverlayEnabled: false,
-        compressor: DartPngCompressor(),
+        frameAcquirer: ToImageFrameAcquirer(
+          DartPngCompressor(),
+          logger: MixpanelLogger(LogLevel.none),
+        ),
         wireframeEmitter: WireframeEmitter(
           sensitiveRules: const [],
           debugEmitter: null,
@@ -1998,7 +2008,10 @@ class _PendingScreenshotCapturer extends ScreenshotCapturer {
     : super(
         directive: MaskingDirective(autoMaskTypes: {}),
         debugOverlayEnabled: false,
-        compressor: DartPngCompressor(),
+        frameAcquirer: ToImageFrameAcquirer(
+          DartPngCompressor(),
+          logger: MixpanelLogger(LogLevel.none),
+        ),
       );
 
   final Completer<CaptureResult> pendingCapture = Completer<CaptureResult>();

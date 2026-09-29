@@ -1,3 +1,4 @@
+import 'package:mixpanel_flutter_session_replay/src/internal/capture/to_image_frame_acquirer.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -117,7 +118,10 @@ Future<void> captureGolden(
     directive: MaskingDirective(autoMaskTypes: maskTypes),
     logger: MixpanelLogger(LogLevel.none),
     debugOverlayEnabled: false,
-    compressor: DartPngCompressor(),
+    frameAcquirer: ToImageFrameAcquirer(
+      DartPngCompressor(),
+      logger: MixpanelLogger(LogLevel.none),
+    ),
   );
 
   // Use runAsync to allow the capture's endOfFrame to complete

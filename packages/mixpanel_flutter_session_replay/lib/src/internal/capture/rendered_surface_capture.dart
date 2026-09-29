@@ -1,8 +1,10 @@
 import 'dart:typed_data';
 import 'dart:ui' show Rect, Size;
 
-/// Acquires immutable platform frames; the screenshot coordinator owns mask
-/// detection and validation. Native capture uses RepaintBoundary.toImage.
+/// Discovers and snapshots the surface a platform has already presented.
+///
+/// This is the platform seam beneath `RenderedSurfaceFrameAcquirer`, which
+/// owns raster sizing and mask validation. Only web implements it.
 abstract class RenderedSurfaceCapture {
   bool get isAvailable;
   double get maximumCapturePixelRatio => 1;

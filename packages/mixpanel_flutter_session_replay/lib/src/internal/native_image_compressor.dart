@@ -27,7 +27,6 @@ class NativeImageCompressor extends ImageCompressor {
     Uint8List rgbaBytes, {
     required int width,
     required int height,
-    List<Rect> maskRects = const [],
   }) => compressToJpeg(
     rgbaBytes,
     width: width,
@@ -73,7 +72,6 @@ class DartPngCompressor extends ImageCompressor {
     Uint8List rgbaBytes, {
     required int width,
     required int height,
-    List<Rect> maskRects = const [],
   }) async {
     try {
       return await compute(_compressInIsolate, (rgbaBytes, width, height));

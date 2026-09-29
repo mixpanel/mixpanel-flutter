@@ -15,37 +15,30 @@ import 'package:mixpanel_flutter_session_replay/src/internal/platform/web_image_
 import 'package:mixpanel_flutter_session_replay/src/models/configuration.dart';
 import 'package:web/web.dart' as web;
 
-void main() {
-  final rgba = Uint8List.fromList(<int>[
-    255,
-    0,
-    0,
-    255,
-    0,
-    255,
-    0,
-    255,
-    0,
-    0,
-    255,
-    255,
-    255,
-    255,
-    255,
-    255,
-  ]);
+/// A [size]x[size] snapshot of a solid red canvas.
+Future<web.ImageBitmap> _redBitmap(int size) {
+  final canvas = web.HTMLCanvasElement()
+    ..width = size
+    ..height = size;
+  final context = canvas.getContext('2d')! as web.CanvasRenderingContext2D;
+  context.fillStyle = '#ff0000'.toJS;
+  context.fillRect(0, 0, size, size);
+  return web.window.createImageBitmap(canvas).toDart;
+}
 
-  test('Web Worker initializes and encodes RGBA as JPEG', () async {
+void main() {
+  test('Web Worker initializes and encodes a bitmap as JPEG', () async {
     final compressor = WebImageCompressor(
       logger: MixpanelLogger(LogLevel.none),
     );
     addTearDown(compressor.dispose);
 
     await compressor.initialize();
-    final result = await compressor.compress(
-      Uint8List.fromList(rgba),
+    final result = await compressor.compressBitmap(
+      imageBitmap: await _redBitmap(2),
       width: 2,
       height: 2,
+      maskRects: const [],
     );
 
     expect(result, isNotNull);
@@ -60,19 +53,9 @@ void main() {
     );
     addTearDown(compressor.dispose);
     await compressor.initialize();
-    final red = Uint8List.fromList(
-      List<int>.generate(
-        32 * 32 * 4,
-        (index) => switch (index % 4) {
-          0 => 255,
-          3 => 255,
-          _ => 0,
-        },
-      ),
-    );
 
-    final result = await compressor.compress(
-      red,
+    final result = await compressor.compressBitmap(
+      imageBitmap: await _redBitmap(32),
       width: 32,
       height: 32,
       maskRects: const [Rect.fromLTWH(0, 0, 32, 32)],

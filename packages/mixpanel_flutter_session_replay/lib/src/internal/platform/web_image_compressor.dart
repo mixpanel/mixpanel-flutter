@@ -3,13 +3,13 @@ import 'dart:typed_data';
 import 'dart:js_interop';
 import 'dart:ui' show Rect;
 import 'package:web/web.dart' as web;
-import '../capture/image_compressor.dart';
 import '../logger.dart';
 import 'web_image_worker.dart';
 
-/// Worker-backed JPEG encoding. Surface discovery and acquisition belong to
-/// WebRenderedSurfaceCapture; this encoder owns only worker resources.
-class WebImageCompressor extends ImageCompressor {
+/// Worker-backed JPEG encoding of browser surface snapshots. Surface
+/// discovery and acquisition belong to WebRenderedSurfaceCapture; this encoder
+/// owns only worker resources.
+class WebImageCompressor {
   static const _workerTimeout = Duration(seconds: 5);
   final MixpanelLogger _logger;
   final double jpegQuality;
@@ -20,10 +20,7 @@ class WebImageCompressor extends ImageCompressor {
   WebImageCompressor({required MixpanelLogger logger, this.jpegQuality = 0.8})
     : _logger = logger;
 
-  @override
   bool get isAvailable => !_disposed && !_workerUnavailable;
-  @override
-  bool get paintsMasks => true;
 
   /// Verify both worker creation and its OffscreenCanvas JPEG path before the
   /// recorder is exposed to the host application. Web replay fails closed when
@@ -87,36 +84,6 @@ class WebImageCompressor extends ImageCompressor {
     }
   }
 
-  @override
-  Future<Uint8List?> compress(
-    Uint8List rgbaBytes, {
-    required int width,
-    required int height,
-    List<Rect> maskRects = const [],
-  }) async {
-    if (!isAvailable) return null;
-    try {
-      _worker ??= _initWorker();
-      return await _worker!
-          .processImage(
-            rgbaBytes: rgbaBytes,
-            width: width,
-            height: height,
-            jpegQuality: jpegQuality,
-            maskRects: maskRects,
-          )
-          .timeout(_workerTimeout);
-    } catch (error) {
-      _logger.warning(
-        'Web Worker JPEG encoding failed; dropping this frame and restarting '
-        'the worker on the next capture: $error',
-      );
-      _worker?.dispose();
-      _worker = null;
-      return null;
-    }
-  }
-
   WebImageWorker _initWorker() {
     final worker = WebImageWorker.create();
     if (worker == null) {
@@ -129,7 +96,6 @@ class WebImageCompressor extends ImageCompressor {
     return worker;
   }
 
-  @override
   Future<void> dispose() async {
     _disposed = true;
     _worker?.dispose();

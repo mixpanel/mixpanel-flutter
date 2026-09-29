@@ -1,3 +1,5 @@
+import 'package:mixpanel_flutter_session_replay/src/internal/capture/to_image_frame_acquirer.dart';
+import 'package:mixpanel_flutter_session_replay/src/internal/capture/rendered_surface_frame_acquirer.dart';
 import 'dart:typed_data';
 import 'package:mixpanel_flutter_session_replay/src/internal/capture/image_compressor.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/capture/rendered_surface_capture.dart';
@@ -26,7 +28,6 @@ class _UnavailableCompressor extends ImageCompressor {
     Uint8List rgbaBytes, {
     required int width,
     required int height,
-    List<Rect> maskRects = const [],
   }) => throw StateError('compress must not be called');
 
   @override
@@ -36,21 +37,23 @@ class _UnavailableCompressor extends ImageCompressor {
 class _RecordingCompressor extends ImageCompressor {
   int? width;
   int? height;
-  List<Rect>? maskRects;
+  Uint8List? rgbaBytes;
 
-  @override
-  bool get paintsMasks => true;
+  /// The RGBA pixel handed to the compressor at raster ([x], [y]).
+  List<int> pixelAt(int x, int y) {
+    final offset = (y * width! + x) * 4;
+    return rgbaBytes!.sublist(offset, offset + 4);
+  }
 
   @override
   Future<Uint8List?> compress(
     Uint8List rgbaBytes, {
     required int width,
     required int height,
-    List<Rect> maskRects = const [],
   }) async {
     this.width = width;
     this.height = height;
-    this.maskRects = maskRects;
+    this.rgbaBytes = Uint8List.fromList(rgbaBytes);
     return Uint8List.fromList(const [0xff, 0xd8, 0xff, 0xd9]);
   }
 
@@ -112,22 +115,29 @@ class _TestSurface implements CapturedSurface {
 void main() {
   group('ScreenshotCapturer raster budget', () {
     test('leaves normal phone viewports at logical resolution', () {
-      expect(ScreenshotCapturer.capturePixelRatioFor(const Size(375, 812)), 1);
+      expect(
+        RenderedSurfaceFrameAcquirer.capturePixelRatioFor(const Size(375, 812)),
+        1,
+      );
     });
 
     test('scales 1080p and 4K to the 1280x720 raster budget', () {
       expect(
-        ScreenshotCapturer.capturePixelRatioFor(const Size(1920, 1080)),
+        RenderedSurfaceFrameAcquirer.capturePixelRatioFor(
+          const Size(1920, 1080),
+        ),
         closeTo(2 / 3, 0.000001),
       );
       expect(
-        ScreenshotCapturer.capturePixelRatioFor(const Size(3840, 2160)),
+        RenderedSurfaceFrameAcquirer.capturePixelRatioFor(
+          const Size(3840, 2160),
+        ),
         closeTo(1 / 3, 0.000001),
       );
     });
 
     test('uses the available budget for a nearly square desktop viewport', () {
-      final ratio = ScreenshotCapturer.capturePixelRatioFor(
+      final ratio = RenderedSurfaceFrameAcquirer.capturePixelRatioFor(
         const Size(1200, 1214),
       );
 
@@ -138,7 +148,9 @@ void main() {
 
     test('also caps the longest edge of pathological viewports', () {
       expect(
-        ScreenshotCapturer.capturePixelRatioFor(const Size(10000, 200)),
+        RenderedSurfaceFrameAcquirer.capturePixelRatioFor(
+          const Size(10000, 200),
+        ),
         closeTo(0.192, 0.000001),
       );
     });
@@ -166,7 +178,10 @@ void main() {
         directive: MaskingDirective(autoMaskTypes: const {AutoMaskedView.text}),
         logger: MixpanelLogger(LogLevel.none),
         debugOverlayEnabled: false,
-        compressor: _RecordingCompressor(),
+        frameAcquirer: ToImageFrameAcquirer(
+          _RecordingCompressor(),
+          logger: MixpanelLogger(LogLevel.none),
+        ),
       );
 
       // WHEN the frame is captured
@@ -212,7 +227,10 @@ void main() {
         directive: MaskingDirective(autoMaskTypes: const {}),
         logger: MixpanelLogger(LogLevel.none),
         debugOverlayEnabled: false,
-        compressor: _RecordingCompressor(),
+        frameAcquirer: ToImageFrameAcquirer(
+          _RecordingCompressor(),
+          logger: MixpanelLogger(LogLevel.none),
+        ),
       );
 
       // WHEN a capture starts from an idle scheduler, as a deferred
@@ -271,7 +289,10 @@ void main() {
           ),
           logger: logger,
           debugOverlayEnabled: false,
-          compressor: compressor,
+          frameAcquirer: ToImageFrameAcquirer(
+            compressor,
+            logger: MixpanelLogger(LogLevel.none),
+          ),
           wireframeEmitter: WireframeEmitter(
             sensitiveRules: const [],
             debugEmitter: null,
@@ -303,13 +324,15 @@ void main() {
         );
         expect((compressor.width, compressor.height), (1920, 1080));
         expect(success.maskRegions, isNotEmpty);
-        expect(compressor.maskRects, hasLength(success.maskRegions.length));
+        // The mask is painted at its logical coordinates in the raster.
         final logicalMask = success.maskRegions.first.bounds;
-        final rasterMask = compressor.maskRects!.first;
-        expect(rasterMask.left, closeTo(logicalMask.left, 0.01));
-        expect(rasterMask.top, closeTo(logicalMask.top, 0.01));
-        expect(rasterMask.width, closeTo(logicalMask.width, 0.01));
-        expect(rasterMask.height, closeTo(logicalMask.height, 0.01));
+        expect(
+          compressor.pixelAt(
+            logicalMask.center.dx.round(),
+            logicalMask.center.dy.round(),
+          ),
+          [0xcc, 0xcc, 0xcc, 0xff],
+        );
       },
     );
 
@@ -346,7 +369,7 @@ void main() {
           ),
           logger: MixpanelLogger(LogLevel.none),
           debugOverlayEnabled: false,
-          surfaceCapture: compressor,
+          frameAcquirer: RenderedSurfaceFrameAcquirer(compressor),
         );
 
         // When capture is requested through the platform surface path.
@@ -417,7 +440,7 @@ void main() {
           ),
           logger: MixpanelLogger(LogLevel.none),
           debugOverlayEnabled: false,
-          surfaceCapture: compressor,
+          frameAcquirer: RenderedSurfaceFrameAcquirer(compressor),
         );
 
         final pending = tester.runAsync(
@@ -475,7 +498,7 @@ void main() {
           ),
           logger: MixpanelLogger(LogLevel.none),
           debugOverlayEnabled: false,
-          surfaceCapture: compressor,
+          frameAcquirer: RenderedSurfaceFrameAcquirer(compressor),
         );
 
         // WHEN
@@ -531,7 +554,7 @@ void main() {
           ),
           logger: MixpanelLogger(LogLevel.none),
           debugOverlayEnabled: false,
-          surfaceCapture: compressor,
+          frameAcquirer: RenderedSurfaceFrameAcquirer(compressor),
         );
 
         final pending = tester.runAsync(
@@ -596,7 +619,7 @@ void main() {
           ),
           logger: MixpanelLogger(LogLevel.none),
           debugOverlayEnabled: false,
-          surfaceCapture: compressor,
+          frameAcquirer: RenderedSurfaceFrameAcquirer(compressor),
         );
 
         final pending = tester.runAsync(
@@ -641,7 +664,7 @@ void main() {
           ),
           logger: MixpanelLogger(LogLevel.none),
           debugOverlayEnabled: false,
-          surfaceCapture: compressor,
+          frameAcquirer: RenderedSurfaceFrameAcquirer(compressor),
         );
 
         final pending = tester.runAsync(
@@ -671,7 +694,10 @@ void main() {
           directive: MaskingDirective(autoMaskTypes: {}),
           logger: logger,
           debugOverlayEnabled: false,
-          compressor: DartPngCompressor(),
+          frameAcquirer: ToImageFrameAcquirer(
+            DartPngCompressor(),
+            logger: MixpanelLogger(LogLevel.none),
+          ),
           wireframeEmitter: withEmitter
               ? WireframeEmitter(
                   sensitiveRules: const [],
@@ -808,7 +834,10 @@ void main() {
         directive: MaskingDirective(autoMaskTypes: {}),
         logger: logger,
         debugOverlayEnabled: false,
-        compressor: _UnavailableCompressor(),
+        frameAcquirer: ToImageFrameAcquirer(
+          _UnavailableCompressor(),
+          logger: MixpanelLogger(LogLevel.none),
+        ),
       );
 
       final result = await capturer.capture(

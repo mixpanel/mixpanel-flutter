@@ -147,13 +147,21 @@ The SDK implements intelligent rate limiting to minimize performance impact:
 
 ## Capture and session lifetime boundaries
 
-`ScreenshotCapturer` coordinates mask detection, validation, and replay payloads.
-Native capture uses `RepaintBoundary.toImage()` and an `ImageCompressor` that
-accepts RGBA bytes. Web uses `RenderedSurfaceCapture` to acquire an immutable
-`CapturedSurface`; the coordinator validates masks before calling `encode` and
-always disposes the snapshot. `WebRenderedSurfaceCapture` owns DOM discovery and
-presentation waits, while `WebImageCompressor` owns the JPEG worker. Encoding
-consumes a bitmap once; rejected snapshots are closed without encoding.
+`ScreenshotCapturer` owns the steps every platform shares: waiting out the
+frame in flight, pinning replay identity, mask detection, wireframes, and the
+capture result. It delegates pixels to a `FrameAcquirer`:
+
+- `ToImageFrameAcquirer` (native) snapshots the layer tree with
+  `RepaintBoundary.toImage()`, paints masks with `MaskPainter`, and hands RGBA
+  bytes to an `ImageCompressor`. The snapshot is synchronous with the mask
+  walk, so no re-validation is needed.
+- `RenderedSurfaceFrameAcquirer` (web) owns the raster budget, waits one
+  browser presentation, acquires an immutable `CapturedSurface` through
+  `RenderedSurfaceCapture`, and encodes it only after the `MaskLayoutFence`
+  confirms the masks still hold. It always disposes the snapshot.
+  `WebRenderedSurfaceCapture` owns DOM discovery and presentation waits, while
+  `WebImageCompressor` owns the JPEG worker. Encoding consumes a bitmap once;
+  rejected snapshots are closed without encoding.
 
 The existing web presentation barriers and endpoint mask comparison remain in
 place. This split does not change their treatment of transient layouts that

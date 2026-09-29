@@ -1,3 +1,4 @@
+import 'package:mixpanel_flutter_session_replay/src/internal/capture/rendered_surface_frame_acquirer.dart';
 import 'dart:async';
 
 import 'package:clock/clock.dart';
@@ -1585,7 +1586,7 @@ class _CapturingCoordinator extends FakeWidgetCoordinator {
     directive: MaskingDirective(autoMaskTypes: const {}),
     logger: MixpanelLogger(LogLevel.none),
     debugOverlayEnabled: false,
-    surfaceCapture: _StaticSurfaceCapture(),
+    frameAcquirer: RenderedSurfaceFrameAcquirer(_StaticSurfaceCapture()),
   );
   final SessionManager sessionManager = SessionManager();
 

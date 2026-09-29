@@ -1,5 +1,6 @@
 export 'platform_init_types.dart';
 
+import '../capture/rendered_surface_frame_acquirer.dart';
 import '../storage/event_queue_interface.dart';
 import '../storage/event_queue_factory_web.dart';
 import '../storage/indexed_db_event_queue.dart';
@@ -73,7 +74,7 @@ Future<PlatformInitResult> platformInit({
       directive: directive,
       logger: logger,
       debugOverlayEnabled: debugOverlayEnabled,
-      surfaceCapture: surfaceCapture,
+      frameAcquirer: RenderedSurfaceFrameAcquirer(surfaceCapture),
       wireframeEmitter: wireframeEmitter,
       useAccessibilityLabelFallback: useAccessibilityLabelFallback,
     );
