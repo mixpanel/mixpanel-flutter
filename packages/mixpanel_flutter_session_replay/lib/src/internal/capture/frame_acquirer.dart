@@ -18,6 +18,21 @@ abstract class FrameAcquirer {
   /// false after a permanent failure so capture stops before any work.
   bool get isAvailable;
 
+  /// Whether a frame that renders while a capture runs is followed up with
+  /// one more capture once it completes.
+  ///
+  /// An acquirer whose pixels can lag the mask walk rejects frames taken
+  /// during motion, so the screen a scroll or animation settles on often
+  /// arrives during a rejected capture. Without a follow-up it would go
+  /// unrecorded until something else repaints.
+  ///
+  /// A follow-up also means capture never requests a frame of its own: that
+  /// frame would count as one rendered during the capture and re-arm it
+  /// forever on a static screen. When false, every capture waits for a
+  /// painted frame, requesting one if the scheduler is idle, and frames that
+  /// render during a capture are dropped.
+  bool get followsUpFramesDuringCapture => false;
+
   /// Runs before the mask walk, once Flutter has finished painting.
   ///
   /// Synchronous by default so capture does not yield between the paint

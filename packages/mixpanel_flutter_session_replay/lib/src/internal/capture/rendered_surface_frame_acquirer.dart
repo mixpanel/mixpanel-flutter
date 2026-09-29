@@ -60,6 +60,11 @@ class RenderedSurfaceFrameAcquirer extends FrameAcquirer {
   @override
   bool get isAvailable => _surface.isAvailable;
 
+  /// The [MaskLayoutFence] rejects frames taken during motion, so the settled
+  /// screen needs a follow-up.
+  @override
+  bool get followsUpFramesDuringCapture => true;
+
   /// With `awaitFreshFrame`, waits for a fresh Flutter frame before the
   /// surface is read.
   ///

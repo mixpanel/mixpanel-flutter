@@ -1305,6 +1305,42 @@ void main() {
       });
     });
 
+    testWidgets('should not follow up a frame that arrives during a capture '
+        'when follow-ups are off', (tester) async {
+      var now = DateTime(2026, 1, 1, 12);
+      await withClock(Clock(() => now), () async {
+        // GIVEN a native coordinator whose initial capture is still running
+        final fake = _GatedCaptureCoordinator(
+          followsUpFramesDuringCapture: false,
+        );
+        final frameNotifier = ChangeNotifier();
+        await tester.pumpWidget(
+          MaterialApp(
+            home: FrameMonitor(
+              frameNotifier: frameNotifier,
+              coordinator: fake,
+              child: const SizedBox(width: 100, height: 100),
+            ),
+          ),
+        );
+        await tester.pump();
+        expect(fake.captureSnapshotCallCount, 1);
+
+        // WHEN one more frame renders while it runs, and the capture then
+        // completes
+        // ignore: invalid_use_of_protected_member, invalid_use_of_visible_for_testing_member
+        frameNotifier.notifyListeners();
+        await tester.pump();
+        fake.releaseCapture();
+        await tester.pump();
+
+        // THEN no follow-up capture runs, as before web support
+        now = now.add(const Duration(seconds: 2));
+        await tester.pump(const Duration(seconds: 2));
+        expect(fake.captureSnapshotCallCount, 1);
+      });
+    });
+
     testWidgets('a frame the capture requests does not re-arm it', (
       tester,
     ) async {
@@ -1605,7 +1641,8 @@ void main() {
 
 /// Coordinator whose first capture stays in flight until [releaseCapture].
 class _GatedCaptureCoordinator extends FakeWidgetCoordinator {
-  _GatedCaptureCoordinator() : super(recordingState: RecordingState.recording);
+  _GatedCaptureCoordinator({super.followsUpFramesDuringCapture = true})
+    : super(recordingState: RecordingState.recording);
 
   Completer<void>? _gate;
 
@@ -1629,7 +1666,11 @@ class _GatedCaptureCoordinator extends FakeWidgetCoordinator {
 /// Drives the production [ScreenshotCapturer] through the web surface path so
 /// a widget test observes the frames the real capture code requests.
 class _CapturingCoordinator extends FakeWidgetCoordinator {
-  _CapturingCoordinator() : super(recordingState: RecordingState.recording);
+  _CapturingCoordinator()
+    : super(
+        recordingState: RecordingState.recording,
+        followsUpFramesDuringCapture: true,
+      );
 
   final ScreenshotCapturer capturer = ScreenshotCapturer(
     directive: MaskingDirective(autoMaskTypes: const {}),

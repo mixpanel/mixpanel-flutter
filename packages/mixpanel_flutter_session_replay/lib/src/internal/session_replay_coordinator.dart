@@ -171,6 +171,10 @@ class SessionReplayCoordinator implements WidgetCoordinator {
   bool get isAppInForeground => _isAppInForeground;
 
   @override
+  bool get followsUpFramesDuringCapture =>
+      _screenshotCapturer.followsUpFramesDuringCapture;
+
+  @override
   bool get leavesForegroundWhenInactive =>
       _lifecyclePolicy.leavesForegroundWhenInactive;
 

@@ -9,7 +9,11 @@ void main() {
     late CaptureScheduler scheduler;
 
     setUp(() {
-      scheduler = CaptureScheduler(logger: MixpanelLogger(LogLevel.none));
+      // Follow-ups on, as on web, so the follow-up tests below apply.
+      scheduler = CaptureScheduler(
+        followsUpFramesDuringCapture: true,
+        logger: MixpanelLogger(LogLevel.none),
+      );
     });
 
     tearDown(() {
@@ -58,6 +62,7 @@ void main() {
         fakeAsync((async) {
           // GIVEN
           final scheduler = CaptureScheduler(
+            followsUpFramesDuringCapture: false,
             logger: MixpanelLogger(LogLevel.none),
           );
 
@@ -80,6 +85,7 @@ void main() {
       fakeAsync((async) {
         // GIVEN
         final scheduler = CaptureScheduler(
+          followsUpFramesDuringCapture: false,
           logger: MixpanelLogger(LogLevel.none),
         );
 
@@ -152,6 +158,26 @@ void main() {
         },
       );
 
+      test('should not note a frame for a follow-up when follow-ups are '
+          'off', () {
+        // GIVEN a scheduler without follow-ups, as on native
+        final native = CaptureScheduler(
+          followsUpFramesDuringCapture: false,
+          logger: MixpanelLogger(LogLevel.none),
+        );
+        addTearDown(native.dispose);
+
+        // WHEN a frame arrives after the capture read the render tree, and
+        // the capture completes
+        native.markCaptureStarted();
+        native.markRenderTreeRead();
+        native.scheduleAfterRateLimit(() {});
+        native.markCaptureCompleted();
+
+        // THEN no follow-up is owed
+        expect(native.takeFrameArrivedDuringCapture(), isFalse);
+      });
+
       test('forgets a noted frame when the next capture starts', () {
         scheduler.markCaptureStarted();
         scheduler.markRenderTreeRead();
@@ -188,6 +214,7 @@ void main() {
         fakeAsync((async) {
           // GIVEN
           final scheduler = CaptureScheduler(
+            followsUpFramesDuringCapture: false,
             logger: MixpanelLogger(LogLevel.none),
           );
           var callbackInvoked = false;
@@ -209,6 +236,7 @@ void main() {
         fakeAsync((async) {
           // GIVEN
           final scheduler = CaptureScheduler(
+            followsUpFramesDuringCapture: false,
             minInterval: Duration(milliseconds: 100),
             logger: MixpanelLogger(LogLevel.none),
           );
@@ -242,6 +270,7 @@ void main() {
             // GIVEN
             final expectedRemainingMs = 70;
             final scheduler = CaptureScheduler(
+              followsUpFramesDuringCapture: false,
               minInterval: Duration(milliseconds: 100),
               logger: MixpanelLogger(LogLevel.none),
             );
@@ -268,6 +297,7 @@ void main() {
         fakeAsync((async) {
           // GIVEN
           final scheduler = CaptureScheduler(
+            followsUpFramesDuringCapture: false,
             logger: MixpanelLogger(LogLevel.none),
           );
           var callbackInvoked = false;
@@ -295,6 +325,7 @@ void main() {
           // GIVEN
           final customInterval = Duration(milliseconds: 100);
           final scheduler = CaptureScheduler(
+            followsUpFramesDuringCapture: false,
             minInterval: customInterval,
             logger: MixpanelLogger(LogLevel.none),
           );

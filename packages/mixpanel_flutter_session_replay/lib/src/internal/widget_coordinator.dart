@@ -6,6 +6,7 @@ import '../models/debug_overlay_colors.dart';
 import '../models/masking_directive.dart';
 import '../models/results.dart';
 import '../models/session_event.dart' show TouchPosition;
+import 'capture/frame_acquirer.dart';
 import 'debug_mask_overlay.dart';
 import 'settings/settings_service.dart';
 import 'logger.dart';
@@ -27,6 +28,10 @@ abstract class WidgetCoordinator {
 
   /// Whether app is currently in foreground
   bool get isAppInForeground;
+
+  /// Whether a frame rendered during a capture is followed up with one more
+  /// capture. See [FrameAcquirer.followsUpFramesDuringCapture].
+  bool get followsUpFramesDuringCapture;
 
   /// Whether [AppLifecycleState.inactive] counts as leaving the foreground,
   /// or only [AppLifecycleState.hidden] does.

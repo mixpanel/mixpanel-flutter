@@ -205,8 +205,7 @@ void main() {
     testWidgets(
       'should keep a native frame when recording stops after toImage is called',
       (tester) async {
-        // GIVEN a settled screen, so capture reaches toImage() before it
-        // first yields
+        // GIVEN a settled screen
         final key = GlobalKey();
         await tester.pumpWidget(
           Directionality(
@@ -234,19 +233,26 @@ void main() {
           ),
         );
 
-        // WHEN recording stops while the image is still being produced
+        // WHEN recording stops once the mask walk has read the render tree.
+        // Nothing yields between that read and toImage(), so this is a stop
+        // after the frame was fixed. The capture starts outside the
+        // fake-async zone so toImage() can complete, and waits on the frame
+        // it requested from the idle scheduler.
         var stopped = false;
-        final pending = tester.runAsync(
-          () => capturer.capture(
+        late Future<CaptureResult> pending;
+        await tester.runAsync(() async {
+          pending = capturer.capture(
             boundary,
             boundaryElement: element,
             getCurrentSession: SessionManager().getCurrentSession,
             getDistinctId: () => 'screenshot-capturer-test-distinct-id',
             isCancelled: () => stopped,
-          ),
-        );
-        stopped = true;
-        final result = await pending;
+            onRenderTreeRead: () => stopped = true,
+          );
+        });
+        await tester.pump();
+        final result = await tester.runAsync(() => pending);
+        expect(stopped, isTrue, reason: 'sanity: the stop happened');
 
         // THEN the frame, fixed before the stop, is still encoded for its
         // replay rather than dropped
@@ -255,10 +261,9 @@ void main() {
       },
     );
 
-    testWidgets('does not request a frame when the scheduler is idle', (
-      tester,
+    Future<(Element, RenderRepaintBoundary)> pumpSettledScreen(
+      WidgetTester tester,
     ) async {
-      // GIVEN a painted, settled screen with no frame in flight
       final key = GlobalKey();
       await tester.pumpWidget(
         Directionality(
@@ -275,7 +280,14 @@ void main() {
       await tester.pump();
       expect(SchedulerBinding.instance.hasScheduledFrame, isFalse);
       final element = key.currentContext! as Element;
-      final boundary = element.findRenderObject()! as RenderRepaintBoundary;
+      return (element, element.findRenderObject()! as RenderRepaintBoundary);
+    }
+
+    testWidgets('should request a painted frame when the scheduler is idle '
+        'without follow-ups', (tester) async {
+      // GIVEN a painted, settled screen with no frame in flight, and the
+      // native acquirer, which does not follow up frames during a capture
+      final (element, boundary) = await pumpSettledScreen(tester);
       final capturer = ScreenshotCapturer(
         directive: MaskingDirective(autoMaskTypes: const {}),
         logger: MixpanelLogger(LogLevel.none),
@@ -287,7 +299,38 @@ void main() {
       );
 
       // WHEN a capture starts from an idle scheduler, as a deferred
-      // rate-limit capture does
+      // rate-limit capture does. Started outside the fake-async zone so
+      // toImage() can complete once the frame is pumped.
+      late Future<CaptureResult> pending;
+      await tester.runAsync(() async {
+        pending = capturer.capture(
+          boundary,
+          boundaryElement: element,
+          getCurrentSession: SessionManager().getCurrentSession,
+          getDistinctId: () => 'screenshot-capturer-test-distinct-id',
+        );
+      });
+
+      // THEN it waits on a frame it requested, as before web support
+      expect(SchedulerBinding.instance.hasScheduledFrame, isTrue);
+      await tester.pump();
+      final result = await tester.runAsync(() => pending);
+      expect(result, isA<CaptureSuccess>());
+    });
+
+    testWidgets('should not request a frame when the scheduler is idle with '
+        'follow-ups', (tester) async {
+      // GIVEN a painted, settled screen with no frame in flight, and the web
+      // acquirer, which follows up frames during a capture
+      final (element, boundary) = await pumpSettledScreen(tester);
+      final capturer = ScreenshotCapturer(
+        directive: MaskingDirective(autoMaskTypes: const {}),
+        logger: MixpanelLogger(LogLevel.none),
+        debugOverlayEnabled: false,
+        frameAcquirer: RenderedSurfaceFrameAcquirer(_DirectSurfaceCapture()),
+      );
+
+      // WHEN a capture starts from an idle scheduler
       final pending = tester.runAsync(
         () => capturer.capture(
           boundary,
@@ -297,9 +340,9 @@ void main() {
         ),
       );
 
-      // THEN it does not ask Flutter for a frame. The persistent frame
-      // callback would report that frame as new content and the scheduler
-      // would answer with another capture, forever, on a static screen.
+      // THEN it does not ask Flutter for a frame. That frame would count as
+      // one rendered during the capture and owe a follow-up that requests
+      // another, forever, on a static screen.
       expect(SchedulerBinding.instance.hasScheduledFrame, isFalse);
       final result = await pending;
       expect(result, isA<CaptureSuccess>());

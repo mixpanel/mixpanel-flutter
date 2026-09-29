@@ -43,7 +43,11 @@ class _FrameMonitorState extends State<FrameMonitor> {
     super.initState();
 
     // Create timing scheduler (private to this widget)
-    _scheduler = CaptureScheduler(logger: widget.coordinator.logger);
+    _scheduler = CaptureScheduler(
+      followsUpFramesDuringCapture:
+          widget.coordinator.followsUpFramesDuringCapture,
+      logger: widget.coordinator.logger,
+    );
 
     final overlayColors = widget.debugOptions?.overlayColors;
     if (kDebugMode && overlayColors != null) {
@@ -129,37 +133,37 @@ class _FrameMonitorState extends State<FrameMonitor> {
     // Double-check we can capture (prevents race condition between timer and frame callbacks)
     if (!_scheduler.canCapture()) return;
 
-    // Tell scheduler we're starting
-    _scheduler.markCaptureStarted();
-    unawaited(_runCapture());
-  }
-
-  Future<void> _runCapture() async {
-    try {
-      await _captureCurrentBoundary();
-    } finally {
-      if (mounted) {
-        // The 500 ms rate limit starts whether capture succeeded or failed.
-        _scheduler.markCaptureCompleted();
-        // A frame that rendered while this capture ran may show the settled
-        // screen, and a static screen produces no further frames. Attempt one
-        // rate-limited follow-up; the usual recording and foreground checks
-        // still apply when it fires.
-        if (_scheduler.takeFrameArrivedDuringCapture()) _attemptCapture();
-      }
-    }
-  }
-
-  Future<void> _captureCurrentBoundary() async {
     final boundaryElement = _repaintBoundaryKey.currentContext;
     if (boundaryElement is! Element) return;
     final boundary = boundaryElement.findRenderObject();
     if (boundary is! RenderRepaintBoundary) return;
-    await widget.coordinator.captureSnapshot(
-      boundary,
-      boundaryElement: boundaryElement,
-      onRenderTreeRead: _scheduler.markRenderTreeRead,
-    );
+
+    // Tell scheduler we're starting
+    _scheduler.markCaptureStarted();
+    unawaited(_runCapture(boundary, boundaryElement));
+  }
+
+  Future<void> _runCapture(
+    RenderRepaintBoundary boundary,
+    Element boundaryElement,
+  ) async {
+    try {
+      await widget.coordinator.captureSnapshot(
+        boundary,
+        boundaryElement: boundaryElement,
+        onRenderTreeRead: _scheduler.markRenderTreeRead,
+      );
+    } finally {
+      if (mounted) {
+        // The 500 ms rate limit starts whether capture succeeded or failed.
+        _scheduler.markCaptureCompleted();
+        // With follow-ups, a frame that rendered while this capture ran may
+        // show the settled screen, and a static screen produces no further
+        // frames. Attempt one rate-limited follow-up; the usual recording and
+        // foreground checks still apply when it fires.
+        if (_scheduler.takeFrameArrivedDuringCapture()) _attemptCapture();
+      }
+    }
   }
 
   @override

@@ -31,6 +31,9 @@ class FakeWidgetCoordinator implements WidgetCoordinator {
   @override
   bool leavesForegroundWhenInactive;
 
+  @override
+  bool followsUpFramesDuringCapture;
+
   /// How [createDebugMaskOverlay] draws the overlay; in-tree by default.
   DebugMaskOverlayFactory debugMaskOverlayFactory;
 
@@ -61,6 +64,7 @@ class FakeWidgetCoordinator implements WidgetCoordinator {
     this.remoteEnablementState = RemoteEnablementState.enabled,
     this.isAppInForeground = true,
     this.leavesForegroundWhenInactive = true,
+    this.followsUpFramesDuringCapture = false,
     this.debugMaskOverlayFactory = InTreeDebugMaskOverlay.new,
     MixpanelLogger? logger,
     ValueNotifier<List<MaskRegionInfo>>? maskRegionsNotifier,

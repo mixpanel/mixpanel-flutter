@@ -32,6 +32,10 @@ class ScreenshotCapturer {
 
   final FrameAcquirer _acquirer;
 
+  /// See [FrameAcquirer.followsUpFramesDuringCapture].
+  bool get followsUpFramesDuringCapture =>
+      _acquirer.followsUpFramesDuringCapture;
+
   /// Optional wireframe emitter. When non-null, wireframes are collected on
   /// the same walk as mask detection and enqueued alongside each screenshot.
   final WireframeEmitter? _wireframeEmitter;
@@ -268,21 +272,24 @@ class ScreenshotCapturer {
     }
   }
 
-  /// Returns the end of the frame in flight, if any, so the render tree read
-  /// next matches what is on screen. Null when there is nothing to wait for,
-  /// so capture does not yield at all.
+  /// Returns the end of a painted frame, so the render tree read next matches
+  /// what is on screen. Null when there is nothing to wait for, so capture
+  /// does not yield at all.
   ///
-  /// When the scheduler is idle and no frame has been requested, the last
-  /// painted frame already is the settled screen and there is nothing to wait
-  /// for. Awaiting `endOfFrame` in that state would request a frame of its
-  /// own, which the persistent frame callback then reports as new content
-  /// and the scheduler answers with another capture: a static screen would
-  /// be captured indefinitely. (A web acquirer does request a fresh frame in
-  /// `prepare`; CaptureScheduler ignores frames that end before the render
-  /// tree is read, so that frame cannot re-arm the capture.)
-  static Future<void>? _awaitPaintedFrame() {
+  /// Without follow-ups, this is `endOfFrame`, which requests a frame when
+  /// the scheduler is idle.
+  ///
+  /// With follow-ups, an idle scheduler with no frame requested means the
+  /// last painted frame already is the settled screen. Requesting a frame
+  /// there would count as a frame rendered during this capture and owe a
+  /// follow-up that requests another: a static screen would be captured
+  /// indefinitely. (A web acquirer does request a fresh frame in `prepare`;
+  /// CaptureScheduler ignores frames that end before the render tree is read,
+  /// so that frame cannot re-arm the capture.)
+  Future<void>? _awaitPaintedFrame() {
     final scheduler = SchedulerBinding.instance;
-    if (scheduler.schedulerPhase == SchedulerPhase.idle &&
+    if (_acquirer.followsUpFramesDuringCapture &&
+        scheduler.schedulerPhase == SchedulerPhase.idle &&
         !scheduler.hasScheduledFrame) {
       return null;
     }
