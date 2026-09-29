@@ -37,14 +37,6 @@ Future<ResumableSession?> checkWebSessionResume({
     return null;
   }
 
-  final backgroundExpiresMs = metadata['background_expires'] as int?;
-  if (backgroundExpiresMs != null && now >= backgroundExpiresMs) {
-    logger.info(
-      'Previous session $sessionId expired (background timeout exceeded)',
-    );
-    return null;
-  }
-
   if (maxExpiresMs == null && idleExpiresMs == null) {
     final sessionAge = now - sessionStartTime;
     if (sessionAge > maxSessionDuration.inMilliseconds) {
@@ -65,9 +57,6 @@ Future<ResumableSession?> checkWebSessionResume({
       ),
       status: SessionStatus.active,
     ),
-    backgroundExpiry: backgroundExpiresMs == null
-        ? null
-        : DateTime.fromMillisecondsSinceEpoch(backgroundExpiresMs),
     idleExpiry: idleExpiresMs == null
         ? null
         : DateTime.fromMillisecondsSinceEpoch(idleExpiresMs),
@@ -79,13 +68,11 @@ Future<void> updateWebSessionExpiry({
   required String sessionId,
   required int idleExpiresMs,
   required int maxExpiresMs,
-  int? backgroundExpiresMs,
   required MixpanelLogger logger,
 }) async {
   await queue.updateSessionExpiry(
     sessionId: sessionId,
     idleExpiresMs: idleExpiresMs,
     maxExpiresMs: maxExpiresMs,
-    backgroundExpiresMs: backgroundExpiresMs,
   );
 }

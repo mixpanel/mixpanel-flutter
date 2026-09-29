@@ -6,16 +6,10 @@ import 'session_lifetime.dart';
 class ResumableSession {
   final Session session;
   final DateTime? idleExpiry;
-  final DateTime? backgroundExpiry;
-  const ResumableSession(
-    this.session, {
-    this.idleExpiry,
-    this.backgroundExpiry,
-  });
+  const ResumableSession(this.session, {this.idleExpiry});
 
   bool isExpired(Duration? maximumDuration) =>
       SessionLifetime.expired(idleExpiry) ||
-      SessionLifetime.expired(backgroundExpiry) ||
       (maximumDuration != null &&
           SessionLifetime.expired(session.startTime.add(maximumDuration)));
 }

@@ -333,7 +333,6 @@ class IndexedDbEventQueue
     final deadlines = [
       _asNullableInt(metadata['idle_expires']),
       _asNullableInt(metadata['max_expires']),
-      _asNullableInt(metadata['background_expires']),
     ].nonNulls.toList();
     if (deadlines.isEmpty) {
       final startMs = _asNullableInt(metadata['session_start_time']) ?? 0;
@@ -841,15 +840,14 @@ class IndexedDbEventQueue
 
   /// Persist session expiry timestamps alongside metadata.
   ///
-  /// Updates (or creates) the `idle_expires` and `max_expires` fields
-  /// and nullable `background_expires` on the session_metadata record.
+  /// Updates (or creates) the `idle_expires` and `max_expires` fields on the
+  /// session_metadata record.
   /// IndexedDB is schemaless for value
   /// fields so no version bump is needed.
   Future<void> updateSessionExpiry({
     required String sessionId,
     required int idleExpiresMs,
     required int maxExpiresMs,
-    int? backgroundExpiresMs,
   }) async {
     await _ensureOpen();
 
@@ -865,8 +863,6 @@ class IndexedDbEventQueue
       final map = (result.dartify()! as Map).cast<String, dynamic>();
       map['idle_expires'] = idleExpiresMs;
       map['max_expires'] = maxExpiresMs;
-      // Null clears the paused deadline when the page returns.
-      map['background_expires'] = backgroundExpiresMs;
       // Adopt a legacy unowned record; never take one from another tab.
       map['owner_id'] ??= ownerId;
       store.put(map.jsify()!);
@@ -909,7 +905,6 @@ class IndexedDbEventQueue
           'last_sequence_number',
           'idle_expires',
           'max_expires',
-          'background_expires',
         ]) {
           final value = map[key];
           if (value != null) map[key] = _asInt(value);

@@ -49,17 +49,8 @@ void main() {
 
     /// Offers [session] to the most recently created coordinator for resume,
     /// as platform init does for a replay a previous page load left behind.
-    void stageResume(
-      Session session, {
-      DateTime? idleExpiry,
-      DateTime? backgroundExpiry,
-    }) => persistence.stageResume(
-      ResumableSession(
-        session,
-        idleExpiry: idleExpiry,
-        backgroundExpiry: backgroundExpiry,
-      ),
-    );
+    void stageResume(Session session, {DateTime? idleExpiry}) => persistence
+        .stageResume(ResumableSession(session, idleExpiry: idleExpiry));
 
     SessionReplayCoordinator createCoordinator({
       double autoRecordSessionsPercent = 0,
@@ -68,12 +59,12 @@ void main() {
       Duration? maxSessionDuration,
       ReplayBackgroundBehavior? backgroundBehavior =
           ReplayBackgroundBehavior.stop,
-      Future<void> Function(String, int, int, int?)? persistIdleExpiry,
+      Future<void> Function(String, int, int)? persistIdleExpiry,
       EventRecorder? recorder,
       ScreenshotCapturer? capturer,
     }) {
       persistence = StoredSessionPersistence(
-        write: persistIdleExpiry ?? (_, _, _, _) async {},
+        write: persistIdleExpiry ?? (_, _, _) async {},
         logger: logger,
       );
       return SessionReplayCoordinator(
@@ -197,99 +188,17 @@ void main() {
     );
 
     group('resume and stop regressions', () {
-      for (final remaining in [Duration.zero, const Duration(seconds: -1)]) {
-        test(
-          'rejects a staged background deadline with $remaining remaining',
-          () async {
-            // GIVEN a reload staged before settings / foreground resolution.
-            final now = DateTime.utc(2026, 9, 28, 12);
-            final coordinator = createCoordinator(
-              autoRecordSessionsPercent: 100,
-            );
-            addTearDown(coordinator.dispose);
-            stageResume(
-              Session(
-                id: 'paused-reload',
-                startTime: now,
-                status: SessionStatus.active,
-              ),
-              backgroundExpiry: now.add(remaining),
-            );
-
-            // WHEN the page can finally start recording.
-            await withClock(Clock.fixed(now), () async {
-              coordinator.onAppForegrounded();
-              await pumpEventQueue();
-            });
-
-            // THEN expired background retention causes a fresh sampling decision.
-            expect(coordinator.replayId, isNot('paused-reload'));
-            expect(coordinator.recordingState, RecordingState.recording);
-          },
-        );
-      }
-
-      for (final enableIdleTimer in [true, false]) {
-        test(
-          'persists and clears background expiry with activity timer=$enableIdleTimer',
-          () async {
-            // GIVEN independently configured activity and background deadlines.
-            final now = DateTime.utc(2026, 9, 28, 12);
-            final writes = <(String, int, int, int?)>[];
-            final coordinator = createCoordinator(
-              idleTimeout: enableIdleTimer ? const Duration(minutes: 30) : null,
-              maxSessionDuration: const Duration(hours: 24),
-              backgroundBehavior: const ReplayBackgroundBehavior.pause(
-                idleTimeout: Duration(minutes: 1),
-              ),
-              persistIdleExpiry: (id, idle, max, background) async {
-                writes.add((id, idle, max, background));
-              },
-            );
-            addTearDown(coordinator.dispose);
-
-            await withClock(Clock.fixed(now), () async {
-              coordinator.startRecording();
-              await pumpEventQueue();
-              expect(writes.last.$4, isNull);
-              final activeIdle = writes.last.$2;
-              final replayId = coordinator.replayId;
-
-              // WHEN the page pauses.
-              coordinator.onAppBackgrounded();
-              await pumpEventQueue();
-
-              // THEN background retention is persisted without replacing activity idle.
-              expect(
-                writes.last.$4,
-                now.add(const Duration(minutes: 1)).millisecondsSinceEpoch,
-              );
-              expect(writes.last.$2, activeIdle);
-
-              // WHEN it returns before expiry without any new capture/interaction.
-              coordinator.onAppForegrounded();
-              await pumpEventQueue();
-
-              // THEN only the background deadline is cleared, even with idle disabled.
-              expect(coordinator.replayId, replayId);
-              expect(writes.last.$4, isNull);
-              expect(writes.last.$2, activeIdle);
-            });
-          },
-        );
-      }
-
       test(
-        'resumed reload clears background expiry without resetting activity idle',
+        'should keep the stored activity idle deadline when a reload resumes',
         () async {
           final now = DateTime.utc(2026, 9, 28, 12);
           final idleExpiry = now.add(const Duration(minutes: 2));
-          final writes = <(String, int, int, int?)>[];
+          final writes = <(String, int, int)>[];
           final coordinator = createCoordinator(
             idleTimeout: const Duration(minutes: 30),
             maxSessionDuration: const Duration(hours: 24),
-            persistIdleExpiry: (id, idle, max, background) async {
-              writes.add((id, idle, max, background));
+            persistIdleExpiry: (id, idle, max) async {
+              writes.add((id, idle, max));
             },
           );
           addTearDown(coordinator.dispose);
@@ -300,7 +209,6 @@ void main() {
               status: SessionStatus.active,
             ),
             idleExpiry: idleExpiry,
-            backgroundExpiry: now.add(const Duration(seconds: 30)),
           );
           await withClock(Clock.fixed(now), () async {
             coordinator.onAppForegrounded();
@@ -308,7 +216,6 @@ void main() {
           });
           expect(coordinator.replayId, 'valid-reload');
           expect(writes.last.$2, idleExpiry.millisecondsSinceEpoch);
-          expect(writes.last.$4, isNull);
         },
       );
 
@@ -399,7 +306,7 @@ void main() {
         final coordinator = createCoordinator(
           autoRecordSessionsPercent: 100,
           maxSessionDuration: const Duration(hours: 24),
-          persistIdleExpiry: (id, idle, max, background) async {
+          persistIdleExpiry: (id, idle, max) async {
             persisted.add((id, idle, max));
           },
         );
@@ -816,7 +723,7 @@ void main() {
           remoteSettingsMode: RemoteSettingsMode.fallback,
           idleTimeout: const Duration(minutes: 30),
           maxSessionDuration: const Duration(hours: 24),
-          persistIdleExpiry: (_, idle, max, background) async {
+          persistIdleExpiry: (_, idle, max) async {
             deadlines.add((idle, max));
           },
         );
@@ -866,7 +773,7 @@ void main() {
             autoRecordSessionsPercent: 100,
             remoteSettingsMode: RemoteSettingsMode.fallback,
             maxSessionDuration: const Duration(hours: 24),
-            persistIdleExpiry: (_, idle, max, background) async {
+            persistIdleExpiry: (_, idle, max) async {
               deadlines.add((idle, max));
             },
           );
@@ -905,7 +812,7 @@ void main() {
           autoRecordSessionsPercent: 100,
           idleTimeout: const Duration(minutes: 30),
           maxSessionDuration: const Duration(hours: 24),
-          persistIdleExpiry: (_, idle, max, background) async {
+          persistIdleExpiry: (_, idle, max) async {
             deadlines.add((idle, max));
           },
         );
@@ -1038,15 +945,9 @@ void main() {
         final coordinator = createCoordinator(
           idleTimeout: const Duration(minutes: 30),
           maxSessionDuration: const Duration(hours: 24),
-          persistIdleExpiry:
-              (
-                sessionId,
-                idleExpiresMs,
-                maxExpiresMs,
-                backgroundExpiresMs,
-              ) async {
-                persistedCalls.add((sessionId, idleExpiresMs, maxExpiresMs));
-              },
+          persistIdleExpiry: (sessionId, idleExpiresMs, maxExpiresMs) async {
+            persistedCalls.add((sessionId, idleExpiresMs, maxExpiresMs));
+          },
         );
         coordinator.startRecording(sessionsPercent: 100.0);
         await pumpEventQueue();
@@ -1324,7 +1225,7 @@ void main() {
           backgroundBehavior: null,
           idleTimeout: const Duration(minutes: 30),
           maxSessionDuration: const Duration(hours: 24),
-          persistIdleExpiry: (id, idle, max, background) async {
+          persistIdleExpiry: (id, idle, max) async {
             writes.add(id);
           },
         );
@@ -1555,7 +1456,7 @@ void main() {
           idleTimeout: const Duration(minutes: 30),
           maxSessionDuration: const Duration(hours: 24),
           backgroundBehavior: null,
-          persistIdleExpiry: (sessionId, idle, max, background) async {
+          persistIdleExpiry: (sessionId, idle, max) async {
             // Mirrors IndexedDB, where a deadline write for a session with no
             // metadata record is a silent no-op.
             if (await gated.getSessionMetadata(sessionId) != null) {
@@ -1588,7 +1489,7 @@ void main() {
         final coordinator = createCoordinator(
           idleTimeout: const Duration(minutes: 30),
           maxSessionDuration: const Duration(hours: 24),
-          persistIdleExpiry: (id, idle, max, background) async {
+          persistIdleExpiry: (id, idle, max) async {
             persisted.add((id, idle, max));
           },
         );
@@ -1613,7 +1514,7 @@ void main() {
         final persisted = <(String, int, int)>[];
         final coordinator = createCoordinator(
           maxSessionDuration: const Duration(hours: 24),
-          persistIdleExpiry: (id, idle, max, background) async {
+          persistIdleExpiry: (id, idle, max) async {
             persisted.add((id, idle, max));
           },
         );
@@ -1640,7 +1541,7 @@ void main() {
         final persisted = <(String, int, int)>[];
         final coordinator = createCoordinator(
           maxSessionDuration: const Duration(hours: 24),
-          persistIdleExpiry: (id, idle, max, background) async {
+          persistIdleExpiry: (id, idle, max) async {
             persisted.add((id, idle, max));
           },
         );
@@ -1667,7 +1568,7 @@ void main() {
         final coordinator = createCoordinator(
           idleTimeout: const Duration(minutes: 30),
           maxSessionDuration: const Duration(hours: 24),
-          persistIdleExpiry: (id, idle, max, background) async {
+          persistIdleExpiry: (id, idle, max) async {
             persisted.add((id, idle, max));
           },
         );
@@ -1711,7 +1612,7 @@ void main() {
           autoRecordSessionsPercent: 100,
           remoteSettingsMode: RemoteSettingsMode.fallback,
           maxSessionDuration: const Duration(hours: 24),
-          persistIdleExpiry: (_, idle, max, background) async {
+          persistIdleExpiry: (_, idle, max) async {
             deadlines.add((idle, max));
           },
         );

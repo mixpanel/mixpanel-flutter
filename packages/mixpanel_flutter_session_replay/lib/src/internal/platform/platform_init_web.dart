@@ -160,14 +160,13 @@ Future<EventQueue> _openQueue({
 SessionDeadlineWriter _deadlineWriter(
   IndexedDbEventQueue queue,
   MixpanelLogger logger,
-) => (sessionId, idleExpiresMs, maxExpiresMs, backgroundExpiresMs) async {
+) => (sessionId, idleExpiresMs, maxExpiresMs) async {
   try {
     await updateWebSessionExpiry(
       queue: queue,
       sessionId: sessionId,
       idleExpiresMs: idleExpiresMs,
       maxExpiresMs: maxExpiresMs,
-      backgroundExpiresMs: backgroundExpiresMs,
       logger: logger,
     );
   } catch (e) {

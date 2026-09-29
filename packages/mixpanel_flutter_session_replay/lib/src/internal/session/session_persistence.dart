@@ -11,7 +11,6 @@ typedef SessionDeadlineWriter =
       String sessionId,
       int idleExpiresMs,
       int maxExpiresMs,
-      int? backgroundExpiresMs,
     );
 
 /// Carries a replay across page loads: stores its deadlines while it records
@@ -124,7 +123,6 @@ class StoredSessionPersistence implements SessionPersistence {
       sessionId,
       lifetime.persistedIdleExpiry!.millisecondsSinceEpoch,
       maximumExpiry.millisecondsSinceEpoch,
-      lifetime.backgroundExpiry?.millisecondsSinceEpoch,
     ).catchError((Object e) {
       _logger.error(
         'Failed to persist idle expiry: $e',
@@ -143,7 +141,7 @@ class StoredSessionPersistence implements SessionPersistence {
   void expire(String sessionId) {
     _lastWriteTime = null;
     final expiredMs = clock.now().millisecondsSinceEpoch - 1;
-    _write(sessionId, expiredMs, expiredMs, null).catchError((Object e) {
+    _write(sessionId, expiredMs, expiredMs).catchError((Object e) {
       _logger.error(
         'Failed to expire persisted session: $e',
         null,

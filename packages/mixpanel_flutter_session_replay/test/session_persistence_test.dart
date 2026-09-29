@@ -11,14 +11,14 @@ import 'package:mixpanel_flutter_session_replay/src/models/session.dart';
 
 void main() {
   group('StoredSessionPersistence', () {
-    late List<(String, int, int, int?)> writes;
+    late List<(String, int, int)> writes;
     late StoredSessionPersistence persistence;
 
     setUp(() {
       writes = [];
       persistence = StoredSessionPersistence(
-        write: (id, idle, max, background) async {
-          writes.add((id, idle, max, background));
+        write: (id, idle, max) async {
+          writes.add((id, idle, max));
         },
         logger: MixpanelLogger(LogLevel.none),
       );
@@ -91,7 +91,6 @@ void main() {
         expect(writes.single.$1, 's');
         expect(writes.single.$2, lessThan(now));
         expect(writes.single.$3, lessThan(now));
-        expect(writes.single.$4, isNull);
       });
     });
 

@@ -39,7 +39,6 @@ class SessionLifetime {
 
   Duration? get maximumDuration => _maximumDuration;
   DateTime? get maximumExpiry => _maximumExpiry;
-  DateTime? get backgroundExpiry => _backgroundExpiry;
   bool get hasMaximumTimer => _maximumTimer?.isActive ?? false;
   bool get needsIdleWindow => _idleTimer != null && _idleExpiry == null;
   bool get isIdleExpired => expired(_idleExpiry);
