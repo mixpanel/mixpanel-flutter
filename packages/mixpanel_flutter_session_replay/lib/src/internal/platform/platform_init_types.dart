@@ -49,4 +49,15 @@ class PlatformInitResult {
     this.persistIdleExpiry,
     required this.backgroundBehavior,
   });
+
+  /// Releases every platform resource this result holds.
+  ///
+  /// Once the coordinator owns these components it disposes them itself.
+  /// This is for the window in between, when SDK initialization fails after
+  /// platform initialization succeeded.
+  Future<void> dispose() async {
+    await screenshotCapturer.dispose();
+    gzipCompressor.dispose();
+    await queue.dispose();
+  }
 }

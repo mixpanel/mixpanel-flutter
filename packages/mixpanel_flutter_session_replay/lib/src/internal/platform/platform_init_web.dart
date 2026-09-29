@@ -8,6 +8,7 @@ import '../logger.dart';
 import '../wireframe/wireframe_emitter.dart';
 import '../../models/masking_directive.dart';
 import '../../models/configuration.dart';
+import '../session/resumable_session.dart';
 import '../session/web_session_resume.dart';
 import '../screenshot_capturer.dart';
 import 'gzip_compressor.dart';
@@ -42,110 +43,164 @@ Future<PlatformInitResult> platformInit({
     throw PlatformCapabilityException(error.toString());
   }
 
-  EventQueue queue =
-      eventQueue ??
-      createWebEventQueue(
-        token: token,
-        quotaMB: storageQuotaMB,
-        logger: logger,
-      );
+  // Everything created from here on is released again when a later step
+  // fails, so a failed initialization never leaks a worker, its Blob URL, or
+  // a database connection into the page.
+  EventQueue? queue;
+  WebRenderedSurfaceCapture? surfaceCapture;
   try {
-    await queue.initialize();
+    queue = await _openQueue(
+      injected: eventQueue,
+      token: token,
+      quotaMB: storageQuotaMB,
+      logger: logger,
+    );
+    await _pruneExpiredData(queue, logger);
+    final resumeInfo = await _checkSessionResume(
+      queue,
+      maxSessionDuration: web.maxSessionDuration,
+      logger: logger,
+    );
+
+    surfaceCapture = WebRenderedSurfaceCapture(logger: logger);
+    try {
+      await surfaceCapture.initialize();
+    } catch (error) {
+      throw PlatformCapabilityException(error.toString());
+    }
+
+    final screenshotCapturer = ScreenshotCapturer(
+      directive: directive,
+      logger: logger,
+      debugOverlayEnabled: debugOverlayEnabled,
+      surfaceCapture: surfaceCapture,
+      wireframeEmitter: wireframeEmitter,
+      useAccessibilityLabelFallback: useAccessibilityLabelFallback,
+    );
+
+    final persistedQueue = queue;
+    return PlatformInitResult(
+      queue: queue,
+      screenshotCapturer: screenshotCapturer,
+      gzipCompressor: gzip,
+      wifiOnly: false,
+      idleTimeout: web.idleTimeout,
+      maxSessionDuration: web.maxSessionDuration,
+      resumableSession: resumeInfo,
+      // Debounced deadline writes; failures are logged, never thrown.
+      persistIdleExpiry:
+          (
+            String sessionId,
+            int idleExpiresMs,
+            int maxExpiresMs,
+            int? backgroundExpiresMs,
+          ) async {
+            try {
+              await updateWebSessionExpiry(
+                queue: persistedQueue,
+                sessionId: sessionId,
+                idleExpiresMs: idleExpiresMs,
+                maxExpiresMs: maxExpiresMs,
+                backgroundExpiresMs: backgroundExpiresMs,
+                logger: logger,
+              );
+            } catch (e) {
+              logger.error('Failed to persist session expiry: $e');
+            }
+          },
+      backgroundBehavior: web.onBackground,
+    );
+  } catch (_) {
+    await surfaceCapture?.dispose();
+    await queue?.dispose();
+    gzip.dispose();
+    rethrow;
+  }
+}
+
+/// Opens the injected queue, or the persistent browser queue with an
+/// in-memory fallback when IndexedDB is unavailable.
+///
+/// An injected queue is owned by the SDK from here on, like the queues this
+/// function creates, and is never swapped for the fallback: a caller that
+/// supplied one wants that queue or a failure.
+Future<EventQueue> _openQueue({
+  required EventQueue? injected,
+  required String token,
+  required int quotaMB,
+  required MixpanelLogger logger,
+}) async {
+  if (injected != null) {
+    await injected.initialize();
+    return injected;
+  }
+  final persistent = createWebEventQueue(
+    token: token,
+    quotaMB: quotaMB,
+    logger: logger,
+  );
+  try {
+    await persistent.initialize();
+    return persistent;
   } catch (error) {
-    if (eventQueue != null) rethrow;
     logger.warning(
       'IndexedDB unavailable; replay will use page-lifetime memory storage: '
       '$error',
     );
-    queue = MemoryEventQueue(quotaMB: storageQuotaMB, logger: logger);
-    await queue.initialize();
+    await persistent.dispose();
+    final memory = MemoryEventQueue(quotaMB: quotaMB, logger: logger);
+    await memory.initialize();
+    return memory;
   }
+}
 
-  if (queue is IndexedDbEventQueue) {
-    try {
-      final cleanup = await queue.pruneExpiredData(
-        DateTime.now().subtract(_webStorageRetention),
-      );
-      if (cleanup.removedEvents > 0 || cleanup.removedSessions > 0) {
-        logger.info(
-          'Removed ${cleanup.removedEvents} expired replay events and '
-          '${cleanup.removedSessions} abandoned sessions',
-        );
-      }
-    } catch (error) {
-      // Retention is best-effort. A cleanup failure must not discard the
-      // otherwise usable persistent queue or prevent recording.
-      logger.warning('Failed to prune expired web replay data: $error');
-    }
-  }
-
-  // Check for resumable session before clearing data
-  final resumeInfo = await checkWebSessionResume(
-    queue: queue,
-    maxSessionDuration: web.maxSessionDuration,
-    logger: logger,
-  );
-
-  if (resumeInfo != null) {
-    logger.info('Found resumable session: ${resumeInfo.session.id}');
-  } else {
-    // A session that cannot be resumed may still have events waiting to upload
-    // from an earlier page load. Do not clear the token-wide queue here: the
-    // uploader owns deletion after a successful request, while a later storage
-    // retention policy can garbage-collect genuinely abandoned data.
-    logger.debug('No resumable session; preserving queued upload backlog');
-  }
-
-  final surfaceCapture = WebRenderedSurfaceCapture(logger: logger);
+/// Retention is best-effort. A cleanup failure must not discard the
+/// otherwise usable persistent queue or prevent recording.
+Future<void> _pruneExpiredData(EventQueue queue, MixpanelLogger logger) async {
+  if (queue is! IndexedDbEventQueue) return;
   try {
-    await surfaceCapture.initialize();
+    final cleanup = await queue.pruneExpiredData(
+      DateTime.now().subtract(_webStorageRetention),
+    );
+    if (cleanup.removedEvents > 0 || cleanup.removedSessions > 0) {
+      logger.info(
+        'Removed ${cleanup.removedEvents} expired replay events and '
+        '${cleanup.removedSessions} abandoned sessions',
+      );
+    }
   } catch (error) {
-    await queue.dispose();
-    gzip.dispose();
-    throw PlatformCapabilityException(error.toString());
+    logger.warning('Failed to prune expired web replay data: $error');
   }
+}
 
-  final screenshotCapturer = ScreenshotCapturer(
-    directive: directive,
-    logger: logger,
-    debugOverlayEnabled: debugOverlayEnabled,
-    surfaceCapture: surfaceCapture,
-    wireframeEmitter: wireframeEmitter,
-    useAccessibilityLabelFallback: useAccessibilityLabelFallback,
-  );
-
-  // Create persist callback for debounced idle expiry writes
-  Future<void> Function(String, int, int, int?)? persistIdleExpiry;
-  persistIdleExpiry =
-      (
-        String sessionId,
-        int idleExpiresMs,
-        int maxExpiresMs,
-        int? backgroundExpiresMs,
-      ) async {
-        try {
-          await updateWebSessionExpiry(
-            queue: queue,
-            sessionId: sessionId,
-            idleExpiresMs: idleExpiresMs,
-            maxExpiresMs: maxExpiresMs,
-            backgroundExpiresMs: backgroundExpiresMs,
-            logger: logger,
-          );
-        } catch (e) {
-          logger.error('Failed to persist session expiry: $e');
-        }
-      };
-
-  return PlatformInitResult(
-    queue: queue,
-    screenshotCapturer: screenshotCapturer,
-    gzipCompressor: gzip,
-    wifiOnly: false,
-    idleTimeout: web.idleTimeout,
-    maxSessionDuration: web.maxSessionDuration,
-    resumableSession: resumeInfo,
-    persistIdleExpiry: persistIdleExpiry,
-    backgroundBehavior: web.onBackground,
-  );
+/// Resuming is an improvement over starting a new replay, never a
+/// requirement: a malformed or unreadable metadata record leaves the SDK
+/// recording fresh rather than failing to initialize on every page load.
+Future<ResumableSession?> _checkSessionResume(
+  EventQueue queue, {
+  required Duration maxSessionDuration,
+  required MixpanelLogger logger,
+}) async {
+  try {
+    final resumeInfo = await checkWebSessionResume(
+      queue: queue,
+      maxSessionDuration: maxSessionDuration,
+      logger: logger,
+    );
+    if (resumeInfo != null) {
+      logger.info('Found resumable session: ${resumeInfo.session.id}');
+    } else {
+      // A session that cannot be resumed may still have events waiting to
+      // upload from an earlier page load. The token-wide queue is not cleared
+      // here: the uploader owns deletion after a successful request, and the
+      // retention pass above garbage-collects genuinely abandoned data.
+      logger.debug('No resumable session; preserving queued upload backlog');
+    }
+    return resumeInfo;
+  } catch (error) {
+    logger.warning(
+      'Could not check for a resumable session; starting fresh: $error',
+    );
+    return null;
+  }
 }

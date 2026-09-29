@@ -210,118 +210,126 @@ class MixpanelSessionReplay {
         logger: logger,
         eventQueue: eventQueue,
       );
-      final queue = platformResult.queue;
-      logger.debug('Platform init complete');
+      // From here until the coordinator owns them, the platform components
+      // have no owner. Release them if any later step fails so a failed
+      // initialization cannot leak a worker or a database connection.
+      try {
+        final queue = platformResult.queue;
+        logger.debug('Platform init complete');
 
-      // Create internal components
-      logger.debug('Creating internal components...');
+        // Create internal components
+        logger.debug('Creating internal components...');
 
-      // Create session manager
-      final sessionManager = SessionManager();
+        // Create session manager
+        final sessionManager = SessionManager();
 
-      // Create instance first (before components) so we can reference it in closures
-      final instance = MixpanelSessionReplay._internal(
-        logger: logger,
-        token: token,
-        distinctId: distinctId,
-      );
-
-      // Create event recorder (handles both screenshots and interactions)
-      final eventRecorder = EventRecorder(
-        eventQueue: queue,
-        sessionManager: sessionManager,
-        getDistinctId: () => instance.distinctId,
-        logger: logger,
-      );
-
-      // Create settings service (check will happen on first foreground)
-      final storageProvider = SettingsStorageProvider(
-        token: token,
-        logger: logger,
-      );
-      // Create shared HTTP client (each service borrows it; SDK owns the lifecycle)
-      final sharedHttpClient = httpClient ?? http.Client();
-
-      final settingsService = SettingsService(
-        token: token,
-        logger: logger,
-        httpClient: sharedHttpClient,
-        storageProvider: storageProvider,
-        serverUrl: resolvedServerUrl,
-        // Only ask for the wireframe kill switch when this app opted in.
-        wireframesRequested: options.wireframesOptions != null,
-      );
-
-      // Create upload service with payload serializer
-      final payloadSerializer = PayloadSerializer(
-        token,
-        gzip: platformResult.gzipCompressor,
-      );
-      final uploadService = UploadService(
-        eventQueue: queue,
-        payloadSerializer: payloadSerializer,
-        wifiOnly: platformResult.wifiOnly,
-        // The coordinator's verdict, not the raw server flag: strict mode can
-        // disable recording even when the server reports is_enabled, and
-        // uploads must follow the same decision as capture.
-        getRemoteEnablementState: () =>
-            instance._coordinator.remoteEnablementState,
-        flushInterval: options.flushInterval,
-        logger: logger,
-        httpClient: sharedHttpClient,
-        serverUrl: resolvedServerUrl,
-      );
-
-      logger.debug('Internal components created');
-
-      // Create idle timeout timer if platform provides an idle timeout
-      IdleTimeoutTimer? idleTimer;
-      late final SessionReplayCoordinator coordinator;
-      final idleTimeout = platformResult.idleTimeout;
-
-      if (idleTimeout != null && idleTimeout > Duration.zero) {
-        idleTimer = IdleTimeoutTimer(
-          timeout: idleTimeout,
-          onTimeout: () => coordinator.handleIdleTimeout(),
+        // Create instance first (before components) so we can reference it in closures
+        final instance = MixpanelSessionReplay._internal(
+          logger: logger,
+          token: token,
+          distinctId: distinctId,
         );
-      }
 
-      // Create coordinator with all internal components
-      logger.debug('Creating coordinator...');
-      coordinator = SessionReplayCoordinator(
-        screenshotCapturer: platformResult.screenshotCapturer,
-        eventRecorder: eventRecorder,
-        uploadService: uploadService,
-        settingsService: settingsService,
-        sessionManager: sessionManager,
-        logger: logger,
-        autoRecordSessionsPercent: options.autoRecordSessionsPercent,
-        remoteSettingsMode: options.remoteSettingsMode,
-        debugOptions: options.debugOptions,
-        idleTimer: idleTimer,
-        maxSessionDuration: platformResult.maxSessionDuration,
-        backgroundBehavior: platformResult.backgroundBehavior,
-        persistIdleExpiry: platformResult.persistIdleExpiry,
-      );
-
-      // Wire up the coordinator and shared HTTP client to the instance
-      instance._coordinator = coordinator;
-      instance._httpClient = sharedHttpClient;
-
-      // Resume session if applicable (web page reload with valid session)
-      if (platformResult.resumableSession != null) {
-        coordinator.prepareSessionResume(
-          platformResult.resumableSession!.session,
-          idleExpiry: platformResult.resumableSession!.idleExpiry,
-          backgroundExpiry: platformResult.resumableSession!.backgroundExpiry,
+        // Create event recorder (handles both screenshots and interactions)
+        final eventRecorder = EventRecorder(
+          eventQueue: queue,
+          sessionManager: sessionManager,
+          getDistinctId: () => instance.distinctId,
+          logger: logger,
         );
+
+        // Create settings service (check will happen on first foreground)
+        final storageProvider = SettingsStorageProvider(
+          token: token,
+          logger: logger,
+        );
+        // Create shared HTTP client (each service borrows it; SDK owns the lifecycle)
+        final sharedHttpClient = httpClient ?? http.Client();
+
+        final settingsService = SettingsService(
+          token: token,
+          logger: logger,
+          httpClient: sharedHttpClient,
+          storageProvider: storageProvider,
+          serverUrl: resolvedServerUrl,
+          // Only ask for the wireframe kill switch when this app opted in.
+          wireframesRequested: options.wireframesOptions != null,
+        );
+
+        // Create upload service with payload serializer
+        final payloadSerializer = PayloadSerializer(
+          token,
+          gzip: platformResult.gzipCompressor,
+        );
+        final uploadService = UploadService(
+          eventQueue: queue,
+          payloadSerializer: payloadSerializer,
+          wifiOnly: platformResult.wifiOnly,
+          // The coordinator's verdict, not the raw server flag: strict mode can
+          // disable recording even when the server reports is_enabled, and
+          // uploads must follow the same decision as capture.
+          getRemoteEnablementState: () =>
+              instance._coordinator.remoteEnablementState,
+          flushInterval: options.flushInterval,
+          logger: logger,
+          httpClient: sharedHttpClient,
+          serverUrl: resolvedServerUrl,
+        );
+
+        logger.debug('Internal components created');
+
+        // Create idle timeout timer if platform provides an idle timeout
+        IdleTimeoutTimer? idleTimer;
+        late final SessionReplayCoordinator coordinator;
+        final idleTimeout = platformResult.idleTimeout;
+
+        if (idleTimeout != null && idleTimeout > Duration.zero) {
+          idleTimer = IdleTimeoutTimer(
+            timeout: idleTimeout,
+            onTimeout: () => coordinator.handleIdleTimeout(),
+          );
+        }
+
+        // Create coordinator with all internal components
+        logger.debug('Creating coordinator...');
+        coordinator = SessionReplayCoordinator(
+          screenshotCapturer: platformResult.screenshotCapturer,
+          eventRecorder: eventRecorder,
+          uploadService: uploadService,
+          settingsService: settingsService,
+          sessionManager: sessionManager,
+          logger: logger,
+          autoRecordSessionsPercent: options.autoRecordSessionsPercent,
+          remoteSettingsMode: options.remoteSettingsMode,
+          debugOptions: options.debugOptions,
+          idleTimer: idleTimer,
+          maxSessionDuration: platformResult.maxSessionDuration,
+          backgroundBehavior: platformResult.backgroundBehavior,
+          persistIdleExpiry: platformResult.persistIdleExpiry,
+        );
+
+        // Wire up the coordinator and shared HTTP client to the instance
+        instance._coordinator = coordinator;
+        instance._httpClient = sharedHttpClient;
+
+        // Resume session if applicable (web page reload with valid session)
+        if (platformResult.resumableSession != null) {
+          coordinator.prepareSessionResume(
+            platformResult.resumableSession!.session,
+            idleExpiry: platformResult.resumableSession!.idleExpiry,
+            backgroundExpiry: platformResult.resumableSession!.backgroundExpiry,
+          );
+        }
+
+        // Register instance in registry
+        _instances[token] = instance;
+
+        logger.info('Initialization successful!');
+        return InitializationResult.success(instance);
+      } catch (_) {
+        await platformResult.dispose();
+        rethrow;
       }
-
-      // Register instance in registry
-      _instances[token] = instance;
-
-      logger.info('Initialization successful!');
-      return InitializationResult.success(instance);
     } on PlatformCapabilityException catch (e) {
       logger.error('Initialization failed: $e');
       return InitializationResult.failure(
