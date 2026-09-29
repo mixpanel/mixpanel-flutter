@@ -1,3 +1,5 @@
+import 'package:mixpanel_flutter_session_replay/src/internal/session/resumable_session.dart';
+import 'package:mixpanel_flutter_session_replay/src/internal/session/session_persistence.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/capture/to_image_frame_acquirer.dart';
 import 'dart:async';
 import 'package:clock/clock.dart';
@@ -42,6 +44,23 @@ void main() {
     late ScreenshotCapturer screenshotCapturer;
     late MixpanelLogger logger;
 
+    /// Persistence of the most recently created coordinator.
+    late StoredSessionPersistence persistence;
+
+    /// Offers [session] to the most recently created coordinator for resume,
+    /// as platform init does for a replay a previous page load left behind.
+    void stageResume(
+      Session session, {
+      DateTime? idleExpiry,
+      DateTime? backgroundExpiry,
+    }) => persistence.stageResume(
+      ResumableSession(
+        session,
+        idleExpiry: idleExpiry,
+        backgroundExpiry: backgroundExpiry,
+      ),
+    );
+
     SessionReplayCoordinator createCoordinator({
       double autoRecordSessionsPercent = 0,
       RemoteSettingsMode remoteSettingsMode = RemoteSettingsMode.disabled,
@@ -53,6 +72,10 @@ void main() {
       EventRecorder? recorder,
       ScreenshotCapturer? capturer,
     }) {
+      persistence = StoredSessionPersistence(
+        write: persistIdleExpiry ?? (_, _, _, _) async {},
+        logger: logger,
+      );
       return SessionReplayCoordinator(
         screenshotCapturer: capturer ?? screenshotCapturer,
         eventRecorder: recorder ?? eventRecorder,
@@ -66,7 +89,7 @@ void main() {
         idleTimer: idleTimer,
         maxSessionDuration: maxSessionDuration,
         backgroundBehavior: backgroundBehavior,
-        persistIdleExpiry: persistIdleExpiry,
+        sessionPersistence: persistence,
       );
     }
 
@@ -180,7 +203,7 @@ void main() {
               autoRecordSessionsPercent: 100,
             );
             addTearDown(coordinator.dispose);
-            coordinator.prepareSessionResume(
+            stageResume(
               Session(
                 id: 'paused-reload',
                 startTime: now,
@@ -274,7 +297,7 @@ void main() {
             },
           );
           addTearDown(coordinator.dispose);
-          coordinator.prepareSessionResume(
+          stageResume(
             Session(
               id: 'valid-reload',
               startTime: now,
@@ -309,7 +332,7 @@ void main() {
           );
           addTearDown(coordinator.dispose);
           withClock(Clock.fixed(start), () {
-            coordinator.prepareSessionResume(
+            stageResume(
               Session(
                 id: 'expired-staged',
                 startTime: start,
@@ -356,7 +379,7 @@ void main() {
           );
           final coordinator = createCoordinator();
 
-          coordinator.prepareSessionResume(session);
+          stageResume(session);
 
           expect(coordinator.recordingState, RecordingState.notRecording);
           expect(coordinator.replayId, isNull);
@@ -389,7 +412,7 @@ void main() {
             persisted.add((id, idle, max));
           },
         );
-        coordinator.prepareSessionResume(
+        stageResume(
           Session(
             id: 'staged-session',
             startTime: DateTime.now().toUtc(),
@@ -418,7 +441,7 @@ void main() {
           status: SessionStatus.active,
         );
         final coordinator = createCoordinator();
-        coordinator.prepareSessionResume(session);
+        stageResume(session);
 
         coordinator.stopRecording();
         coordinator.onAppForegrounded();
@@ -1005,7 +1028,7 @@ void main() {
 
           // WHEN the remote 10-minute cap arrives before resumption
           await withClock(Clock.fixed(now), () async {
-            coordinator.prepareSessionResume(stale);
+            stageResume(stale);
             coordinator.onAppForegrounded();
             await pumpEventQueue();
           });
@@ -1109,10 +1132,7 @@ void main() {
 
           // WHEN it resumes, then goes away for 5 minutes
           await withClock(Clock.fixed(now), () async {
-            coordinator.prepareSessionResume(
-              session,
-              idleExpiry: storedDeadline,
-            );
+            stageResume(session, idleExpiry: storedDeadline);
             coordinator.onAppForegrounded();
             await pumpEventQueue();
             expect(coordinator.replayId, 'resumed-with-deadline');
@@ -1159,7 +1179,7 @@ void main() {
 
           // WHEN it resumes and returns 5 minutes later
           await withClock(Clock.fixed(now), () async {
-            coordinator.prepareSessionResume(session);
+            stageResume(session);
             coordinator.onAppForegrounded();
             await pumpEventQueue();
             coordinator.onAppBackgrounded();
@@ -1664,7 +1684,7 @@ void main() {
             persisted.add((id, idle, max));
           },
         );
-        coordinator.prepareSessionResume(
+        stageResume(
           Session(
             id: 'staged-session',
             startTime: DateTime.now().toUtc(),

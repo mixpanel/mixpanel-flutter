@@ -11,6 +11,7 @@ import '../wireframe/wireframe_emitter.dart';
 import '../../models/masking_directive.dart';
 import '../../models/configuration.dart';
 import '../session/resumable_session.dart';
+import '../session/session_persistence.dart';
 import '../session/web_session_resume.dart';
 import '../screenshot_capturer.dart';
 import 'gzip_compressor.dart';
@@ -88,28 +89,31 @@ Future<PlatformInitResult> platformInit({
       wifiOnly: false,
       idleTimeout: web.idleTimeout,
       maxSessionDuration: web.maxSessionDuration,
-      resumableSession: resumeInfo,
-      // Debounced deadline writes; failures are logged, never thrown.
-      persistIdleExpiry:
-          (
-            String sessionId,
-            int idleExpiresMs,
-            int maxExpiresMs,
-            int? backgroundExpiresMs,
-          ) async {
-            try {
-              await updateWebSessionExpiry(
-                queue: persistedQueue,
-                sessionId: sessionId,
-                idleExpiresMs: idleExpiresMs,
-                maxExpiresMs: maxExpiresMs,
-                backgroundExpiresMs: backgroundExpiresMs,
-                logger: logger,
-              );
-            } catch (e) {
-              logger.error('Failed to persist session expiry: $e');
-            }
-          },
+      sessionPersistence: StoredSessionPersistence(
+        resumable: resumeInfo,
+        logger: logger,
+        // Failures are logged, never thrown.
+        write:
+            (
+              sessionId,
+              idleExpiresMs,
+              maxExpiresMs,
+              backgroundExpiresMs,
+            ) async {
+              try {
+                await updateWebSessionExpiry(
+                  queue: persistedQueue,
+                  sessionId: sessionId,
+                  idleExpiresMs: idleExpiresMs,
+                  maxExpiresMs: maxExpiresMs,
+                  backgroundExpiresMs: backgroundExpiresMs,
+                  logger: logger,
+                );
+              } catch (e) {
+                logger.error('Failed to persist session expiry: $e');
+              }
+            },
+      ),
       backgroundBehavior: web.onBackground,
       // Capture reads the presented Flutter canvas, which would include
       // anything painted in-tree.

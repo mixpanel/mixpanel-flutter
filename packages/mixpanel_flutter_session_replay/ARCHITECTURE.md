@@ -168,12 +168,15 @@ place. This split does not change their treatment of transient layouts that
 return to their original geometry between validation points.
 
 `SessionLifetime` owns activity, maximum-duration, and background-retention
-deadlines and timers. The coordinator owns recording state, sampling, uploads,
-analytics registration, and persistence. It consults wall-clock deadlines at
+deadlines and timers. `SessionPersistence` carries a replay across page loads:
+it stores those deadlines (debouncing activity writes) and offers the replay a
+previous page load left recording. Native uses `SessionPersistence.none()`;
+web uses `StoredSessionPersistence` over IndexedDB. The coordinator owns
+recording state, sampling, uploads, and analytics registration. It consults wall-clock deadlines at
 transitions as well as reacting to timers, since browser suspension can delay
 callbacks. Maximum expiry remains active during metadata initialization.
 `ResumableSession` keeps a staged session and its persisted deadlines together
-while waiting for remote settings.
+while `SessionPersistence` holds it waiting for remote settings.
 
 Web capture requires one matching canvas in one Flutter view. A platform view
 may split rendering across multiple canvases; those frames are skipped rather

@@ -75,7 +75,7 @@ void main() {
         eventQueue: queue,
       );
 
-      expect(result.resumableSession, isNull);
+      expect(result.sessionPersistence.takeResumable(), isNull);
       expect(result.backgroundBehavior, isA<ReplayBackgroundPauseBehavior>());
       expect(
         (result.backgroundBehavior as ReplayBackgroundPauseBehavior)
@@ -113,7 +113,7 @@ void main() {
 
     // THEN initialization succeeds without a resumed session rather than
     // failing on every page load until the site data is cleared
-    expect(result.resumableSession, isNull);
+    expect(result.sessionPersistence.takeResumable(), isNull);
     expect(result.queue, same(queue));
 
     await result.dispose();

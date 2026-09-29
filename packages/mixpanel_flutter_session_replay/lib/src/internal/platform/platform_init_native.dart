@@ -6,6 +6,7 @@ import '../logger.dart';
 import '../capture/to_image_frame_acquirer.dart';
 import '../debug_mask_overlay.dart';
 import '../native_image_compressor.dart';
+import '../session/session_persistence.dart';
 import '../screenshot_capturer.dart';
 import '../storage/event_queue_interface.dart';
 import '../storage/sqlite_event_queue.dart';
@@ -50,6 +51,7 @@ Future<PlatformInitResult> platformInit({
     gzipCompressor: createGzipCompressor(),
     wifiOnly: mobile.wifiOnly,
     backgroundBehavior: mobile.onBackground,
+    sessionPersistence: SessionPersistence.none(),
     // toImage() renders only the boundary's subtree, so an overlay painted
     // above it in the tree is never captured.
     debugMaskOverlayFactory: InTreeDebugMaskOverlay.new,

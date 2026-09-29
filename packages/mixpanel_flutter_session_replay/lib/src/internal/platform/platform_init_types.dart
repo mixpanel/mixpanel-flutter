@@ -1,4 +1,4 @@
-import '../session/resumable_session.dart';
+import '../session/session_persistence.dart';
 import '../../models/configuration.dart';
 import '../debug_mask_overlay.dart';
 import '../screenshot_capturer.dart';
@@ -26,15 +26,9 @@ class PlatformInitResult {
   final bool wifiOnly;
   final Duration? idleTimeout;
   final Duration? maxSessionDuration;
-  final ResumableSession? resumableSession;
 
-  final Future<void> Function(
-    String sessionId,
-    int idleExpiresMs,
-    int maxExpiresMs,
-    int? backgroundExpiresMs,
-  )?
-  persistIdleExpiry;
+  /// Carries replays across page loads on web; a no-op elsewhere.
+  final SessionPersistence sessionPersistence;
 
   /// Configured behavior when the app or page leaves the foreground.
   final ReplayBackgroundBehavior backgroundBehavior;
@@ -49,8 +43,7 @@ class PlatformInitResult {
     required this.wifiOnly,
     this.idleTimeout,
     this.maxSessionDuration,
-    this.resumableSession,
-    this.persistIdleExpiry,
+    required this.sessionPersistence,
     required this.backgroundBehavior,
     required this.debugMaskOverlayFactory,
   });

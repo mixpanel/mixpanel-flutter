@@ -305,22 +305,13 @@ class MixpanelSessionReplay {
           idleTimer: idleTimer,
           maxSessionDuration: platformResult.maxSessionDuration,
           backgroundBehavior: platformResult.backgroundBehavior,
-          persistIdleExpiry: platformResult.persistIdleExpiry,
+          sessionPersistence: platformResult.sessionPersistence,
           debugMaskOverlayFactory: platformResult.debugMaskOverlayFactory,
         );
 
         // Wire up the coordinator and shared HTTP client to the instance
         instance._coordinator = coordinator;
         instance._httpClient = sharedHttpClient;
-
-        // Resume session if applicable (web page reload with valid session)
-        if (platformResult.resumableSession != null) {
-          coordinator.prepareSessionResume(
-            platformResult.resumableSession!.session,
-            idleExpiry: platformResult.resumableSession!.idleExpiry,
-            backgroundExpiry: platformResult.resumableSession!.backgroundExpiry,
-          );
-        }
 
         // Register instance in registry
         _instances[token] = instance;

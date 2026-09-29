@@ -1,5 +1,4 @@
 import 'dart:math' show Random;
-import 'package:clock/clock.dart';
 import 'package:flutter/foundation.dart'
     show ValueListenable, listEquals, visibleForTesting;
 import 'package:flutter/rendering.dart';
@@ -22,7 +21,7 @@ import 'settings/settings_service.dart';
 import 'session/session_manager.dart';
 import 'session/idle_timeout_timer.dart';
 import 'session/session_lifetime.dart';
-import 'session/resumable_session.dart';
+import 'session/session_persistence.dart';
 import 'session/recording_limits.dart';
 import 'widget_coordinator.dart';
 import 'session_replay_sender.dart';
@@ -98,27 +97,15 @@ class SessionReplayCoordinator implements WidgetCoordinator {
 
   late final SessionLifetime _lifetime;
 
-  /// Staged until this page's remote enablement verdict is available.
-  ResumableSession? _pendingResume;
-
   /// True when recording was stopped due to idle timeout (awaiting next interaction)
   bool _isIdledOut = false;
 
   /// Configured behavior when the app or page leaves the foreground.
   final ReplayBackgroundBehavior _backgroundBehavior;
 
-  /// Callback to persist activity, maximum, and background deadlines (web only)
-  final Future<void> Function(
-    String sessionId,
-    int idleExpiresMs,
-    int maxExpiresMs,
-    int? backgroundExpiresMs,
-  )?
-  _persistIdleExpiry;
-
-  /// Debounce: last time we persisted idle expiry to IndexedDB. Activity
-  /// writes are held back by [expiryWriteDebounce] to avoid excessive writes.
-  DateTime? _lastExpiryWriteTime;
+  /// Stores deadlines and offers a replay a previous page load left
+  /// recording. A no-op on native platforms.
+  final SessionPersistence _persistence;
 
   SessionReplayCoordinator({
     required ScreenshotCapturer screenshotCapturer,
@@ -136,13 +123,7 @@ class SessionReplayCoordinator implements WidgetCoordinator {
     required ReplayBackgroundBehavior backgroundBehavior,
     DebugMaskOverlayFactory debugMaskOverlayFactory =
         InTreeDebugMaskOverlay.new,
-    Future<void> Function(
-      String sessionId,
-      int idleExpiresMs,
-      int maxExpiresMs,
-      int? backgroundExpiresMs,
-    )?
-    persistIdleExpiry,
+    SessionPersistence? sessionPersistence,
   }) : _screenshotCapturer = screenshotCapturer,
        _eventRecorder = eventRecorder,
        _uploadService = uploadService,
@@ -156,7 +137,7 @@ class SessionReplayCoordinator implements WidgetCoordinator {
        _debugOptions = debugOptions,
        _backgroundBehavior = backgroundBehavior,
        _debugMaskOverlayFactory = debugMaskOverlayFactory,
-       _persistIdleExpiry = persistIdleExpiry {
+       _persistence = sessionPersistence ?? SessionPersistence.none() {
     _lifetime = SessionLifetime(
       idleTimer: idleTimer,
       maximumDuration: maxSessionDuration,
@@ -614,16 +595,13 @@ class SessionReplayCoordinator implements WidgetCoordinator {
   }
 
   void _startOrResumeRecording() {
-    final pending = _pendingResume;
+    final pending = _persistence.takeResumable();
     if (pending != null) {
-      if (pending.isExpired(_lifetime.maximumDuration)) {
-        _pendingResume = null;
-        _expirePersistedSession(pending.session.id);
-        startRecording(sessionsPercent: _autoRecordSessionsPercent);
+      if (!pending.isExpired(_lifetime.maximumDuration)) {
+        resumeSession(pending.session, idleExpiry: pending.idleExpiry);
         return;
       }
-      resumeSession(pending.session);
-      return;
+      _persistence.expire(pending.session.id);
     }
     startRecording(sessionsPercent: _autoRecordSessionsPercent);
   }
@@ -731,8 +709,7 @@ class SessionReplayCoordinator implements WidgetCoordinator {
       handleIdleTimeout();
       return;
     }
-    _lastExpiryWriteTime = null;
-    _persistExpiryDebounced();
+    _writeDeadlinesNow();
   }
 
   void _applyRecordSessionsPercent(RemoteSettingsResult result) {
@@ -807,13 +784,11 @@ class SessionReplayCoordinator implements WidgetCoordinator {
       // A new session supersedes one still waiting for remote settings to
       // resume, so the settings verdict cannot swap it in mid-recording.
       // Matches mixpanel-js, which skips resuming while a recording is active.
-      if (_pendingResume case final pending?) {
+      if (_persistence.discardResumable() case final discarded?) {
         _logger.debug(
-          'Discarding staged session ${pending.session.id} for a new recording',
+          'Discarding staged session ${discarded.session.id} for a new recording',
           tag: 'coordinator',
         );
-        _pendingResume = null;
-        _expirePersistedSession(pending.session.id);
       }
 
       // Create a new session (matches iOS/Android behavior)
@@ -858,13 +833,12 @@ class SessionReplayCoordinator implements WidgetCoordinator {
           // expire. Expire it now so a reload cannot resume this session.
           if (_recordingState == RecordingState.notRecording ||
               _sessionManager.getCurrentSession().id != sessionId) {
-            _expirePersistedSession(sessionId);
+            _persistence.expire(sessionId);
           } else {
             // Still this session, now paused or already resumed to recording.
             // Every deadline write so far found no record to update, so land
             // the first one now rather than after the activity debounce.
-            _lastExpiryWriteTime = null;
-            _persistExpiryDebounced();
+            _writeDeadlinesNow();
           }
           return;
         }
@@ -875,8 +849,7 @@ class SessionReplayCoordinator implements WidgetCoordinator {
         _uploadService.startAutoFlush();
         _lifetime.recordActivity();
         // Persist initial expiry to IndexedDB (web only, force write)
-        _lastExpiryWriteTime = null;
-        _persistExpiryDebounced();
+        _writeDeadlinesNow();
         _logger.debug(
           'Session metadata persisted, recording enabled',
           tag: 'coordinator',
@@ -917,8 +890,7 @@ class SessionReplayCoordinator implements WidgetCoordinator {
 
     // Preserve the latest web idle deadline before the page may be frozen or
     // discarded. Native platforms do not provide this callback.
-    _lastExpiryWriteTime = null;
-    _persistExpiryDebounced();
+    _writeDeadlinesNow();
 
     if (_maskRegions.value.isNotEmpty) {
       _maskRegions.value = const <MaskRegionInfo>[];
@@ -993,8 +965,7 @@ class SessionReplayCoordinator implements WidgetCoordinator {
       _lifetime.recordActivity();
     }
     // Clear the persisted background deadline even without fresh activity.
-    _lastExpiryWriteTime = null;
-    _persistExpiryDebounced();
+    _writeDeadlinesNow();
 
     _logger.debug('Recording resumed', tag: 'coordinator');
   }
@@ -1021,14 +992,9 @@ class SessionReplayCoordinator implements WidgetCoordinator {
     // A stopped replay must not come back on the next page load, so its
     // persisted deadlines are expired along with the in-memory ones below.
     if (_recordingState != RecordingState.notRecording) {
-      _expirePersistedSession(_sessionManager.getCurrentSession().id);
+      _persistence.expire(_sessionManager.getCurrentSession().id);
     }
-    if (cancelPendingResume) {
-      if (_pendingResume case final pending?) {
-        _expirePersistedSession(pending.session.id);
-      }
-      _pendingResume = null;
-    }
+    if (cancelPendingResume) _persistence.discardResumable();
 
     // Transition to notRecording state. A frame still waiting to acquire
     // pixels must not do so now; one already acquired stays with its replay.
@@ -1108,13 +1074,11 @@ class SessionReplayCoordinator implements WidgetCoordinator {
   /// Called during initialization when a valid non-expired session is found
   /// in IndexedDB. Restores the session without creating a new one or
   /// re-rolling sampling.
-  void resumeSession(Session session) {
+  void resumeSession(Session session, {DateTime? idleExpiry}) {
     if (_isDisposed) return;
 
     _logger.info('Resuming session: ${session.id}', tag: 'coordinator');
 
-    final resumeIdleExpiry = _pendingResume?.idleExpiry;
-    _pendingResume = null;
     _lifetime.resumeBackground();
     _isIdledOut = false;
     _sessionManager.resumeSession(session);
@@ -1126,36 +1090,23 @@ class SessionReplayCoordinator implements WidgetCoordinator {
 
     _recordingState = RecordingState.recording;
     _uploadService.startAutoFlush();
-    _lifetime.restoreIdleWindow(resumeIdleExpiry);
-    _lastExpiryWriteTime = null;
-    _persistExpiryDebounced();
-  }
-
-  /// Stage a persisted web session until remote recording enablement has been
-  /// checked for this page load.
-  void prepareSessionResume(
-    Session session, {
-    DateTime? idleExpiry,
-    DateTime? backgroundExpiry,
-  }) {
-    if (_isDisposed) return;
-    _pendingResume = ResumableSession(
-      session,
-      idleExpiry: idleExpiry,
-      backgroundExpiry: backgroundExpiry,
-    );
-    _logger.info(
-      'Session ${session.id} is eligible for resume; waiting for remote settings',
-      tag: 'coordinator',
-    );
+    _lifetime.restoreIdleWindow(idleExpiry);
+    _writeDeadlinesNow();
   }
 
   /// Reset idle timer and persist expiry (debounced). Called on every
   /// successful capture or interaction.
   void _onActivity() {
     _lifetime.recordActivity();
-    _persistExpiryDebounced();
+    _persistence.recordActivity(
+      _sessionManager.getCurrentSession().id,
+      _lifetime,
+    );
   }
+
+  /// Stores the current replay's deadlines, bypassing the activity debounce.
+  void _writeDeadlinesNow() =>
+      _persistence.writeNow(_sessionManager.getCurrentSession().id, _lifetime);
 
   @visibleForTesting
   bool get hasMaxSessionTimerForTest => _lifetime.hasMaximumTimer;
@@ -1176,57 +1127,6 @@ class SessionReplayCoordinator implements WidgetCoordinator {
     return false;
   }
 
-  /// Mark a persisted session as expired so a page reload cannot resume it.
-  ///
-  /// Not debounced: a stop must reach storage even if an activity write just
-  /// happened. IndexedDB runs readwrite transactions on the same store in
-  /// creation order, so an earlier in-flight activity write cannot land after
-  /// this one and revive the session.
-  void _expirePersistedSession(String sessionId) {
-    final persist = _persistIdleExpiry;
-    if (persist == null) return;
-
-    _lastExpiryWriteTime = null;
-    final expiredMs = clock.now().millisecondsSinceEpoch - 1;
-    persist(sessionId, expiredMs, expiredMs, null).catchError((e) {
-      _logger.error(
-        'Failed to expire persisted session: $e',
-        null,
-        null,
-        'coordinator',
-      );
-    });
-  }
-
-  /// Persist session deadlines to IndexedDB (debounced for activity writes).
-  void _persistExpiryDebounced() {
-    if (_persistIdleExpiry == null || _lifetime.maximumExpiry == null) {
-      return;
-    }
-
-    final now = clock.now();
-    if (_lastExpiryWriteTime != null &&
-        now.difference(_lastExpiryWriteTime!) < expiryWriteDebounce) {
-      return;
-    }
-
-    _lastExpiryWriteTime = now;
-    final sessionId = _sessionManager.getCurrentSession().id;
-    _persistIdleExpiry(
-      sessionId,
-      _lifetime.persistedIdleExpiry!.millisecondsSinceEpoch,
-      _lifetime.maximumExpiry!.millisecondsSinceEpoch,
-      _lifetime.backgroundExpiry?.millisecondsSinceEpoch,
-    ).catchError((e) {
-      _logger.error(
-        'Failed to persist idle expiry: $e',
-        null,
-        null,
-        'coordinator',
-      );
-    });
-  }
-
   /// Dispose resources
   ///
   /// Stops all captures, flushes pending events, then closes connections.
@@ -1241,7 +1141,6 @@ class SessionReplayCoordinator implements WidgetCoordinator {
     // STEP 1: Stop all captures (prevents race condition with flush)
     _isDisposed = true;
     _recordingState = RecordingState.notRecording;
-    _pendingResume = null;
     _logger.debug(
       'Marked as disposed - no more captures will be accepted',
       tag: 'coordinator',
