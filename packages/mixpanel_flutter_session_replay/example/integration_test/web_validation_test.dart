@@ -8,6 +8,7 @@ import 'dart:js_interop_unsafe';
 import 'dart:convert';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show kIsWasm;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -73,7 +74,10 @@ void main() {
         directive: MaskingDirective(autoMaskTypes: const {AutoMaskedView.text}),
         logger: MixpanelLogger(LogLevel.none),
         debugOverlayEnabled: false,
-        frameAcquirer: RenderedSurfaceFrameAcquirer(compressor),
+        frameAcquirer: RenderedSurfaceFrameAcquirer(
+          compressor,
+          awaitFreshFrame: kIsWasm,
+        ),
       );
 
       final boundary = await _pumpScene(tester, complexity: 48);
@@ -256,7 +260,10 @@ void main() {
       directive: MaskingDirective(autoMaskTypes: const {}),
       logger: MixpanelLogger(LogLevel.none),
       debugOverlayEnabled: true,
-      frameAcquirer: RenderedSurfaceFrameAcquirer(compressor),
+      frameAcquirer: RenderedSurfaceFrameAcquirer(
+        compressor,
+        awaitFreshFrame: kIsWasm,
+      ),
     );
 
     final boundaryKey = GlobalKey();
@@ -357,7 +364,10 @@ void main() {
     );
     await compressor.initialize();
     addTearDown(compressor.dispose);
-    final acquirer = RenderedSurfaceFrameAcquirer(compressor);
+    final acquirer = RenderedSurfaceFrameAcquirer(
+      compressor,
+      awaitFreshFrame: kIsWasm,
+    );
     final capturer = ScreenshotCapturer(
       directive: MaskingDirective(
         autoMaskTypes: const {AutoMaskedView.text, AutoMaskedView.image},

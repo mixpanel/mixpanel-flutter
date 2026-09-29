@@ -1595,7 +1595,10 @@ class _CapturingCoordinator extends FakeWidgetCoordinator {
     directive: MaskingDirective(autoMaskTypes: const {}),
     logger: MixpanelLogger(LogLevel.none),
     debugOverlayEnabled: false,
-    frameAcquirer: RenderedSurfaceFrameAcquirer(_StaticSurfaceCapture()),
+    frameAcquirer: RenderedSurfaceFrameAcquirer(
+      _StaticSurfaceCapture(),
+      awaitFreshFrame: true,
+    ),
   );
   final SessionManager sessionManager = SessionManager();
 

@@ -32,7 +32,11 @@ class RenderedSurfaceFrameAcquirer extends FrameAcquirer {
   /// integration performance validation.
   Duration? lastPresentationWaitTime;
 
-  RenderedSurfaceFrameAcquirer(this._surface);
+  /// Whether [prepare] waits for a fresh Flutter frame; see [prepare].
+  final bool _awaitFreshFrame;
+
+  RenderedSurfaceFrameAcquirer(this._surface, {bool awaitFreshFrame = false})
+    : _awaitFreshFrame = awaitFreshFrame;
 
   /// Returns a down-only capture ratio that preserves aspect ratio while
   /// bounding both raster area and the longest encoded edge.
@@ -56,19 +60,25 @@ class RenderedSurfaceFrameAcquirer extends FrameAcquirer {
   @override
   bool get isAvailable => _surface.isAvailable;
 
-  /// Waits for a fresh Flutter frame before the surface is read.
+  /// With `awaitFreshFrame`, waits for a fresh Flutter frame before the
+  /// surface is read.
   ///
-  /// The web engine draws each frame to the canvas asynchronously after
-  /// Dart finishes it, so on a slow renderer (skwasm on a software GPU) the
-  /// canvas can still show an earlier frame than the one the mask walk
-  /// reads. The engine exposes no signal that a frame reached the canvas;
-  /// awaiting a new frame gives the pending draw that much more time to land,
-  /// which the presentation wait in [acquire] then extends. This frame ends
-  /// before the mask walk, so CaptureScheduler does not count it as new
-  /// content and it cannot re-arm the capture.
+  /// skwasm draws each frame to the canvas asynchronously after Dart
+  /// finishes it, so on a slow renderer (a software GPU) the canvas can
+  /// still show an earlier frame than the one the mask walk reads. The
+  /// engine exposes no signal that a frame reached the canvas; awaiting a new
+  /// frame gives the pending draw that much more time to land, which the
+  /// presentation wait in [acquire] then extends. This frame ends before the
+  /// mask walk, so CaptureScheduler does not count it as new content and it
+  /// cannot re-arm the capture.
+  ///
+  /// CanvasKit rasterizes on the main thread and only hands the result to
+  /// the canvas asynchronously, which the presentation wait covers. There an
+  /// extra frame per capture is a full re-render of the screen on the UI
+  /// thread, and it drops frames, so it is not requested.
   @override
   Future<FrameSourceStatus> prepare(Size logicalSize) async {
-    await SchedulerBinding.instance.endOfFrame;
+    if (_awaitFreshFrame) await SchedulerBinding.instance.endOfFrame;
     return switch (await _surface.waitUntilRenderedSurfaceAvailable(
       logicalSize,
     )) {

@@ -1,5 +1,7 @@
 export 'platform_init_types.dart';
 
+import 'package:flutter/foundation.dart' show kIsWasm;
+
 import '../capture/rendered_surface_frame_acquirer.dart';
 import '../debug_mask_overlay.dart';
 import '../storage/event_queue_interface.dart';
@@ -87,7 +89,11 @@ Future<PlatformInitResult> platformInit({
       directive: directive,
       logger: logger,
       debugOverlayEnabled: debugOverlayEnabled,
-      frameAcquirer: RenderedSurfaceFrameAcquirer(surfaceCapture),
+      // Wasm builds render with skwasm, whose canvas can lag Dart frames.
+      frameAcquirer: RenderedSurfaceFrameAcquirer(
+        surfaceCapture,
+        awaitFreshFrame: kIsWasm,
+      ),
       wireframeEmitter: wireframeEmitter,
       useAccessibilityLabelFallback: useAccessibilityLabelFallback,
     );
