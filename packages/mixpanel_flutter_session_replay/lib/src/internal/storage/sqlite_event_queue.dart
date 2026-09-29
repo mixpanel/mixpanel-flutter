@@ -227,6 +227,7 @@ class SqliteEventQueue implements EventQueue {
     // Step 2: Fetch events with size filtering
     final rows = await _fetchEventsWithSizeLimit(
       sessionId: sessionId,
+      distinctId: distinctId,
       boundaryId: boundaryId,
       maxBytes: maxBytes,
       maxCount: maxCount,
@@ -260,8 +261,14 @@ class SqliteEventQueue implements EventQueue {
   }
 
   /// Fetch events with cumulative size and count limits.
+  ///
+  /// Both queries also filter on [distinctId]. The boundary only covers
+  /// events that existed when it was read; the recorder can insert another
+  /// user's event (after `identify`) between these awaits, and it must not
+  /// join this batch.
   Future<List<Map<String, Object?>>> _fetchEventsWithSizeLimit({
     required String sessionId,
+    required String distinctId,
     required int? boundaryId,
     required int maxBytes,
     required int maxCount,
@@ -278,11 +285,12 @@ class SqliteEventQueue implements EventQueue {
       SELECT id, data_size
       FROM events
       WHERE session_id = ?
+        AND distinct_id = ?
         AND id < ?
       ORDER BY id ASC
       LIMIT ?
       ''',
-      [sessionId, effectiveBoundary, maxCount],
+      [sessionId, distinctId, effectiveBoundary, maxCount],
     );
 
     var lastId = -1;
@@ -301,10 +309,11 @@ class SqliteEventQueue implements EventQueue {
              payload_metadata, payload_binary, data_size
       FROM events
       WHERE session_id = ?
+        AND distinct_id = ?
         AND id <= ?
       ORDER BY id ASC
       ''',
-      [sessionId, lastId],
+      [sessionId, distinctId, lastId],
     );
   }
 

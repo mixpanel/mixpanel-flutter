@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/storage/sqlite_event_queue.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/configuration.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/logger.dart';
+import 'package:mixpanel_flutter_session_replay/src/models/session_event.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'dart:io';
 
@@ -87,6 +88,36 @@ void main() {
 
     // Shared contract tests (identical assertions for all EventQueue impls)
     runEventQueueContractTests(() => storage);
+
+    test('should keep another user out of a batch when their event is added '
+        'while the batch is read', () async {
+      // GIVEN a session holding events for user-1
+      SessionReplayEvent eventFor(String distinctId, int ms) =>
+          SessionReplayEvent(
+            sessionId: 'session',
+            distinctId: distinctId,
+            timestamp: DateTime.fromMillisecondsSinceEpoch(ms, isUtc: true),
+            type: EventType.interaction,
+            payload: InteractionPayload(interactionType: 7, x: 1, y: 2),
+          );
+      await storage.add(eventFor('user-1', 1));
+      await storage.add(eventFor('user-1', 2));
+
+      // WHEN identify moves recording to user-2 while user-1's batch is
+      // being read: the insert is queued behind the boundary query but
+      // ahead of the queries that select the batch
+      final adding = storage.add(eventFor('user-2', 3));
+      final batch = await storage.fetchBatch(
+        sessionId: 'session',
+        distinctId: 'user-1',
+        maxBytes: 1 << 20,
+        maxCount: 100,
+      );
+      await adding;
+
+      // THEN the batch holds only user-1's events
+      expect(batch.map((event) => event.distinctId), ['user-1', 'user-1']);
+    });
 
     runQuotaEnforcementTests(() async {
       final quotaDir = await Directory.systemTemp.createTemp('mixpanel_quota_');
