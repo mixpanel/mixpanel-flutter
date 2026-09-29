@@ -20,7 +20,7 @@ class InMemoryEventQueue implements EventQueue {
   }
 
   @override
-  Future<void> add(SessionReplayEvent event) async {
+  Future<bool> add(SessionReplayEvent event) async {
     _checkNotDisposed();
 
     // Rough estimate of data size for batching
@@ -37,6 +37,7 @@ class InMemoryEventQueue implements EventQueue {
         payload: event.payload,
       ),
     );
+    return true;
   }
 
   /// Estimate payload size in bytes (rough approximation)
@@ -74,10 +75,16 @@ class InMemoryEventQueue implements EventQueue {
   }
 
   @override
-  Future<QueuedEventHeader?> fetchOldestHeader() async {
+  Future<QueuedEventHeader?> fetchOldestHeader({
+    Set<String> excludeSessionIds = const {},
+  }) async {
     _checkNotDisposed();
-    if (_events.isEmpty) return null;
-    return _headerFor(_events.first);
+    for (final event in _events) {
+      if (!excludeSessionIds.contains(event.sessionId)) {
+        return _headerFor(event);
+      }
+    }
+    return null;
   }
 
   @override
@@ -109,9 +116,10 @@ class InMemoryEventQueue implements EventQueue {
     int totalBytes = 0;
 
     for (final event in _events) {
-      if (event.sessionId != sessionId || event.distinctId != distinctId) {
-        break;
-      }
+      // Same semantics as every production queue: other sessions are skipped,
+      // and the batch ends at the first identity change within this session.
+      if (event.sessionId != sessionId) continue;
+      if (event.distinctId != distinctId) break;
 
       // Use the dataSize field from the persisted event
       if (batch.isNotEmpty &&

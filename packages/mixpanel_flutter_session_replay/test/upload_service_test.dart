@@ -1248,6 +1248,63 @@ void main() {
         expect(leaseQueue.eventCount, 1, reason: 'nothing uploaded');
         expect(leaseQueue.releaseOwnerIds, isEmpty);
       });
+
+      test(
+        'uploads the next session when another owner holds the oldest lease',
+        () async {
+          // GIVEN an expired session another tab is draining sits ahead of
+          // this tab's own session in the queue
+          final leaseQueue = LeaseEventQueue()
+            ..busySessionIds.add('contended-session');
+          await leaseQueue.initialize();
+          for (final (id, timestamp) in [
+            ('contended-session', 1000),
+            ('own-session', 2000),
+          ]) {
+            await leaseQueue.createSessionMetadata(
+              Session(
+                id: id,
+                startTime: DateTime.fromMillisecondsSinceEpoch(
+                  timestamp,
+                  isUtc: true,
+                ),
+                status: SessionStatus.active,
+              ),
+            );
+            await leaseQueue.add(
+              SessionReplayEvent(
+                sessionId: id,
+                distinctId: testDistinctId,
+                timestamp: DateTime.fromMillisecondsSinceEpoch(
+                  timestamp + 1,
+                  isUtc: true,
+                ),
+                type: EventType.interaction,
+                payload: InteractionPayload(interactionType: 7, x: 1, y: 2),
+              ),
+            );
+          }
+          final service = createService(eventQueue: leaseQueue);
+
+          // WHEN a flush runs while the other tab holds the first lease
+          await service.flush();
+
+          // THEN the busy session is left alone and this tab's replay is
+          // uploaded instead of waiting behind it; the flush ends once the
+          // contended session is all that remains
+          expect(leaseQueue.acquireSessionIds, [
+            'contended-session',
+            'own-session',
+            'contended-session',
+          ]);
+          expect(leaseQueue.releaseSessionIds, ['own-session']);
+          expect(
+            (await leaseQueue.fetchOldestHeader())?.sessionId,
+            'contended-session',
+            reason: 'only the contended session still has events queued',
+          );
+        },
+      );
     });
 
     group('storage failures', () {
@@ -1267,9 +1324,9 @@ void main() {
 
       test('flushOneBatch swallows a failing progress read', () async {
         // GIVEN a healthy upload whose falling-behind header read fails. The
-        // first two oldest-header reads (batch selection and post-removal
-        // verification) succeed; the third, outside _uploadBatch, throws.
-        final failingQueue = _FailingHeaderQueue(failAfterFetches: 2);
+        // first oldest-header read (batch selection) succeeds; the second,
+        // outside _uploadBatch, throws.
+        final failingQueue = _FailingHeaderQueue(failAfterFetches: 1);
         await failingQueue.initialize();
         final session = Session(
           id: testSessionId,
@@ -1349,10 +1406,12 @@ class _FailingHeaderQueue extends InMemoryEventQueue {
   }
 
   @override
-  Future<QueuedEventHeader?> fetchOldestHeader() {
+  Future<QueuedEventHeader?> fetchOldestHeader({
+    Set<String> excludeSessionIds = const {},
+  }) {
     if (_oldestHeaderFetches++ >= failAfterFetches) {
       throw StateError('IndexedDB connection is closed');
     }
-    return super.fetchOldestHeader();
+    return super.fetchOldestHeader(excludeSessionIds: excludeSessionIds);
   }
 }

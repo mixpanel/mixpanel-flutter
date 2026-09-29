@@ -266,7 +266,7 @@ class IndexedDbEventQueue
   }
 
   @override
-  Future<void> add(SessionReplayEvent event) async {
+  Future<bool> add(SessionReplayEvent event) async {
     await _ensureOpen();
 
     final row = event.toDbRow();
@@ -309,6 +309,7 @@ class IndexedDbEventQueue
         'dropping event',
       );
     }
+    return accepted;
   }
 
   /// Sessions whose events this tab must leave alone: recorded by another tab
@@ -404,14 +405,19 @@ class IndexedDbEventQueue
   }
 
   @override
-  Future<QueuedEventHeader?> fetchOldestHeader() => _fetchHeader('next');
+  Future<QueuedEventHeader?> fetchOldestHeader({
+    Set<String> excludeSessionIds = const {},
+  }) => _fetchHeader('next', excludeSessionIds: excludeSessionIds);
 
   @override
   Future<QueuedEventHeader?> fetchNewestHeader() => _fetchHeader('prev');
 
-  Future<QueuedEventHeader?> _fetchHeader(String direction) async {
+  Future<QueuedEventHeader?> _fetchHeader(
+    String direction, {
+    Set<String> excludeSessionIds = const {},
+  }) async {
     await _ensureOpen();
-    final blocked = await _foreignLiveSessionIds();
+    final blocked = {...await _foreignLiveSessionIds(), ...excludeSessionIds};
 
     final txn = _transaction(_eventsStore.toJS, 'readonly');
     final index = txn.objectStore(_eventsStore).index(_eventHeaderIndex);

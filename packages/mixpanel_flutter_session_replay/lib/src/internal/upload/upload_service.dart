@@ -21,6 +21,8 @@ enum UploadResult {
   serverError,
   quotaExceeded,
   backoff,
+
+  /// Every session with queued events is being uploaded by another runtime.
   busy,
 }
 
@@ -322,7 +324,7 @@ class UploadService {
           _handleFailure();
           break; // Stop flushing on error
         } else {
-          break; // No more events or backoff
+          break; // Remaining sessions are leased elsewhere, or backoff
         }
       }
 
@@ -354,56 +356,68 @@ class UploadService {
     }
   }
 
-  /// Upload a single batch of events
+  /// Upload a single batch of events.
+  ///
+  /// A session another runtime holds the lease for is skipped in favor of
+  /// the next eligible one, so one contended expired session cannot hold
+  /// back this runtime's own replay. Returns [UploadResult.busy] only when
+  /// every session with queued events is leased elsewhere.
   Future<UploadResult> _uploadBatch() async {
-    // The queue decides which events this runtime may upload: on web that is
-    // its own sessions plus expired ones, matching mixpanel-js. FIFO within
-    // that scope prevents abandoned events.
-    final QueuedEventHeader? oldestEvent;
-    try {
-      oldestEvent = await eventQueue.fetchOldestHeader();
-    } catch (e) {
-      _logger.error('Failed to read the upload queue: $e');
-      return UploadResult.networkError;
-    }
-    if (oldestEvent == null) {
-      return UploadResult.success; // No events to upload
-    }
-
-    final queue = eventQueue;
-    if (queue is! UploadLease) {
-      return _uploadNextBatch(oldestEvent);
-    }
-    // Per-session lease, as mixpanel-js locks per replay. Contention only
-    // arises when several tabs drain the same expired session.
-    final uploadLease = queue as UploadLease;
-
-    var acquired = false;
-    try {
-      acquired = await uploadLease.acquireUploadLease(
-        ownerId: uploadLease.uploadLeaseOwnerId,
-        sessionId: oldestEvent.sessionId,
-        ttl: _uploadLeaseTtl,
-      );
-      if (!acquired) {
-        _logger.debug(
-          'Another browser tab is uploading session ${oldestEvent.sessionId}',
+    final busySessions = <String>{};
+    while (true) {
+      // The queue decides which events this runtime may upload: on web that
+      // is its own sessions plus expired ones, matching mixpanel-js. FIFO
+      // within that scope prevents abandoned events.
+      final QueuedEventHeader? oldestEvent;
+      try {
+        oldestEvent = await eventQueue.fetchOldestHeader(
+          excludeSessionIds: busySessions,
         );
-        return UploadResult.busy;
+      } catch (e) {
+        _logger.error('Failed to read the upload queue: $e');
+        return UploadResult.networkError;
       }
-      return await _uploadNextBatch(oldestEvent);
-    } catch (e) {
-      _logger.error('Failed to coordinate replay upload: $e');
-      return UploadResult.networkError;
-    } finally {
-      if (acquired) {
-        try {
-          await uploadLease.releaseUploadLease(
-            ownerId: uploadLease.uploadLeaseOwnerId,
-            sessionId: oldestEvent.sessionId,
+      if (oldestEvent == null) {
+        return busySessions.isEmpty ? UploadResult.success : UploadResult.busy;
+      }
+
+      final queue = eventQueue;
+      if (queue is! UploadLease) {
+        return _uploadNextBatch(oldestEvent);
+      }
+      // Per-session lease, as mixpanel-js locks per replay. Contention only
+      // arises when several tabs drain the same expired session.
+      final uploadLease = queue as UploadLease;
+
+      var acquired = false;
+      try {
+        acquired = await uploadLease.acquireUploadLease(
+          ownerId: uploadLease.uploadLeaseOwnerId,
+          sessionId: oldestEvent.sessionId,
+          ttl: _uploadLeaseTtl,
+        );
+        if (!acquired) {
+          _logger.debug(
+            'Another browser tab is uploading session '
+            '${oldestEvent.sessionId}; trying the next session',
           );
-        } catch (e) {
-          _logger.warning('Failed to release replay upload lease: $e');
+          busySessions.add(oldestEvent.sessionId);
+          continue;
+        }
+        return await _uploadNextBatch(oldestEvent);
+      } catch (e) {
+        _logger.error('Failed to coordinate replay upload: $e');
+        return UploadResult.networkError;
+      } finally {
+        if (acquired) {
+          try {
+            await uploadLease.releaseUploadLease(
+              ownerId: uploadLease.uploadLeaseOwnerId,
+              sessionId: oldestEvent.sessionId,
+            );
+          } catch (e) {
+            _logger.warning('Failed to release replay upload lease: $e');
+          }
         }
       }
     }
@@ -523,12 +537,6 @@ class UploadService {
             _logger.error('Failed to persist sequence number: $e');
           }
         }
-
-        // Verify events were removed
-        final remainingOldest = await eventQueue.fetchOldestHeader();
-        _logger.debug(
-          'After removal, oldest event: ${remainingOldest?.id} (session: ${remainingOldest?.sessionId}, distinctId: ${remainingOldest?.distinctId})',
-        );
 
         _logger.info('Successfully uploaded ${events.length} events');
         return UploadResult.success;

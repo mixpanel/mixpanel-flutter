@@ -20,6 +20,9 @@ class LeaseEventQueue extends InMemoryEventQueue
   /// Results returned by successive acquire calls; `true` once exhausted.
   final List<bool> acquireResults = [];
 
+  /// Sessions whose lease another owner holds for the whole test.
+  final Set<String> busySessionIds = {};
+
   int commitCount = 0;
 
   @override
@@ -30,6 +33,7 @@ class LeaseEventQueue extends InMemoryEventQueue
   }) async {
     acquireOwnerIds.add(ownerId);
     acquireSessionIds.add(sessionId);
+    if (busySessionIds.contains(sessionId)) return false;
     return acquireResults.isEmpty ? true : acquireResults.removeAt(0);
   }
 

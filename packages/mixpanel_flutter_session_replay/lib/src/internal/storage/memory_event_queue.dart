@@ -24,18 +24,19 @@ class MemoryEventQueue implements EventQueue {
   Future<void> initialize() async {}
 
   @override
-  Future<void> add(SessionReplayEvent event) async {
+  Future<bool> add(SessionReplayEvent event) async {
     _checkState();
     final row = event.toDbRow()..['id'] = _nextId;
     final persisted = PersistedSessionReplayEvent.fromDbRow(row);
     final quotaBytes = quotaMB * 1024 * 1024;
     if (_sizeBytes + persisted.dataSize > quotaBytes) {
       _logger.warning('In-memory replay queue quota exceeded; dropping event');
-      return;
+      return false;
     }
     _nextId++;
     _events.add(persisted);
     _sizeBytes += persisted.dataSize;
+    return true;
   }
 
   @override
@@ -58,9 +59,16 @@ class MemoryEventQueue implements EventQueue {
   }
 
   @override
-  Future<QueuedEventHeader?> fetchOldestHeader() async {
+  Future<QueuedEventHeader?> fetchOldestHeader({
+    Set<String> excludeSessionIds = const {},
+  }) async {
     _checkState();
-    return _events.isEmpty ? null : _headerFor(_events.first);
+    for (final event in _events) {
+      if (!excludeSessionIds.contains(event.sessionId)) {
+        return _headerFor(event);
+      }
+    }
+    return null;
   }
 
   @override

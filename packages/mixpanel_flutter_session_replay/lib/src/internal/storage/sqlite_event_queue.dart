@@ -93,7 +93,7 @@ class SqliteEventQueue implements EventQueue {
   }
 
   @override
-  Future<void> add(SessionReplayEvent event) async {
+  Future<bool> add(SessionReplayEvent event) async {
     if (_db == null) {
       throw StateError('Queue not initialized');
     }
@@ -113,11 +113,12 @@ class SqliteEventQueue implements EventQueue {
       _logger.warning(
         'Queue quota exceeded ($currentSize + $eventSize > $quotaBytes), dropping event',
       );
-      return; // Drop the event instead of inserting
+      return false; // Drop the event instead of inserting
     }
 
     // Insert into database
     await _db!.insert('events', eventRow);
+    return true;
   }
 
   @override
@@ -175,19 +176,28 @@ class SqliteEventQueue implements EventQueue {
   }
 
   @override
-  Future<QueuedEventHeader?> fetchOldestHeader() => _fetchHeader('ASC');
+  Future<QueuedEventHeader?> fetchOldestHeader({
+    Set<String> excludeSessionIds = const {},
+  }) => _fetchHeader('ASC', excludeSessionIds: excludeSessionIds);
 
   @override
   Future<QueuedEventHeader?> fetchNewestHeader() => _fetchHeader('DESC');
 
-  Future<QueuedEventHeader?> _fetchHeader(String direction) async {
+  Future<QueuedEventHeader?> _fetchHeader(
+    String direction, {
+    Set<String> excludeSessionIds = const {},
+  }) async {
     if (_db == null) {
       throw StateError('Storage not initialized');
     }
 
+    final excluded = excludeSessionIds.toList(growable: false);
+    final placeholders = List.filled(excluded.length, '?').join(', ');
     final rows = await _db!.query(
       'events',
       columns: ['id', 'session_id', 'distinct_id', 'timestamp'],
+      where: excluded.isEmpty ? null : 'session_id NOT IN ($placeholders)',
+      whereArgs: excluded.isEmpty ? null : excluded,
       orderBy: 'id $direction',
       limit: 1,
     );

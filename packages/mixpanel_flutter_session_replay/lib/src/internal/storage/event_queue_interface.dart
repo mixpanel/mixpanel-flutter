@@ -50,8 +50,12 @@ abstract class EventQueue {
   /// Initialize the queue
   Future<void> initialize();
 
-  /// Add an event to the queue
-  Future<void> add(SessionReplayEvent event);
+  /// Add an event to the queue.
+  ///
+  /// Returns false when the event was dropped, for example because storing it
+  /// would exceed the quota. A dropped event must not be treated as stored:
+  /// the recorder relies on this to re-emit a session's viewport metadata.
+  Future<bool> add(SessionReplayEvent event);
 
   /// Create session metadata in upload_metadata table
   ///
@@ -69,7 +73,12 @@ abstract class EventQueue {
   Future<PersistedSessionReplayEvent?> fetchNewest();
 
   /// Get payload-free metadata for the oldest event across all sessions.
-  Future<QueuedEventHeader?> fetchOldestHeader();
+  ///
+  /// Events of sessions in [excludeSessionIds] are skipped, so an uploader can
+  /// move past a session that another runtime is draining at the moment.
+  Future<QueuedEventHeader?> fetchOldestHeader({
+    Set<String> excludeSessionIds = const {},
+  });
 
   /// Get payload-free metadata for the newest event across all sessions.
   Future<QueuedEventHeader?> fetchNewestHeader();

@@ -2057,9 +2057,9 @@ class _RecordingEventQueue extends InMemoryEventQueue {
   final List<SessionReplayEvent> addedEvents = [];
 
   @override
-  Future<void> add(SessionReplayEvent event) async {
+  Future<bool> add(SessionReplayEvent event) async {
     addedEvents.add(event);
-    await super.add(event);
+    return super.add(event);
   }
 }
 
@@ -2070,12 +2070,12 @@ class _PausingMetadataEventQueue extends InMemoryEventQueue {
   bool metadataAddStarted = false;
 
   @override
-  Future<void> add(SessionReplayEvent event) async {
+  Future<bool> add(SessionReplayEvent event) async {
     if (event.type == EventType.metadata) {
       metadataAddStarted = true;
       await _metadataGate.future;
     }
-    await super.add(event);
+    return super.add(event);
   }
 
   void releaseMetadata() {

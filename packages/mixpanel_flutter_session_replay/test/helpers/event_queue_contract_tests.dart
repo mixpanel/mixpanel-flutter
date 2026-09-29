@@ -69,7 +69,7 @@ void runEventQueueContractTests(EventQueue Function() getStorage) {
         payload: InteractionPayload(interactionType: 1, x: 10, y: 20),
       );
 
-      await storage.add(event);
+      expect(await storage.add(event), isTrue);
 
       final oldest = await storage.fetchOldest();
       expect(oldest, isNotNull);
@@ -83,6 +83,38 @@ void runEventQueueContractTests(EventQueue Function() getStorage) {
       expect(payload.interactionType, 1);
       expect(payload.x, 10);
       expect(payload.y, 20);
+    });
+
+    test('fetchOldestHeader skips excluded sessions', () async {
+      // GIVEN events from two sessions, the excluded one queued first
+      final storage = getStorage();
+      for (final (sessionId, timestamp) in [('busy', 100), ('mine', 200)]) {
+        await storage.add(
+          SessionReplayEvent(
+            sessionId: sessionId,
+            distinctId: 'user1',
+            timestamp: DateTime.fromMillisecondsSinceEpoch(
+              timestamp,
+              isUtc: true,
+            ),
+            type: EventType.interaction,
+            payload: InteractionPayload(interactionType: 1, x: 10, y: 20),
+          ),
+        );
+      }
+
+      // THEN the oldest header comes from the first session not excluded
+      expect((await storage.fetchOldestHeader())?.sessionId, 'busy');
+      expect(
+        (await storage.fetchOldestHeader(
+          excludeSessionIds: {'busy'},
+        ))?.sessionId,
+        'mine',
+      );
+      expect(
+        await storage.fetchOldestHeader(excludeSessionIds: {'busy', 'mine'}),
+        isNull,
+      );
     });
 
     test('round-trips screenshot binary data', () async {
@@ -687,7 +719,13 @@ void runQuotaEnforcementTests(
         type: EventType.screenshot,
         payload: ScreenshotPayload(imageData: Uint8List(200000)),
       );
-      await storage.add(anotherLargeEvent);
+      expect(
+        await storage.add(anotherLargeEvent),
+        isFalse,
+        reason:
+            'a dropped event must be reported so callers do not treat '
+            'it as stored',
+      );
 
       // Should still only have 1 event (second event was dropped)
       oldest = await storage.fetchOldest();
