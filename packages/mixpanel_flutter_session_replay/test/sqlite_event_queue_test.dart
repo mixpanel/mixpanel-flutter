@@ -119,6 +119,40 @@ void main() {
       expect(batch.map((event) => event.distinctId), ['user-1', 'user-1']);
     });
 
+    test('should not skip another user\'s earlier event when both users add '
+        'events while the batch is read', () async {
+      // GIVEN a session holding events for user-1
+      SessionReplayEvent eventFor(String distinctId, int ms) =>
+          SessionReplayEvent(
+            sessionId: 'session',
+            distinctId: distinctId,
+            timestamp: DateTime.fromMillisecondsSinceEpoch(ms, isUtc: true),
+            type: EventType.interaction,
+            payload: InteractionPayload(interactionType: 7, x: 1, y: 2),
+          );
+      await storage.add(eventFor('user-1', 1));
+      await storage.add(eventFor('user-1', 2));
+
+      // WHEN user-2 and then user-1 again record while user-1's batch is
+      // being read
+      final addingUser2 = storage.add(eventFor('user-2', 3));
+      final addingUser1 = storage.add(eventFor('user-1', 4));
+      final batch = await storage.fetchBatch(
+        sessionId: 'session',
+        distinctId: 'user-1',
+        maxBytes: 1 << 20,
+        maxCount: 100,
+      );
+      await Future.wait([addingUser2, addingUser1]);
+
+      // THEN the batch stops before user-2's event rather than jumping
+      // ahead to user-1's later one, keeping upload order
+      expect(batch.map((event) => event.timestamp.millisecondsSinceEpoch), [
+        1,
+        2,
+      ]);
+    });
+
     runQuotaEnforcementTests(() async {
       final quotaDir = await Directory.systemTemp.createTemp('mixpanel_quota_');
       final quotaStorage = SqliteEventQueue(

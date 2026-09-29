@@ -217,18 +217,11 @@ class SqliteEventQueue implements EventQueue {
     }
 
     // Get CONSECUTIVE events for the given sessionId and distinctId,
-    // stopping at the first event where distinctId changes.
-    //
-    // This ensures we don't mix different users in the same upload batch.
-
-    // Step 1: Find the boundary - first event where distinctId changes
-    final boundaryId = await _findDistinctIdBoundary(sessionId, distinctId);
-
-    // Step 2: Fetch events with size filtering
+    // stopping at the first event where distinctId changes, so a batch never
+    // mixes users or skips another user's earlier event.
     final rows = await _fetchEventsWithSizeLimit(
       sessionId: sessionId,
       distinctId: distinctId,
-      boundaryId: boundaryId,
       maxBytes: maxBytes,
       maxCount: maxCount,
     );
@@ -238,45 +231,18 @@ class SqliteEventQueue implements EventQueue {
         .toList();
   }
 
-  /// Find the first event ID where distinctId changes (boundary detection)
-  Future<int?> _findDistinctIdBoundary(
-    String sessionId,
-    String distinctId,
-  ) async {
-    final rows = await _db!.rawQuery(
-      '''
-      SELECT MIN(id) as boundary_id
-      FROM events
-      WHERE session_id = ?
-        AND distinct_id != ?
-      ''',
-      [sessionId, distinctId],
-    );
-
-    if (rows.isEmpty || rows.first['boundary_id'] == null) {
-      return null;
-    }
-
-    return rows.first['boundary_id'] as int;
-  }
-
   /// Fetch events with cumulative size and count limits.
   ///
-  /// Both queries also filter on [distinctId]. The boundary only covers
-  /// events that existed when it was read; the recorder can insert another
-  /// user's event (after `identify`) between these awaits, and it must not
-  /// join this batch.
+  /// The distinctId boundary is computed inside the same statement that
+  /// selects the batch. As separate queries, the recorder could insert
+  /// between them (after `identify`), and the batch would either take
+  /// another user's event or skip it and upload a later event first.
   Future<List<Map<String, Object?>>> _fetchEventsWithSizeLimit({
     required String sessionId,
     required String distinctId,
-    required int? boundaryId,
     required int maxBytes,
     required int maxCount,
   }) async {
-    // Use a very large number as the boundary if none exists
-    // This allows us to use a single query for both cases
-    final effectiveBoundary = boundaryId ?? (1 << 62); // Large boundary value
-
     // Choose the batch from sizes alone so payloads beyond the byte budget
     // never cross the platform channel. The first event is always included,
     // so a single oversized event cannot block the queue.
@@ -285,12 +251,14 @@ class SqliteEventQueue implements EventQueue {
       SELECT id, data_size
       FROM events
       WHERE session_id = ?
-        AND distinct_id = ?
-        AND id < ?
+        AND id < COALESCE(
+          (SELECT MIN(id) FROM events WHERE session_id = ? AND distinct_id != ?),
+          ?
+        )
       ORDER BY id ASC
       LIMIT ?
       ''',
-      [sessionId, distinctId, effectiveBoundary, maxCount],
+      [sessionId, sessionId, distinctId, 1 << 62, maxCount],
     );
 
     var lastId = -1;
@@ -303,17 +271,18 @@ class SqliteEventQueue implements EventQueue {
     }
     if (lastId == -1) return const [];
 
+    // Ids are AUTOINCREMENT, so every row inserted after the batch was chosen
+    // has an id above lastId: this reads exactly the chosen rows.
     return await _db!.rawQuery(
       '''
       SELECT id, session_id, distinct_id, timestamp, type,
              payload_metadata, payload_binary, data_size
       FROM events
       WHERE session_id = ?
-        AND distinct_id = ?
         AND id <= ?
       ORDER BY id ASC
       ''',
-      [sessionId, distinctId, lastId],
+      [sessionId, lastId],
     );
   }
 
