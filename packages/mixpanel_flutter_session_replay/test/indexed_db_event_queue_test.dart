@@ -11,6 +11,7 @@ import 'package:mixpanel_flutter_session_replay/src/models/session.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/session_event.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/configuration.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/logger.dart';
+import 'package:mixpanel_flutter_session_replay/src/internal/session/recording_limits.dart';
 import 'package:web/web.dart' as web;
 
 import 'helpers/event_queue_contract_tests.dart';
@@ -474,8 +475,37 @@ void main() {
         expect((await otherTab.fetchOldestHeader())?.sessionId, 'other-live');
       });
 
+      test(
+        'a live session stays blocked while its stored deadline lags',
+        () async {
+          // GIVEN another tab recording a session whose persisted idle
+          // deadline has just passed. Its in-memory deadline is newer: the
+          // owning tab persists activity at most once per write debounce.
+          final otherTab = await openOtherTab();
+          await otherTab.createSessionMetadata(
+            Session(
+              id: 'other-lagging',
+              startTime: DateTime.utc(2025),
+              status: SessionStatus.active,
+            ),
+          );
+          final nowMs = DateTime.now().millisecondsSinceEpoch;
+          await otherTab.updateSessionExpiry(
+            sessionId: 'other-lagging',
+            idleExpiresMs: nowMs - 1000,
+            maxExpiresMs: nowMs + 3600000,
+          );
+          await addEvent(otherTab, 'other-lagging');
+
+          // THEN this tab does not start draining a replay that may still be
+          // recording
+          expect(await storage.fetchOldestHeader(), isNull);
+        },
+      );
+
       test('another tab may drain a session once it has expired', () async {
-        // GIVEN a session another tab recorded whose deadlines have passed
+        // GIVEN a session another tab recorded whose deadlines have passed,
+        // by more than the owning tab's deadline write debounce
         final otherTab = await openOtherTab();
         await otherTab.createSessionMetadata(
           Session(
@@ -484,7 +514,10 @@ void main() {
             status: SessionStatus.active,
           ),
         );
-        final past = DateTime.now().millisecondsSinceEpoch - 1000;
+        final past =
+            DateTime.now().millisecondsSinceEpoch -
+            expiryWriteDebounce.inMilliseconds -
+            1000;
         await otherTab.updateSessionExpiry(
           sessionId: 'other-expired',
           idleExpiresMs: past,

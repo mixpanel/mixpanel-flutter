@@ -105,11 +105,9 @@ class SessionReplayCoordinator implements WidgetCoordinator {
   )?
   _persistIdleExpiry;
 
-  /// Debounce: last time we persisted idle expiry to IndexedDB
+  /// Debounce: last time we persisted idle expiry to IndexedDB. Activity
+  /// writes are held back by [expiryWriteDebounce] to avoid excessive writes.
   DateTime? _lastExpiryWriteTime;
-
-  /// Debounce interval for expiry writes (avoid excessive IDB writes)
-  static const _expiryWriteDebounce = Duration(seconds: 5);
 
   SessionReplayCoordinator({
     required ScreenshotCapturer screenshotCapturer,
@@ -1194,7 +1192,7 @@ class SessionReplayCoordinator implements WidgetCoordinator {
 
     final now = clock.now();
     if (_lastExpiryWriteTime != null &&
-        now.difference(_lastExpiryWriteTime!) < _expiryWriteDebounce) {
+        now.difference(_lastExpiryWriteTime!) < expiryWriteDebounce) {
       return;
     }
 

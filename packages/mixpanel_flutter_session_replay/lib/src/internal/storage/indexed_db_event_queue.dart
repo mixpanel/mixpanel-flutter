@@ -154,29 +154,23 @@ class IndexedDbEventQueue
         openedDb.close();
         return;
       }
-      _logger.debug('IndexedDB opened: $_dbName');
+      _logger.debug('IndexedDB opened');
       completer.complete(openedDb);
     }.toJS;
 
     request.onerror = (web.Event event) {
       blockedTimer?.cancel();
       if (!completer.isCompleted) {
-        completer.completeError(
-          StateError('Failed to open IndexedDB: $_dbName'),
-        );
+        completer.completeError(StateError('Failed to open IndexedDB'));
       }
     }.toJS;
 
     request.onblocked = (web.Event event) {
-      _logger.warning(
-        'Opening IndexedDB is waiting for another tab to close: $_dbName',
-      );
+      _logger.warning('Opening IndexedDB is waiting for another tab to close');
       blockedTimer ??= Timer(const Duration(seconds: 5), () {
         if (!completer.isCompleted) {
           completer.completeError(
-            StateError(
-              'Opening IndexedDB was blocked by another tab: $_dbName',
-            ),
+            StateError('Opening IndexedDB was blocked by another tab'),
           );
         }
       });
@@ -222,7 +216,7 @@ class IndexedDbEventQueue
     if (_db != null) return;
     final retryAfter = _reopenRetryAfter;
     if (retryAfter != null && DateTime.now().isBefore(retryAfter)) {
-      throw StateError('IndexedDB connection is closed: $_dbName');
+      throw StateError('IndexedDB connection is closed');
     }
     await (_reopening ??= _reopen().whenComplete(() => _reopening = null));
     if (_disposed) throw StateError('EventQueue has been disposed');
@@ -238,7 +232,7 @@ class IndexedDbEventQueue
       _attach(db);
       _currentSizeBytes = await _synchronizeTotalSize();
       _reopenRetryAfter = null;
-      _logger.info('IndexedDB connection reopened: $_dbName');
+      _logger.info('IndexedDB connection reopened');
     } catch (error) {
       _reopenRetryAfter = DateTime.now().add(_reopenRetryInterval);
       _logger.warning('Failed to reopen IndexedDB: $error');
@@ -255,7 +249,7 @@ class IndexedDbEventQueue
     // A versionchange or close event can land between _ensureOpen() and here.
     final db = _db;
     if (db == null) {
-      throw StateError('IndexedDB connection is closed: $_dbName');
+      throw StateError('IndexedDB connection is closed');
     }
     try {
       return db.transaction(storeNames, mode);
@@ -345,7 +339,12 @@ class IndexedDbEventQueue
       final startMs = _asNullableInt(metadata['session_start_time']) ?? 0;
       return nowMs - startMs < maxRecordingDuration.inMilliseconds;
     }
-    return deadlines.every((deadline) => nowMs < deadline);
+    // The owning tab refreshes its idle deadline in memory on every input
+    // but persists it at most once per [expiryWriteDebounce]. Allow that lag
+    // before treating the replay as over, so a tab still recording is never
+    // mistaken for an expired one and drained by another tab.
+    final graceMs = expiryWriteDebounce.inMilliseconds;
+    return deadlines.every((deadline) => nowMs < deadline + graceMs);
   }
 
   @override
