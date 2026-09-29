@@ -202,6 +202,59 @@ void main() {
       expect(capturer.lastPostSnapshotMaskValidationTime, isNull);
     });
 
+    testWidgets(
+      'should keep a native frame when recording stops after toImage is called',
+      (tester) async {
+        // GIVEN a settled screen, so capture reaches toImage() before it
+        // first yields
+        final key = GlobalKey();
+        await tester.pumpWidget(
+          Directionality(
+            textDirection: TextDirection.ltr,
+            child: RepaintBoundary(
+              key: key,
+              child: const ColoredBox(
+                color: Colors.white,
+                child: Text('Screen B'),
+              ),
+            ),
+          ),
+        );
+        await tester.pump();
+        final element = key.currentContext! as Element;
+        final boundary = element.findRenderObject()! as RenderRepaintBoundary;
+        final compressor = _RecordingCompressor();
+        final capturer = ScreenshotCapturer(
+          directive: MaskingDirective(autoMaskTypes: const {}),
+          logger: MixpanelLogger(LogLevel.none),
+          debugOverlayEnabled: false,
+          frameAcquirer: ToImageFrameAcquirer(
+            compressor,
+            logger: MixpanelLogger(LogLevel.none),
+          ),
+        );
+
+        // WHEN recording stops while the image is still being produced
+        var stopped = false;
+        final pending = tester.runAsync(
+          () => capturer.capture(
+            boundary,
+            boundaryElement: element,
+            getCurrentSession: SessionManager().getCurrentSession,
+            getDistinctId: () => 'screenshot-capturer-test-distinct-id',
+            isCancelled: () => stopped,
+          ),
+        );
+        stopped = true;
+        final result = await pending;
+
+        // THEN the frame, fixed before the stop, is still encoded for its
+        // replay rather than dropped
+        expect(result, isA<CaptureSuccess>());
+        expect(compressor.width, isNotNull);
+      },
+    );
+
     testWidgets('does not request a frame when the scheduler is idle', (
       tester,
     ) async {

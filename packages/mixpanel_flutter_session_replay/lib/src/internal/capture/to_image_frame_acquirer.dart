@@ -16,6 +16,9 @@ import 'image_compressor.dart';
 /// the layer tree synchronously when called, so the image is the frame the
 /// mask walk observed. A second walk after the await would only see later
 /// frames and discard valid captures during scrolls and animations.
+///
+/// For the same reason the frame counts as acquired as soon as `toImage()` is
+/// called, and cancellation is not checked after it.
 class ToImageFrameAcquirer extends FrameAcquirer {
   final ImageCompressor _compressor;
   final MixpanelLogger _logger;
@@ -46,10 +49,10 @@ class ToImageFrameAcquirer extends FrameAcquirer {
         ),
       );
     }
-    if (request.isCancelled()) {
-      rawImage.dispose();
-      return const FrameRejected(cancelledCaptureFailure);
-    }
+    // Not cancelled here: the pixels were fixed when toImage() was called,
+    // before the await, so they cannot show a screen from after a stop. A
+    // stop keeps an acquired frame under the replay it was captured for,
+    // like the native SDKs; the coordinator discards it only across a pause.
     final renderTime = clock.now().difference(capturedAt);
     _logger.debug(
       'Image rendering: ${renderTime.inMilliseconds}ms '
