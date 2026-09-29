@@ -194,7 +194,7 @@ void main() {
       ]);
     });
 
-    testWidgets('dispatches mouse pointer to coordinator when recording', (
+    testWidgets('should record a mouse click as rrweb mouse events on web', (
       tester,
     ) async {
       // GIVEN
@@ -206,6 +206,7 @@ void main() {
         MaterialApp(
           home: InteractionDetector(
             coordinator: fake,
+            recordsMouseAsMouse: true,
             child: Container(
               width: 200,
               height: 200,
@@ -239,6 +240,7 @@ void main() {
         MaterialApp(
           home: InteractionDetector(
             coordinator: fake,
+            recordsMouseAsMouse: true,
             child: Container(
               width: 200,
               height: 200,
@@ -273,6 +275,7 @@ void main() {
         MaterialApp(
           home: InteractionDetector(
             coordinator: fake,
+            recordsMouseAsMouse: true,
             child: Container(
               key: const Key('cancel-target'),
               width: 200,
@@ -294,6 +297,89 @@ void main() {
         RRWebMouseInteraction.mouseUp,
       ]);
     });
+
+    testWidgets(
+      'should record a mouse press as touch events on native platforms',
+      (tester) async {
+        // GIVEN a native platform (macOS), which records every pointer as
+        // touch with sampled moves, as the native SDKs do
+        final fake = FakeWidgetCoordinator(
+          recordingState: RecordingState.recording,
+        );
+        await tester.pumpWidget(
+          MaterialApp(
+            home: InteractionDetector(
+              coordinator: fake,
+              recordsMouseAsMouse: false,
+              child: Container(
+                width: 200,
+                height: 200,
+                color: const Color(0xFFFFFFFF),
+              ),
+            ),
+          ),
+        );
+
+        // WHEN the mouse is pressed, dragged and released
+        final center = tester.getCenter(find.byType(Container));
+        final gesture = await tester.createGesture(
+          kind: PointerDeviceKind.mouse,
+        );
+        await gesture.down(center);
+        await gesture.moveBy(
+          const Offset(20, 0),
+          timeStamp: const Duration(milliseconds: 60),
+        );
+        await gesture.up(timeStamp: const Duration(milliseconds: 120));
+
+        // THEN it is a touch gesture with its drag positions sampled
+        expect(fake.capturedInteractions.map((i) => i.interactionType), [
+          RRWebMouseInteraction.touchStart,
+          RRWebMouseInteraction.touchEnd,
+        ]);
+        expect(fake.capturedTouchMoves, isNotEmpty);
+      },
+    );
+
+    testWidgets(
+      'should record a secondary mouse button as touch on native platforms',
+      (tester) async {
+        // GIVEN a native platform, where every mouse button was recorded
+        // before web support and still is
+        final fake = FakeWidgetCoordinator(
+          recordingState: RecordingState.recording,
+        );
+        await tester.pumpWidget(
+          MaterialApp(
+            home: InteractionDetector(
+              coordinator: fake,
+              recordsMouseAsMouse: false,
+              child: Container(
+                width: 200,
+                height: 200,
+                color: const Color(0xFFFFFFFF),
+              ),
+            ),
+          ),
+        );
+
+        // WHEN the right button is clicked
+        final center = tester.getCenter(find.byType(Container));
+        final gesture = await tester.createGesture(
+          kind: PointerDeviceKind.mouse,
+          buttons: kSecondaryMouseButton,
+        );
+        await gesture.down(center);
+        await tester.pump();
+        await gesture.up();
+
+        // THEN it is recorded as a touch, unchanged from native behavior
+        expect(fake.capturedInteractions.map((i) => i.interactionType), [
+          RRWebMouseInteraction.touchStart,
+          RRWebMouseInteraction.touchEnd,
+        ]);
+      },
+    );
 
     testWidgets('does not dispatch stylus pointer events', (tester) async {
       // GIVEN

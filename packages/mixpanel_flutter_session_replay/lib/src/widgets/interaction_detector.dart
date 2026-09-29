@@ -1,4 +1,5 @@
 import 'package:clock/clock.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -11,11 +12,12 @@ import '../models/session_event.dart' show TouchPosition;
 
 /// Internal widget that translates the pointer stream into rrweb touch events.
 ///
-/// A touch gesture becomes `touchStart` → zero or more `touchMove` position
-/// batches → `touchEnd` (or `touchCancel`). A primary mouse gesture becomes
-/// `mouseDown` → `mouseUp`, followed by `click` when it remained within the
-/// click slop. Only the primary pointer is tracked; secondary pointers going
-/// down or up mid-gesture are ignored.
+/// A gesture becomes `touchStart` → zero or more `touchMove` position batches →
+/// `touchEnd` (or `touchCancel`). With [recordsMouseAsMouse] (web), a primary
+/// mouse gesture instead becomes `mouseDown` → `mouseUp`, followed by `click`
+/// when it remained within the click slop, as mixpanel-js records it. Only
+/// the primary pointer is tracked; secondary pointers going down or up
+/// mid-gesture are ignored.
 ///
 /// Nothing is deferred: batches drain on the next sampled move or when the
 /// gesture ends, so no position is held behind a timer.
@@ -24,10 +26,18 @@ class InteractionDetector extends StatefulWidget {
     super.key,
     required this.coordinator,
     required this.child,
+    this.recordsMouseAsMouse = kIsWeb,
   });
 
   final WidgetCoordinator coordinator;
   final Widget child;
+
+  /// Whether mouse input is recorded as rrweb mouse events rather than as
+  /// touches.
+  ///
+  /// On web this matches mixpanel-js. Native platforms, including macOS,
+  /// record every pointer as touch with sampled moves, as the native SDKs do.
+  final bool recordsMouseAsMouse;
 
   @override
   State<InteractionDetector> createState() => _InteractionDetectorState();
@@ -36,7 +46,9 @@ class InteractionDetector extends StatefulWidget {
 class _InteractionDetectorState extends State<InteractionDetector> {
   /// Pointer id of the gesture in flight; null when not tracking.
   int? _activePointer;
-  PointerDeviceKind? _activePointerKind;
+
+  /// Whether the gesture in flight is recorded as mouse events.
+  bool _activeGestureIsMouse = false;
   Offset _pointerDownPosition = Offset.zero;
   bool _mouseExceededClickSlop = false;
 
@@ -128,8 +140,9 @@ class _InteractionDetectorState extends State<InteractionDetector> {
       );
       return;
     }
-    if (event.kind == PointerDeviceKind.mouse &&
-        event.buttons & kPrimaryMouseButton == 0) {
+    final isMouseGesture =
+        widget.recordsMouseAsMouse && event.kind == PointerDeviceKind.mouse;
+    if (isMouseGesture && event.buttons & kPrimaryMouseButton == 0) {
       coordinator.logger.debug('Ignoring non-primary mouse button');
       return;
     }
@@ -138,14 +151,14 @@ class _InteractionDetectorState extends State<InteractionDetector> {
 
     _resetGesture();
     _activePointer = event.pointer;
-    _activePointerKind = event.kind;
+    _activeGestureIsMouse = isMouseGesture;
     _pointerDownPosition = event.localPosition;
     _epochAnchor = clock.now();
     _timeStampAnchor = event.timeStamp;
     _lastSampledTimeStamp = event.timeStamp;
 
     coordinator.captureInteraction(
-      event.kind == PointerDeviceKind.mouse
+      isMouseGesture
           ? RRWebMouseInteraction.mouseDown
           : RRWebMouseInteraction.touchStart,
       event.localPosition,
@@ -158,7 +171,7 @@ class _InteractionDetectorState extends State<InteractionDetector> {
     // wait for the next clean gesture rather than emitting a path with no
     // start.
     if (event.pointer != _activePointer) return;
-    if (_activePointerKind == PointerDeviceKind.mouse) {
+    if (_activeGestureIsMouse) {
       if ((event.localPosition - _pointerDownPosition).distance > kTouchSlop) {
         _mouseExceededClickSlop = true;
       }
@@ -187,7 +200,7 @@ class _InteractionDetectorState extends State<InteractionDetector> {
   }
 
   void _handlePointerUp(PointerUpEvent event) {
-    if (_activePointerKind == PointerDeviceKind.mouse) {
+    if (_activeGestureIsMouse) {
       _endMouseGesture(event, emitClick: !_mouseExceededClickSlop);
     } else {
       _endGesture(event, RRWebMouseInteraction.touchEnd);
@@ -195,7 +208,7 @@ class _InteractionDetectorState extends State<InteractionDetector> {
   }
 
   void _handlePointerCancel(PointerCancelEvent event) {
-    if (_activePointerKind == PointerDeviceKind.mouse) {
+    if (_activeGestureIsMouse) {
       _endMouseGesture(event, emitClick: false);
     } else {
       _endGesture(event, RRWebMouseInteraction.touchCancel);
@@ -258,7 +271,7 @@ class _InteractionDetectorState extends State<InteractionDetector> {
   void _resetGesture() {
     _pendingSamples.clear();
     _activePointer = null;
-    _activePointerKind = null;
+    _activeGestureIsMouse = false;
     _pointerDownPosition = Offset.zero;
     _mouseExceededClickSlop = false;
     _lastSampledTimeStamp = Duration.zero;
