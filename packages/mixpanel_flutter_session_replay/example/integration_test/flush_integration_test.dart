@@ -79,6 +79,15 @@ void main() {
 
     // Simulate app foregrounding to trigger auto-start recording
     await simulateForegrounding(tester);
+    expect(sdk.recordingState, RecordingState.recording);
+
+    // Foregrounding pumps frames of its own. How many captures they produce
+    // depends on timing: a frame inside the 500ms rate limit earns one
+    // deferred capture. Let them settle and drain them, with the session's
+    // meta event, so only the captures below are counted.
+    await tester.runAsync(() => Future.delayed(Duration(milliseconds: 2000)));
+    await tester.runAsync(() => sdk.flush());
+    uploadRequests.clear();
 
     // Trigger 3 automatic captures with 500ms+ gaps (CaptureScheduler rate limit)
     for (var i = 0; i < 3; i++) {
@@ -89,16 +98,19 @@ void main() {
 
     await tester.runAsync(() => sdk.flush());
 
-    expect(uploadRequests, isNotEmpty);
-
-    // Count total events across all upload requests
-    var totalEvents = 0;
-    for (final request in uploadRequests) {
-      final decompressed = gzip.decode(request.bodyBytes);
-      final json = jsonDecode(utf8.decode(decompressed)) as List;
-      totalEvents += json.length;
-    }
-    expect(totalEvents, 4); // 1 meta + 3 screenshots
+    expect(
+      uploadRequests,
+      hasLength(1),
+      reason: 'All captures should go out in a single upload',
+    );
+    final events =
+        jsonDecode(utf8.decode(gzip.decode(uploadRequests.single.bodyBytes)))
+            as List;
+    expect(
+      events.map((event) => (event as Map<String, dynamic>)['type']),
+      [2, 2, 2],
+      reason: 'One full snapshot per capture',
+    );
 
     final replayIds = uploadRequests
         .map((r) => r.url.queryParameters['replay_id'])
