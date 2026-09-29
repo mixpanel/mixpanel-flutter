@@ -420,6 +420,22 @@ void main() {
             0,
             reason: '${scenario.name} produced a main-thread long task',
           );
+        } else {
+          // Without the Long Tasks API, browser frame gaps over the long-frame
+          // threshold are the only main-thread signal. The runner produces
+          // some on its own, so capture may add none beyond the control runs.
+          final controlLongFrames = math.max(
+            baseline.longFrameCount,
+            control.longFrameCount,
+          );
+          expect(
+            metrics.longFrameCount,
+            lessThanOrEqualTo(controlLongFrames),
+            reason:
+                '${scenario.name} produced ${metrics.longFrameCount} browser '
+                'frame gaps over ${_longFrameThresholdMs.round()}ms, control '
+                'produced $controlLongFrames',
+          );
         }
       }
     }
