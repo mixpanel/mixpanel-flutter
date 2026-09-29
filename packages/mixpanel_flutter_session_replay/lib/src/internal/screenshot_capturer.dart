@@ -190,9 +190,9 @@ class ScreenshotCapturer {
         useAccessibilityLabelFallback: _useAccessibilityLabelFallback,
       );
 
-      // endOfFrame ensures mask detection and snapshot initiation observe the
-      // same completed Flutter paint.
-      await SchedulerBinding.instance.endOfFrame;
+      // Mask detection and snapshot initiation must observe the same
+      // completed Flutter paint, so wait out any frame still in flight.
+      await _awaitPaintedFrame();
       if (cancelled()) return cancelledFailure;
       if (_surfaceCapture case final surface?) {
         final surfaceAvailability = await surface
@@ -208,7 +208,7 @@ class ScreenshotCapturer {
         // the same-painted-frame invariant before reading mask coordinates.
         if (surfaceAvailability ==
             RenderedSurfaceAvailability.availableAfterBrowserFrame) {
-          await SchedulerBinding.instance.endOfFrame;
+          await _awaitPaintedFrame();
           if (cancelled()) return cancelledFailure;
         }
       }
@@ -541,6 +541,24 @@ class ScreenshotCapturer {
         'Unexpected capture error: $e',
       );
     }
+  }
+
+  /// Waits for the frame in flight, if any, so the render tree read next
+  /// matches what is on screen.
+  ///
+  /// When the scheduler is idle and no frame has been requested, the last
+  /// painted frame already is the settled screen and there is nothing to wait
+  /// for. Awaiting `endOfFrame` in that state would request a frame of its
+  /// own, which the persistent frame callback then reports as new content
+  /// and the scheduler answers with another capture: a static screen would
+  /// be captured indefinitely. Capture must never be what schedules a frame.
+  static Future<void> _awaitPaintedFrame() {
+    final scheduler = SchedulerBinding.instance;
+    if (scheduler.schedulerPhase == SchedulerPhase.idle &&
+        !scheduler.hasScheduledFrame) {
+      return Future<void>.value();
+    }
+    return scheduler.endOfFrame;
   }
 
   Future<void> dispose() async {

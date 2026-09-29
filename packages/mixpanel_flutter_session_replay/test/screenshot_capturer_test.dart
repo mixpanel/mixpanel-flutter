@@ -4,6 +4,7 @@ import 'package:mixpanel_flutter_session_replay/src/internal/capture/rendered_su
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/logger.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/native_image_compressor.dart';
@@ -184,6 +185,54 @@ void main() {
       // toImage() snapshots the same frame the mask walk observed
       expect(result, isA<CaptureSuccess>());
       expect(capturer.lastPostSnapshotMaskValidationTime, isNull);
+    });
+
+    testWidgets('does not request a frame when the scheduler is idle', (
+      tester,
+    ) async {
+      // GIVEN a painted, settled screen with no frame in flight
+      final key = GlobalKey();
+      await tester.pumpWidget(
+        Directionality(
+          textDirection: TextDirection.ltr,
+          child: RepaintBoundary(
+            key: key,
+            child: const ColoredBox(
+              color: Colors.white,
+              child: Text('Settled screen'),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      expect(SchedulerBinding.instance.hasScheduledFrame, isFalse);
+      final element = key.currentContext! as Element;
+      final boundary = element.findRenderObject()! as RenderRepaintBoundary;
+      final capturer = ScreenshotCapturer(
+        directive: MaskingDirective(autoMaskTypes: const {}),
+        logger: MixpanelLogger(LogLevel.none),
+        debugOverlayEnabled: false,
+        compressor: _RecordingCompressor(),
+      );
+
+      // WHEN a capture starts from an idle scheduler, as a deferred
+      // rate-limit capture does
+      final pending = tester.runAsync(
+        () => capturer.capture(
+          boundary,
+          boundaryElement: element,
+          getCurrentSession: SessionManager().getCurrentSession,
+          getDistinctId: () => 'screenshot-capturer-test-distinct-id',
+        ),
+      );
+
+      // THEN it does not ask Flutter for a frame. The persistent frame
+      // callback would report that frame as new content and the scheduler
+      // would answer with another capture, forever, on a static screen.
+      expect(SchedulerBinding.instance.hasScheduledFrame, isFalse);
+      final result = await pending;
+      expect(result, isA<CaptureSuccess>());
+      expect(SchedulerBinding.instance.hasScheduledFrame, isFalse);
     });
 
     testWidgets(

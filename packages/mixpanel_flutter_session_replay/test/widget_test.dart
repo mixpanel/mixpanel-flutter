@@ -5,6 +5,12 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mixpanel_flutter_session_replay/src/internal/session/session_manager.dart';
+import 'package:mixpanel_flutter_session_replay/src/internal/screenshot_capturer.dart';
+import 'package:mixpanel_flutter_session_replay/src/internal/logger.dart';
+import 'package:mixpanel_flutter_session_replay/src/internal/capture/rendered_surface_capture.dart';
+import 'package:flutter/scheduler.dart';
+import 'dart:typed_data';
 import 'package:mixpanel_flutter_session_replay/src/internal/settings/settings_service.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/configuration.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/debug_overlay_colors.dart';
@@ -1257,6 +1263,59 @@ void main() {
       });
     });
 
+    testWidgets('a capture never requests the frame that would re-arm it', (
+      tester,
+    ) async {
+      // A deferred capture starts from an idle scheduler. If the capturer
+      // asked Flutter for a frame there, the persistent frame callback would
+      // report it as new content and the follow-up above would repeat every
+      // rate-limit interval on a screen that never changed.
+      var now = DateTime(2026, 1, 1, 12);
+      await withClock(Clock(() => now), () async {
+        // GIVEN the production capturer behind a FrameMonitor, notified on
+        // every frame exactly as MixpanelSessionReplayWidget does
+        final coordinator = _CapturingCoordinator();
+        final frameNotifier = ChangeNotifier();
+        var notifying = true;
+        addTearDown(() => notifying = false);
+        SchedulerBinding.instance.addPersistentFrameCallback((_) {
+          // ignore: invalid_use_of_protected_member, invalid_use_of_visible_for_testing_member
+          if (notifying) frameNotifier.notifyListeners();
+        });
+        await tester.pumpWidget(
+          MaterialApp(
+            home: FrameMonitor(
+              frameNotifier: frameNotifier,
+              coordinator: coordinator,
+              child: const SizedBox(width: 100, height: 100),
+            ),
+          ),
+        );
+        await tester.pump();
+        await tester.pump();
+        // One real repaint inside the rate limit arms one deferred capture
+        now = now.add(const Duration(milliseconds: 100));
+        await tester.pump(const Duration(milliseconds: 100));
+        final seeded = coordinator.captureSnapshotCallCount;
+
+        // WHEN the screen stays static: time passes without any frame, and a
+        // frame is drawn only if the SDK itself requested one
+        var framesRequested = 0;
+        for (var i = 0; i < 5; i++) {
+          now = now.add(const Duration(milliseconds: 600));
+          await tester.binding.delayed(const Duration(milliseconds: 600));
+          if (tester.binding.hasScheduledFrame) {
+            framesRequested++;
+            await tester.pump();
+          }
+        }
+
+        // THEN the deferred capture ran once and nothing re-armed it
+        expect(framesRequested, 0, reason: 'capture must not schedule frames');
+        expect(coordinator.captureSnapshotCallCount, seeded + 1);
+      });
+    });
+
     testWidgets('renders debug mask overlay when debugOptions provided', (
       tester,
     ) async {
@@ -1511,4 +1570,60 @@ class _GatedCaptureCoordinator extends FakeWidgetCoordinator {
       await _gate!.future;
     }
   }
+}
+
+/// Drives the production [ScreenshotCapturer] through the web surface path so
+/// a widget test observes the frames the real capture code requests.
+class _CapturingCoordinator extends FakeWidgetCoordinator {
+  _CapturingCoordinator()
+    : super(
+        recordingState: RecordingState.recording,
+        capturesRenderedSurface: true,
+      );
+
+  final ScreenshotCapturer capturer = ScreenshotCapturer(
+    directive: MaskingDirective(autoMaskTypes: const {}),
+    logger: MixpanelLogger(LogLevel.none),
+    debugOverlayEnabled: false,
+    surfaceCapture: _StaticSurfaceCapture(),
+  );
+  final SessionManager sessionManager = SessionManager();
+
+  @override
+  Future<void> captureSnapshot(
+    RenderRepaintBoundary boundary, {
+    required Element boundaryElement,
+  }) async {
+    captureSnapshotCallCount++;
+    await capturer.capture(
+      boundary,
+      boundaryElement: boundaryElement,
+      getCurrentSession: sessionManager.getCurrentSession,
+      getDistinctId: () => 'widget-test-user',
+    );
+  }
+}
+
+class _StaticSurfaceCapture extends RenderedSurfaceCapture {
+  @override
+  bool get isAvailable => true;
+
+  @override
+  Future<CapturedSurface?> capture({
+    required Size logicalSize,
+    required int outputWidth,
+    required int outputHeight,
+  }) async => _StaticSurface();
+
+  @override
+  Future<void> dispose() async {}
+}
+
+class _StaticSurface implements CapturedSurface {
+  @override
+  Future<Uint8List?> encode({required List<Rect> maskRects}) async =>
+      Uint8List.fromList(const [0xff, 0xd8, 0xff, 0xd9]);
+
+  @override
+  void dispose() {}
 }
