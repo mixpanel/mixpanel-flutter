@@ -2029,6 +2029,7 @@ class _PendingScreenshotCapturer extends ScreenshotCapturer {
     required Element boundaryElement,
     Set<AutoMaskedView>? maskTypes,
     bool Function()? isCancelled,
+    void Function()? onRenderTreeRead,
   }) {
     pinnedSessionId = getCurrentSession().id;
     pinnedDistinctId = getDistinctId();

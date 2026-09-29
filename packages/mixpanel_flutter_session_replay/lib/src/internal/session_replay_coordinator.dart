@@ -214,6 +214,7 @@ class SessionReplayCoordinator implements WidgetCoordinator {
   Future<void> captureSnapshot(
     RenderRepaintBoundary boundary, {
     required Element boundaryElement,
+    void Function()? onRenderTreeRead,
   }) async {
     // Check if disposed first (prevents captures during shutdown)
     if (_isDisposed) {
@@ -248,6 +249,7 @@ class SessionReplayCoordinator implements WidgetCoordinator {
       getDistinctId: _eventRecorder.getDistinctId,
       boundaryElement: boundaryElement,
       isCancelled: () => _captureInvalidation.isCancelled(ticket),
+      onRenderTreeRead: onRenderTreeRead,
     );
 
     // A pause may have happened while the asynchronous image capture was in

@@ -1265,13 +1265,15 @@ void main() {
       });
     });
 
-    testWidgets('a capture never requests the frame that would re-arm it', (
+    testWidgets('a frame the capture requests does not re-arm it', (
       tester,
     ) async {
-      // A deferred capture starts from an idle scheduler. If the capturer
-      // asked Flutter for a frame there, the persistent frame callback would
-      // report it as new content and the follow-up above would repeat every
-      // rate-limit interval on a screen that never changed.
+      // On web the capturer asks Flutter for a fresh frame before reading the
+      // surface, so the canvas can catch up. The persistent frame callback
+      // reports that frame like any other, while the capture is running. If
+      // it counted as new content, every capture would owe a follow-up that
+      // requests another frame: a static screen captured every rate-limit
+      // interval, forever.
       var now = DateTime(2026, 1, 1, 12);
       await withClock(Clock(() => now), () async {
         // GIVEN the production capturer behind a FrameMonitor, notified on
@@ -1279,10 +1281,16 @@ void main() {
         final coordinator = _CapturingCoordinator();
         final frameNotifier = ChangeNotifier();
         var notifying = true;
+        var framesDuringCapture = 0;
         addTearDown(() => notifying = false);
         SchedulerBinding.instance.addPersistentFrameCallback((_) {
+          if (!notifying) return;
+          if (coordinator.captureSnapshotCallCount > 0 &&
+              coordinator.inFlight) {
+            framesDuringCapture++;
+          }
           // ignore: invalid_use_of_protected_member, invalid_use_of_visible_for_testing_member
-          if (notifying) frameNotifier.notifyListeners();
+          frameNotifier.notifyListeners();
         });
         await tester.pumpWidget(
           MaterialApp(
@@ -1295,13 +1303,15 @@ void main() {
         );
         await tester.pump();
         await tester.pump();
-        // One real repaint inside the rate limit arms one deferred capture
-        now = now.add(const Duration(milliseconds: 100));
-        await tester.pump(const Duration(milliseconds: 100));
-        final seeded = coordinator.captureSnapshotCallCount;
+        expect(coordinator.captureSnapshotCallCount, 1);
+        expect(
+          framesDuringCapture,
+          1,
+          reason: 'the web capture draws the frame it requested mid-capture',
+        );
 
-        // WHEN the screen stays static: time passes without any frame, and a
-        // frame is drawn only if the SDK itself requested one
+        // WHEN the screen stays static: time passes, and a frame is drawn
+        // only when the SDK itself requests one
         var framesRequested = 0;
         for (var i = 0; i < 5; i++) {
           now = now.add(const Duration(milliseconds: 600));
@@ -1312,9 +1322,9 @@ void main() {
           }
         }
 
-        // THEN the deferred capture ran once and nothing re-armed it
-        expect(framesRequested, 0, reason: 'capture must not schedule frames');
-        expect(coordinator.captureSnapshotCallCount, seeded + 1);
+        // THEN that frame did not re-arm the capture
+        expect(framesRequested, 0);
+        expect(coordinator.captureSnapshotCallCount, 1);
       });
     });
 
@@ -1565,8 +1575,10 @@ class _GatedCaptureCoordinator extends FakeWidgetCoordinator {
   Future<void> captureSnapshot(
     RenderRepaintBoundary boundary, {
     required Element boundaryElement,
+    void Function()? onRenderTreeRead,
   }) async {
     captureSnapshotCallCount++;
+    onRenderTreeRead?.call();
     if (_gate == null) {
       _gate = Completer<void>();
       await _gate!.future;
@@ -1591,15 +1603,25 @@ class _CapturingCoordinator extends FakeWidgetCoordinator {
   Future<void> captureSnapshot(
     RenderRepaintBoundary boundary, {
     required Element boundaryElement,
+    void Function()? onRenderTreeRead,
   }) async {
     captureSnapshotCallCount++;
-    await capturer.capture(
-      boundary,
-      boundaryElement: boundaryElement,
-      getCurrentSession: sessionManager.getCurrentSession,
-      getDistinctId: () => 'widget-test-user',
-    );
+    inFlight = true;
+    try {
+      await capturer.capture(
+        boundary,
+        boundaryElement: boundaryElement,
+        getCurrentSession: sessionManager.getCurrentSession,
+        getDistinctId: () => 'widget-test-user',
+        onRenderTreeRead: onRenderTreeRead,
+      );
+    } finally {
+      inFlight = false;
+    }
   }
+
+  /// Whether a capture is running right now.
+  bool inFlight = false;
 }
 
 class _StaticSurfaceCapture extends RenderedSurfaceCapture {

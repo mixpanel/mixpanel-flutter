@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'dart:ui' show Size;
 
 import 'package:clock/clock.dart';
+import 'package:flutter/scheduler.dart';
 
 import '../../models/masking_directive.dart';
 import '../../models/results.dart';
@@ -55,8 +56,19 @@ class RenderedSurfaceFrameAcquirer extends FrameAcquirer {
   @override
   bool get isAvailable => _surface.isAvailable;
 
+  /// Waits for a fresh Flutter frame before the surface is read.
+  ///
+  /// The web engine draws each frame to the canvas asynchronously after
+  /// Dart finishes it, so on a slow renderer (skwasm on a software GPU) the
+  /// canvas can still show an earlier frame than the one the mask walk
+  /// reads. The engine exposes no signal that a frame reached the canvas;
+  /// awaiting a new frame gives the pending draw that much more time to land,
+  /// which the presentation wait in [acquire] then extends. This frame ends
+  /// before the mask walk, so CaptureScheduler does not count it as new
+  /// content and it cannot re-arm the capture.
   @override
   Future<FrameSourceStatus> prepare(Size logicalSize) async {
+    await SchedulerBinding.instance.endOfFrame;
     return switch (await _surface.waitUntilRenderedSurfaceAvailable(
       logicalSize,
     )) {

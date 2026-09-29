@@ -107,6 +107,7 @@ class ScreenshotCapturer {
   /// - [isCancelled]: polled after every await before pixels are acquired and
   ///   before they are encoded, so a frame whose recording stopped or paused
   ///   while it waited is never captured
+  /// - [onRenderTreeRead]: runs right after the mask walk reads the render tree
   /// Returns CaptureResult with compressed image data or error
   Future<CaptureResult> capture(
     RenderRepaintBoundary boundary, {
@@ -115,6 +116,7 @@ class ScreenshotCapturer {
     required Element boundaryElement,
     Set<AutoMaskedView>? maskTypes,
     bool Function()? isCancelled,
+    void Function()? onRenderTreeRead,
   }) async {
     final captureStart = clock.now();
     bool cancelled() => isCancelled?.call() ?? false;
@@ -140,7 +142,7 @@ class ScreenshotCapturer {
 
       // Mask detection and snapshot initiation must observe the same
       // completed Flutter paint, so wait out any frame still in flight.
-      await _awaitPaintedFrame();
+      if (_awaitPaintedFrame() case final painted?) await painted;
       if (cancelled()) return cancelledCaptureFailure;
       final preparing = _acquirer.prepare(boundary.size);
       final sourceStatus = preparing is Future<FrameSourceStatus>
@@ -153,7 +155,7 @@ class ScreenshotCapturer {
         case FrameSourceStatus.readyAfterPlatformFrame:
           // Re-establish the same-painted-frame invariant before reading
           // mask coordinates.
-          await _awaitPaintedFrame();
+          if (_awaitPaintedFrame() case final painted?) await painted;
           if (cancelled()) return cancelledCaptureFailure;
         case FrameSourceStatus.unavailable:
           return const CaptureFailure(
@@ -180,6 +182,7 @@ class ScreenshotCapturer {
           'Failed to detect mask regions: $e',
         );
       }
+      onRenderTreeRead?.call();
       final maskRegions = maskResult.maskRegions;
       final maskDetectionTime = clock.now().difference(maskDetectionStart);
       lastMaskDetectionTime = maskDetectionTime;
@@ -265,20 +268,23 @@ class ScreenshotCapturer {
     }
   }
 
-  /// Waits for the frame in flight, if any, so the render tree read next
-  /// matches what is on screen.
+  /// Returns the end of the frame in flight, if any, so the render tree read
+  /// next matches what is on screen. Null when there is nothing to wait for,
+  /// so capture does not yield at all.
   ///
   /// When the scheduler is idle and no frame has been requested, the last
   /// painted frame already is the settled screen and there is nothing to wait
   /// for. Awaiting `endOfFrame` in that state would request a frame of its
   /// own, which the persistent frame callback then reports as new content
   /// and the scheduler answers with another capture: a static screen would
-  /// be captured indefinitely. Capture must never be what schedules a frame.
-  static Future<void> _awaitPaintedFrame() {
+  /// be captured indefinitely. (A web acquirer does request a fresh frame in
+  /// `prepare`; CaptureScheduler ignores frames that end before the render
+  /// tree is read, so that frame cannot re-arm the capture.)
+  static Future<void>? _awaitPaintedFrame() {
     final scheduler = SchedulerBinding.instance;
     if (scheduler.schedulerPhase == SchedulerPhase.idle &&
         !scheduler.hasScheduledFrame) {
-      return Future<void>.value();
+      return null;
     }
     return scheduler.endOfFrame;
   }

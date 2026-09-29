@@ -23,10 +23,20 @@ class CaptureScheduler {
   /// Flag to track if a capture is currently in progress
   bool _isCaptureInProgress = false;
 
-  /// A frame rendered while a capture was in progress. The screen it showed
-  /// may be the settled state that capture missed or rejected, so one more
-  /// rate-limited capture is owed once the current one completes.
+  /// A frame rendered while a capture was in progress, after that capture
+  /// read the render tree. The screen it showed may be the settled state that
+  /// capture missed or rejected, so one more rate-limited capture is owed
+  /// once the current one completes.
   bool _frameArrivedDuringCapture = false;
+
+  /// Whether the capture in progress has read the render tree yet.
+  ///
+  /// A frame that ends before the read is part of what the capture records,
+  /// including any frame the capture itself requested, so it owes nothing.
+  /// Counting it would let a capture re-arm itself: its own frame would
+  /// schedule a follow-up that requests another frame, every rate-limit
+  /// interval, on a screen that never changed.
+  bool _renderTreeRead = false;
 
   /// Timer for debouncing capture requests
   Timer? _debounceTimer;
@@ -66,8 +76,12 @@ class CaptureScheduler {
     // Don't schedule while a capture is in progress; remember that a frame
     // arrived so the caller can retry after completion.
     if (_isCaptureInProgress) {
-      _frameArrivedDuringCapture = true;
-      _logger.debug('Capture in progress, frame noted for a follow-up capture');
+      if (_renderTreeRead) {
+        _frameArrivedDuringCapture = true;
+        _logger.debug(
+          'Capture in progress, frame noted for a follow-up capture',
+        );
+      }
       return null;
     }
 
@@ -101,7 +115,12 @@ class CaptureScheduler {
     _logger.debug('Capture started at ${now.millisecondsSinceEpoch}');
     _isCaptureInProgress = true;
     _frameArrivedDuringCapture = false;
+    _renderTreeRead = false;
   }
+
+  /// Mark that the capture in progress has read the render tree. Frames from
+  /// here on may show content it did not record.
+  void markRenderTreeRead() => _renderTreeRead = true;
 
   /// Whether a frame rendered during the capture that just completed, and
   /// clears that note. The caller schedules one rate-limited follow-up so a

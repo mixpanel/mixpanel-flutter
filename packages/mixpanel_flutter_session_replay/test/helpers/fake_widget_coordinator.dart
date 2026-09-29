@@ -107,7 +107,10 @@ class FakeWidgetCoordinator implements WidgetCoordinator {
   Future<void> captureSnapshot(
     RenderRepaintBoundary boundary, {
     required Element boundaryElement,
+    void Function()? onRenderTreeRead,
   }) async {
+    // A real capture reads the render tree before its first yield.
+    onRenderTreeRead?.call();
     onCaptureSnapshot?.call();
     captureSnapshotCallCount++;
     capturedSnapshots.add((

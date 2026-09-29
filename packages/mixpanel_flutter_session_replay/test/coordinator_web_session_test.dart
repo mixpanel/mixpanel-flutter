@@ -1815,6 +1815,7 @@ class _ImmediateCapturer extends ScreenshotCapturer {
     required Element boundaryElement,
     Set<AutoMaskedView>? maskTypes,
     bool Function()? isCancelled,
+    void Function()? onRenderTreeRead,
   }) async => CaptureSuccess(
     data: Uint8List.fromList([1, 2, 3]),
     width: 10,

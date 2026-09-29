@@ -61,9 +61,13 @@ abstract class WidgetCoordinator {
   void captureTouchMove(List<TouchPosition> positions, DateTime timestamp);
 
   /// Capture a screenshot from the given boundary
+  ///
+  /// [onRenderTreeRead] runs once the capture has read the render tree, if it
+  /// gets that far.
   Future<void> captureSnapshot(
     RenderRepaintBoundary boundary, {
     required Element boundaryElement,
+    void Function()? onRenderTreeRead,
   });
 
   /// Notify coordinator of user activity (even when not recording).

@@ -120,8 +120,10 @@ void main() {
       });
 
       test('remembers a frame that arrived during a capture', () {
-        // GIVEN a frame notification while a capture is running
+        // GIVEN a frame notification while a capture is running, after it
+        // read the render tree
         scheduler.markCaptureStarted();
+        scheduler.markRenderTreeRead();
         scheduler.scheduleAfterRateLimit(() {});
 
         // WHEN that capture completes
@@ -133,8 +135,26 @@ void main() {
         expect(scheduler.takeFrameArrivedDuringCapture(), isFalse);
       });
 
+      test(
+        'ignores a frame that ends before the capture reads the render tree',
+        () {
+          // GIVEN a frame that ends while the capture is still waiting to
+          // read the render tree, such as the frame the capture requested
+          scheduler.markCaptureStarted();
+          scheduler.scheduleAfterRateLimit(() {});
+
+          // WHEN the capture reads the tree and completes
+          scheduler.markRenderTreeRead();
+          scheduler.markCaptureCompleted();
+
+          // THEN nothing is owed: the capture recorded that frame
+          expect(scheduler.takeFrameArrivedDuringCapture(), isFalse);
+        },
+      );
+
       test('forgets a noted frame when the next capture starts', () {
         scheduler.markCaptureStarted();
+        scheduler.markRenderTreeRead();
         scheduler.scheduleAfterRateLimit(() {});
         scheduler.markCaptureCompleted();
 

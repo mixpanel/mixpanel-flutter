@@ -158,6 +158,7 @@ class _FrameMonitorState extends State<FrameMonitor> {
     await widget.coordinator.captureSnapshot(
       boundary,
       boundaryElement: boundaryElement,
+      onRenderTreeRead: _scheduler.markRenderTreeRead,
     );
   }
 
