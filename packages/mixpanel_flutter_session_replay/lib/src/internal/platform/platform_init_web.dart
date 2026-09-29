@@ -10,6 +10,7 @@ import '../logger.dart';
 import '../wireframe/wireframe_emitter.dart';
 import '../../models/masking_directive.dart';
 import '../../models/configuration.dart';
+import '../session/recording_limits.dart';
 import '../session/resumable_session.dart';
 import '../session/session_persistence.dart';
 import '../session/web_session_resume.dart';
@@ -87,8 +88,10 @@ Future<PlatformInitResult> platformInit({
       screenshotCapturer: screenshotCapturer,
       gzipCompressor: gzip,
       wifiOnly: false,
-      idleTimeout: web.idleTimeout,
-      maxSessionDuration: web.maxSessionDuration,
+      durationLimits: RecordingDurationLimits(
+        maximum: web.maxSessionDuration,
+        idle: web.idleTimeout,
+      ),
       sessionPersistence: StoredSessionPersistence(
         resumable: resumeInfo,
         logger: logger,

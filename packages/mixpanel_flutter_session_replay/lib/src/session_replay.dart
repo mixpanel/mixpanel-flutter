@@ -12,7 +12,6 @@ import 'internal/endpoints.dart';
 import 'internal/event_recorder.dart';
 import 'internal/storage/event_queue_interface.dart';
 import 'internal/options_validation.dart';
-import 'internal/session/idle_timeout_timer.dart';
 import 'internal/session/session_manager.dart';
 import 'internal/upload/upload_service.dart';
 import 'internal/upload/payload_serializer.dart';
@@ -278,21 +277,9 @@ class MixpanelSessionReplay {
 
         logger.debug('Internal components created');
 
-        // Create idle timeout timer if platform provides an idle timeout
-        IdleTimeoutTimer? idleTimer;
-        late final SessionReplayCoordinator coordinator;
-        final idleTimeout = platformResult.idleTimeout;
-
-        if (idleTimeout != null && idleTimeout > Duration.zero) {
-          idleTimer = IdleTimeoutTimer(
-            timeout: idleTimeout,
-            onTimeout: () => coordinator.handleIdleTimeout(),
-          );
-        }
-
         // Create coordinator with all internal components
         logger.debug('Creating coordinator...');
-        coordinator = SessionReplayCoordinator(
+        final coordinator = SessionReplayCoordinator(
           screenshotCapturer: platformResult.screenshotCapturer,
           eventRecorder: eventRecorder,
           uploadService: uploadService,
@@ -302,8 +289,7 @@ class MixpanelSessionReplay {
           autoRecordSessionsPercent: options.autoRecordSessionsPercent,
           remoteSettingsMode: options.remoteSettingsMode,
           debugOptions: options.debugOptions,
-          idleTimer: idleTimer,
-          maxSessionDuration: platformResult.maxSessionDuration,
+          durationLimits: platformResult.durationLimits,
           backgroundBehavior: platformResult.backgroundBehavior,
           sessionPersistence: platformResult.sessionPersistence,
           debugMaskOverlayFactory: platformResult.debugMaskOverlayFactory,

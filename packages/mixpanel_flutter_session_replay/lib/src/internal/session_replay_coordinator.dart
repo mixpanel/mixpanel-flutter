@@ -19,7 +19,6 @@ import 'triggers/trigger_service.dart';
 import 'upload/upload_service.dart';
 import 'settings/settings_service.dart';
 import 'session/session_manager.dart';
-import 'session/idle_timeout_timer.dart';
 import 'session/session_lifetime.dart';
 import 'session/session_persistence.dart';
 import 'session/recording_limits.dart';
@@ -118,8 +117,7 @@ class SessionReplayCoordinator implements WidgetCoordinator {
     required RemoteSettingsMode remoteSettingsMode,
     required DebugOptions? debugOptions,
     BackgroundTaskManager? backgroundTaskManager,
-    IdleTimeoutTimer? idleTimer,
-    Duration? maxSessionDuration,
+    RecordingDurationLimits? durationLimits,
     required ReplayBackgroundBehavior backgroundBehavior,
     DebugMaskOverlayFactory debugMaskOverlayFactory =
         InTreeDebugMaskOverlay.new,
@@ -139,8 +137,7 @@ class SessionReplayCoordinator implements WidgetCoordinator {
        _debugMaskOverlayFactory = debugMaskOverlayFactory,
        _persistence = sessionPersistence ?? SessionPersistence.none() {
     _lifetime = SessionLifetime(
-      idleTimer: idleTimer,
-      maximumDuration: maxSessionDuration,
+      limits: durationLimits,
       onIdleExpired: handleIdleTimeout,
       onMaximumExpired: () => _endIfExpired(includeIdle: false),
     );
@@ -670,7 +667,7 @@ class SessionReplayCoordinator implements WidgetCoordinator {
 
   void _applyWebRecordingDurations(SdkConfig? config) {
     // Native sessions have no activity/maximum duration limits.
-    if (_lifetime.maximumDuration == null || config == null) return;
+    if (!_lifetime.hasLimits || config == null) return;
     if (config.recordMaxMs == null && config.recordIdleTimeoutMs == null) {
       return;
     }

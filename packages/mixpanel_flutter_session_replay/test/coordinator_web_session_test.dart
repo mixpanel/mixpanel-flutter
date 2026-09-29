@@ -1,3 +1,4 @@
+import 'package:mixpanel_flutter_session_replay/src/internal/session/recording_limits.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/session/resumable_session.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/session/session_persistence.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/capture/to_image_frame_acquirer.dart';
@@ -18,7 +19,6 @@ import 'package:mixpanel_flutter_session_replay/src/internal/settings/settings_s
 import 'package:mixpanel_flutter_session_replay/src/internal/settings/settings_storage_provider.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/upload/payload_serializer.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/session/session_manager.dart';
-import 'package:mixpanel_flutter_session_replay/src/internal/session/idle_timeout_timer.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/logger.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/configuration.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/masking_directive.dart';
@@ -64,7 +64,7 @@ void main() {
     SessionReplayCoordinator createCoordinator({
       double autoRecordSessionsPercent = 0,
       RemoteSettingsMode remoteSettingsMode = RemoteSettingsMode.disabled,
-      IdleTimeoutTimer? idleTimer,
+      Duration? idleTimeout,
       Duration? maxSessionDuration,
       ReplayBackgroundBehavior backgroundBehavior =
           ReplayBackgroundBehavior.stop,
@@ -86,8 +86,12 @@ void main() {
         autoRecordSessionsPercent: autoRecordSessionsPercent,
         remoteSettingsMode: remoteSettingsMode,
         debugOptions: null,
-        idleTimer: idleTimer,
-        maxSessionDuration: maxSessionDuration,
+        durationLimits: maxSessionDuration == null && idleTimeout == null
+            ? null
+            : RecordingDurationLimits(
+                maximum: maxSessionDuration ?? maxRecordingDuration,
+                idle: idleTimeout,
+              ),
         backgroundBehavior: backgroundBehavior,
         sessionPersistence: persistence,
       );
@@ -233,12 +237,7 @@ void main() {
             final now = DateTime.utc(2026, 9, 28, 12);
             final writes = <(String, int, int, int?)>[];
             final coordinator = createCoordinator(
-              idleTimer: enableIdleTimer
-                  ? IdleTimeoutTimer(
-                      timeout: const Duration(minutes: 30),
-                      onTimeout: () {},
-                    )
-                  : null,
+              idleTimeout: enableIdleTimer ? const Duration(minutes: 30) : null,
               maxSessionDuration: const Duration(hours: 24),
               backgroundBehavior: const ReplayBackgroundBehavior.pause(
                 idleTimeout: Duration(minutes: 1),
@@ -287,10 +286,7 @@ void main() {
           final idleExpiry = now.add(const Duration(minutes: 2));
           final writes = <(String, int, int, int?)>[];
           final coordinator = createCoordinator(
-            idleTimer: IdleTimeoutTimer(
-              timeout: const Duration(minutes: 30),
-              onTimeout: () {},
-            ),
+            idleTimeout: const Duration(minutes: 30),
             maxSessionDuration: const Duration(hours: 24),
             persistIdleExpiry: (id, idle, max, background) async {
               writes.add((id, idle, max, background));
@@ -320,14 +316,9 @@ void main() {
         'expired staged idle deadline is not resumed after settings',
         () async {
           final start = DateTime.utc(2026, 9, 28, 12);
-          late SessionReplayCoordinator coordinator;
-          final timer = IdleTimeoutTimer(
-            timeout: const Duration(minutes: 30),
-            onTimeout: () => coordinator.handleIdleTimeout(),
-          );
-          coordinator = createCoordinator(
+          final coordinator = createCoordinator(
             autoRecordSessionsPercent: 100,
-            idleTimer: timer,
+            idleTimeout: const Duration(minutes: 30),
             maxSessionDuration: const Duration(hours: 24),
           );
           addTearDown(coordinator.dispose);
@@ -712,14 +703,9 @@ void main() {
       test('refreshes the idle window while recording', () {
         fakeAsync((async) {
           // GIVEN a recording session with a ten second idle window
-          late SessionReplayCoordinator coordinator;
-          final idleTimer = IdleTimeoutTimer(
-            timeout: const Duration(seconds: 10),
-            onTimeout: () => coordinator.handleIdleTimeout(),
-          );
-          coordinator = createCoordinator(
+          final coordinator = createCoordinator(
             autoRecordSessionsPercent: 100,
-            idleTimer: idleTimer,
+            idleTimeout: const Duration(seconds: 10),
             maxSessionDuration: const Duration(hours: 24),
           );
           coordinator.startRecording(sessionsPercent: 100);
@@ -740,7 +726,6 @@ void main() {
           // AND still idles out ten seconds after the last activity
           async.elapse(const Duration(seconds: 6));
           expect(coordinator.recordingState, RecordingState.notRecording);
-          idleTimer.dispose();
         });
       });
 
@@ -748,13 +733,8 @@ void main() {
         // Like mixpanel-js, only user input keeps a session alive. A screen
         // that repaints on its own (animation, live data) still idles out.
         fakeAsync((async) {
-          late SessionReplayCoordinator coordinator;
-          final idleTimer = IdleTimeoutTimer(
-            timeout: const Duration(seconds: 10),
-            onTimeout: () => coordinator.handleIdleTimeout(),
-          );
-          coordinator = createCoordinator(
-            idleTimer: idleTimer,
+          final coordinator = createCoordinator(
+            idleTimeout: const Duration(seconds: 10),
             maxSessionDuration: const Duration(hours: 24),
             capturer: _ImmediateCapturer(logger: logger),
           );
@@ -774,19 +754,13 @@ void main() {
           // THEN the session still idles out at ten seconds
           async.elapse(const Duration(seconds: 2));
           expect(coordinator.recordingState, RecordingState.notRecording);
-          idleTimer.dispose();
         });
       });
 
       test('a drag keeps the idle window open', () {
         fakeAsync((async) {
-          late SessionReplayCoordinator coordinator;
-          final idleTimer = IdleTimeoutTimer(
-            timeout: const Duration(seconds: 10),
-            onTimeout: () => coordinator.handleIdleTimeout(),
-          );
-          coordinator = createCoordinator(
-            idleTimer: idleTimer,
+          final coordinator = createCoordinator(
+            idleTimeout: const Duration(seconds: 10),
             maxSessionDuration: const Duration(hours: 24),
           );
           coordinator.startRecording(sessionsPercent: 100);
@@ -799,7 +773,6 @@ void main() {
 
           async.elapse(const Duration(seconds: 5));
           expect(coordinator.recordingState, RecordingState.recording);
-          idleTimer.dispose();
         });
       });
 
@@ -838,14 +811,10 @@ void main() {
           ),
         );
         final deadlines = <(int, int)>[];
-        final localIdleTimer = IdleTimeoutTimer(
-          timeout: const Duration(minutes: 30),
-          onTimeout: () {},
-        );
         final coordinator = createCoordinator(
           autoRecordSessionsPercent: 100,
           remoteSettingsMode: RemoteSettingsMode.fallback,
-          idleTimer: localIdleTimer,
+          idleTimeout: const Duration(minutes: 30),
           maxSessionDuration: const Duration(hours: 24),
           persistIdleExpiry: (_, idle, max, background) async {
             deadlines.add((idle, max));
@@ -932,13 +901,9 @@ void main() {
           ),
         );
         final deadlines = <(int, int)>[];
-        final idleTimer = IdleTimeoutTimer(
-          timeout: const Duration(minutes: 30),
-          onTimeout: () {},
-        );
         final coordinator = createCoordinator(
           autoRecordSessionsPercent: 100,
-          idleTimer: idleTimer,
+          idleTimeout: const Duration(minutes: 30),
           maxSessionDuration: const Duration(hours: 24),
           persistIdleExpiry: (_, idle, max, background) async {
             deadlines.add((idle, max));
@@ -1041,20 +1006,16 @@ void main() {
 
       test('coordinator accepts idle timer without error', () async {
         // GIVEN
-        final idleTimer = IdleTimeoutTimer(
-          timeout: const Duration(minutes: 30),
-          onTimeout: () {},
-        );
 
         // WHEN
-        final coordinator = createCoordinator(idleTimer: idleTimer);
+        final coordinator = createCoordinator(
+          idleTimeout: const Duration(minutes: 30),
+        );
         coordinator.startRecording(sessionsPercent: 100.0);
         await pumpEventQueue();
 
         // THEN
         expect(coordinator.recordingState, RecordingState.recording);
-
-        idleTimer.dispose();
       });
 
       test('coordinator accepts max session duration without error', () async {
@@ -1074,12 +1035,8 @@ void main() {
       test('persist callback is invoked on activity', () async {
         // GIVEN
         final persistedCalls = <(String, int, int)>[];
-        final idleTimer = IdleTimeoutTimer(
-          timeout: const Duration(minutes: 30),
-          onTimeout: () {},
-        );
         final coordinator = createCoordinator(
-          idleTimer: idleTimer,
+          idleTimeout: const Duration(minutes: 30),
           maxSessionDuration: const Duration(hours: 24),
           persistIdleExpiry:
               (
@@ -1099,8 +1056,6 @@ void main() {
         expect(persistedCalls, isNotEmpty);
         final persisted = persistedCalls.single;
         expect(persisted.$3, greaterThan(persisted.$2));
-
-        idleTimer.dispose();
       });
     });
 
@@ -1110,17 +1065,12 @@ void main() {
         () async {
           // GIVEN a persisted session whose 30 minute idle deadline is 2
           // minutes away
-          final idleTimer = IdleTimeoutTimer(
-            timeout: const Duration(minutes: 30),
-            onTimeout: () {},
-          );
-          addTearDown(idleTimer.dispose);
           final coordinator = createCoordinator(
             autoRecordSessionsPercent: 100,
             backgroundBehavior: const ReplayBackgroundBehavior.pause(
               idleTimeout: Duration(minutes: 30),
             ),
-            idleTimer: idleTimer,
+            idleTimeout: const Duration(minutes: 30),
           );
           final now = DateTime.utc(2026, 1, 1, 12);
           final storedDeadline = now.add(const Duration(minutes: 2));
@@ -1158,17 +1108,12 @@ void main() {
         'resuming without a stored deadline falls back to a full window',
         () async {
           // GIVEN a resume that carries no persisted deadline
-          final idleTimer = IdleTimeoutTimer(
-            timeout: const Duration(minutes: 30),
-            onTimeout: () {},
-          );
-          addTearDown(idleTimer.dispose);
           final coordinator = createCoordinator(
             autoRecordSessionsPercent: 100,
             backgroundBehavior: const ReplayBackgroundBehavior.pause(
               idleTimeout: Duration(minutes: 30),
             ),
-            idleTimer: idleTimer,
+            idleTimeout: const Duration(minutes: 30),
           );
           final now = DateTime.utc(2026, 1, 1, 12);
           final session = Session(
@@ -1486,17 +1431,12 @@ void main() {
           // The idle Timer is deliberately never fired: this models bfcache
           // or OS suspension, where the page is frozen and timers do not
           // advance even though wall-clock time passes.
-          final idleTimer = IdleTimeoutTimer(
-            timeout: const Duration(minutes: 30),
-            onTimeout: () {},
-          );
-          addTearDown(idleTimer.dispose);
           final coordinator = createCoordinator(
             autoRecordSessionsPercent: 100,
             backgroundBehavior: const ReplayBackgroundBehavior.pause(
               idleTimeout: Duration(minutes: 30),
             ),
-            idleTimer: idleTimer,
+            idleTimeout: const Duration(minutes: 30),
           );
           final hiddenAt = DateTime.utc(2026, 1, 1, 12);
           String? replayId;
@@ -1529,17 +1469,12 @@ void main() {
         'a frozen page within its idle window keeps the same session',
         () async {
           // GIVEN the same setup, restored before the window elapses
-          final idleTimer = IdleTimeoutTimer(
-            timeout: const Duration(minutes: 30),
-            onTimeout: () {},
-          );
-          addTearDown(idleTimer.dispose);
           final coordinator = createCoordinator(
             autoRecordSessionsPercent: 100,
             backgroundBehavior: const ReplayBackgroundBehavior.pause(
               idleTimeout: Duration(minutes: 30),
             ),
-            idleTimer: idleTimer,
+            idleTimeout: const Duration(minutes: 30),
           );
           final hiddenAt = DateTime.utc(2026, 1, 1, 12);
           String? replayId;
@@ -1603,15 +1538,10 @@ void main() {
           logger: logger,
         );
         final writesWithMetadata = <String>[];
-        final idleTimer = IdleTimeoutTimer(
-          timeout: const Duration(minutes: 30),
-          onTimeout: () {},
-        );
-        addTearDown(idleTimer.dispose);
         final coordinator = createCoordinator(
           autoRecordSessionsPercent: 100,
           recorder: recorder,
-          idleTimer: idleTimer,
+          idleTimeout: const Duration(minutes: 30),
           maxSessionDuration: const Duration(hours: 24),
           backgroundBehavior: const ReplayBackgroundBehavior.pause(
             idleTimeout: Duration(minutes: 30),
@@ -1646,12 +1576,8 @@ void main() {
       test('stop expires the recorded session in storage', () async {
         // GIVEN an active web recording
         final persisted = <(String, int, int)>[];
-        final idleTimer = IdleTimeoutTimer(
-          timeout: const Duration(minutes: 30),
-          onTimeout: () {},
-        );
         final coordinator = createCoordinator(
-          idleTimer: idleTimer,
+          idleTimeout: const Duration(minutes: 30),
           maxSessionDuration: const Duration(hours: 24),
           persistIdleExpiry: (id, idle, max, background) async {
             persisted.add((id, idle, max));
@@ -1671,8 +1597,6 @@ void main() {
         // cannot resume the stopped session
         final expiredMs = now.millisecondsSinceEpoch - 1;
         expect(persisted.last, (sessionId, expiredMs, expiredMs));
-
-        idleTimer.dispose();
       });
 
       test('stop expires a staged resumable session', () async {
@@ -1731,12 +1655,8 @@ void main() {
       test('background stop behavior expires the session', () async {
         // GIVEN an active recording configured to stop in the background
         final persisted = <(String, int, int)>[];
-        final idleTimer = IdleTimeoutTimer(
-          timeout: const Duration(minutes: 30),
-          onTimeout: () {},
-        );
         final coordinator = createCoordinator(
-          idleTimer: idleTimer,
+          idleTimeout: const Duration(minutes: 30),
           maxSessionDuration: const Duration(hours: 24),
           persistIdleExpiry: (id, idle, max, background) async {
             persisted.add((id, idle, max));
@@ -1755,8 +1675,6 @@ void main() {
         // THEN the session cannot be resumed by a later page load
         final expiredMs = now.millisecondsSinceEpoch - 1;
         expect(persisted.last, (sessionId, expiredMs, expiredMs));
-
-        idleTimer.dispose();
       });
     });
 

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:clock/clock.dart';
 import 'idle_timeout_timer.dart';
+import 'recording_limits.dart';
 
 /// A replay deadline that ends the recording when it passes.
 enum ExpiredDeadline { maximum, idle }
@@ -18,15 +19,23 @@ class SessionLifetime {
   DateTime? _maximumExpiry;
   DateTime? _backgroundExpiry;
 
+  /// Without [limits] (native) nothing ever expires.
   SessionLifetime({
-    IdleTimeoutTimer? idleTimer,
-    Duration? maximumDuration,
+    RecordingDurationLimits? limits,
     required void Function() onIdleExpired,
     required void Function() onMaximumExpired,
-  }) : _idleTimer = idleTimer,
-       _maximumDuration = maximumDuration,
+  }) : _maximumDuration = limits?.maximum,
        _onIdleExpired = onIdleExpired,
-       _onMaximumExpired = onMaximumExpired;
+       _onMaximumExpired = onMaximumExpired {
+    final idle = limits?.idle;
+    if (idle != null && idle > Duration.zero) {
+      _idleTimer = IdleTimeoutTimer(timeout: idle, onTimeout: onIdleExpired);
+    }
+  }
+
+  /// Whether this replay has duration limits at all. Remote duration config
+  /// applies only then.
+  bool get hasLimits => _maximumDuration != null;
 
   Duration? get maximumDuration => _maximumDuration;
   DateTime? get maximumExpiry => _maximumExpiry;

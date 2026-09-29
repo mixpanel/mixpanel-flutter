@@ -14,6 +14,20 @@ const maxRecordingDuration = Duration(hours: 24);
 /// replay another runtime is recording must allow for this much lag.
 const expiryWriteDebounce = Duration(seconds: 5);
 
+/// Activity and maximum-duration limits of a replay.
+///
+/// Web replays carry these across page loads. Native replays end with the
+/// process and have neither, so native platforms pass no limits at all.
+class RecordingDurationLimits {
+  /// Longest a replay may record, measured from its start.
+  final Duration maximum;
+
+  /// Inactivity after which a replay ends. Null or non-positive disables it.
+  final Duration? idle;
+
+  const RecordingDurationLimits({required this.maximum, this.idle});
+}
+
 /// Caps [value] at [maxRecordingDuration], logging when it had to be lowered.
 Duration capRecordingDuration(
   Duration value, {

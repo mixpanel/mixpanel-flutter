@@ -25,7 +25,7 @@ void main() {
     });
 
     SessionLifetime activeLifetime() => SessionLifetime(
-      maximumDuration: const Duration(hours: 1),
+      limits: const RecordingDurationLimits(maximum: Duration(hours: 1)),
       onIdleExpired: () {},
       onMaximumExpired: () {},
     )..begin(clock.now());
@@ -69,7 +69,7 @@ void main() {
     test('writes nothing without a maximum deadline', () {
       // GIVEN a lifetime that has not begun
       final lifetime = SessionLifetime(
-        maximumDuration: const Duration(hours: 1),
+        limits: const RecordingDurationLimits(maximum: Duration(hours: 1)),
         onIdleExpired: () {},
         onMaximumExpired: () {},
       );

@@ -1,3 +1,4 @@
+import '../session/recording_limits.dart';
 import '../session/session_persistence.dart';
 import '../../models/configuration.dart';
 import '../debug_mask_overlay.dart';
@@ -24,8 +25,9 @@ class PlatformInitResult {
   /// Upload payload compressor, owned by this SDK instance.
   final GzipCompressor gzipCompressor;
   final bool wifiOnly;
-  final Duration? idleTimeout;
-  final Duration? maxSessionDuration;
+
+  /// Web replays' duration limits; null on native, which has none.
+  final RecordingDurationLimits? durationLimits;
 
   /// Carries replays across page loads on web; a no-op elsewhere.
   final SessionPersistence sessionPersistence;
@@ -41,8 +43,7 @@ class PlatformInitResult {
     required this.screenshotCapturer,
     required this.gzipCompressor,
     required this.wifiOnly,
-    this.idleTimeout,
-    this.maxSessionDuration,
+    this.durationLimits,
     required this.sessionPersistence,
     required this.backgroundBehavior,
     required this.debugMaskOverlayFactory,

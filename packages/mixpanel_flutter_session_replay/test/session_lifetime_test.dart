@@ -1,6 +1,6 @@
 import 'package:clock/clock.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mixpanel_flutter_session_replay/src/internal/session/idle_timeout_timer.dart';
+import 'package:mixpanel_flutter_session_replay/src/internal/session/recording_limits.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/session/session_lifetime.dart';
 
 void main() {
@@ -9,11 +9,10 @@ void main() {
 
     SessionLifetime lifetimeWithBothDeadlinesAt(DateTime deadline) {
       final lifetime = SessionLifetime(
-        idleTimer: IdleTimeoutTimer(
-          timeout: const Duration(minutes: 1),
-          onTimeout: () {},
+        limits: const RecordingDurationLimits(
+          maximum: Duration(minutes: 1),
+          idle: Duration(minutes: 1),
         ),
-        maximumDuration: const Duration(minutes: 1),
         onIdleExpired: () {},
         onMaximumExpired: () {},
       );
