@@ -381,13 +381,14 @@ class UploadService {
         return busySessions.isEmpty ? UploadResult.success : UploadResult.busy;
       }
 
-      final queue = eventQueue;
-      if (queue is! UploadLease) {
+      final UploadLease uploadLease;
+      if (eventQueue case final UploadLease lease) {
+        uploadLease = lease;
+      } else {
         return _uploadNextBatch(oldestEvent);
       }
       // Per-session lease, as mixpanel-js locks per replay. Contention only
       // arises when several tabs drain the same expired session.
-      final uploadLease = queue as UploadLease;
 
       var acquired = false;
       try {
@@ -508,8 +509,7 @@ class UploadService {
       // Handle response
       if (response.statusCode == 200) {
         final queue = eventQueue;
-        if (queue is AtomicUploadCommit) {
-          final atomicQueue = queue as AtomicUploadCommit;
+        if (queue case final AtomicUploadCommit atomicQueue) {
           await atomicQueue.commitUploadedBatch(
             events: events,
             sessionId: session.id,

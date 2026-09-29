@@ -59,12 +59,22 @@ Future<PlatformInitResult> platformInit({
       quotaMB: storageQuotaMB,
       logger: logger,
     );
-    await _pruneExpiredData(queue, logger);
-    final resumeInfo = await _checkSessionResume(
-      queue,
-      maxSessionDuration: web.maxSessionDuration,
-      logger: logger,
-    );
+    final SessionPersistence sessionPersistence;
+    if (queue case final IndexedDbEventQueue persistent) {
+      await _pruneExpiredData(persistent, logger);
+      sessionPersistence = StoredSessionPersistence(
+        resumable: await _checkSessionResume(
+          persistent,
+          maxSessionDuration: web.maxSessionDuration,
+          logger: logger,
+        ),
+        logger: logger,
+        write: _deadlineWriter(persistent, logger),
+      );
+    } else {
+      // Page-lifetime memory storage cannot carry a replay across page loads.
+      sessionPersistence = SessionPersistence.none();
+    }
 
     surfaceCapture = WebRenderedSurfaceCapture(logger: logger);
     try {
@@ -82,7 +92,6 @@ Future<PlatformInitResult> platformInit({
       useAccessibilityLabelFallback: useAccessibilityLabelFallback,
     );
 
-    final persistedQueue = queue;
     return PlatformInitResult(
       queue: queue,
       screenshotCapturer: screenshotCapturer,
@@ -92,31 +101,7 @@ Future<PlatformInitResult> platformInit({
         maximum: web.maxSessionDuration,
         idle: web.idleTimeout,
       ),
-      sessionPersistence: StoredSessionPersistence(
-        resumable: resumeInfo,
-        logger: logger,
-        // Failures are logged, never thrown.
-        write:
-            (
-              sessionId,
-              idleExpiresMs,
-              maxExpiresMs,
-              backgroundExpiresMs,
-            ) async {
-              try {
-                await updateWebSessionExpiry(
-                  queue: persistedQueue,
-                  sessionId: sessionId,
-                  idleExpiresMs: idleExpiresMs,
-                  maxExpiresMs: maxExpiresMs,
-                  backgroundExpiresMs: backgroundExpiresMs,
-                  logger: logger,
-                );
-              } catch (e) {
-                logger.error('Failed to persist session expiry: $e');
-              }
-            },
-      ),
+      sessionPersistence: sessionPersistence,
       backgroundBehavior: web.onBackground,
       // Capture reads the presented Flutter canvas, which would include
       // anything painted in-tree.
@@ -166,10 +151,31 @@ Future<EventQueue> _openQueue({
   }
 }
 
+/// Stores replay deadlines in [queue]. Failures are logged, never thrown.
+SessionDeadlineWriter _deadlineWriter(
+  IndexedDbEventQueue queue,
+  MixpanelLogger logger,
+) => (sessionId, idleExpiresMs, maxExpiresMs, backgroundExpiresMs) async {
+  try {
+    await updateWebSessionExpiry(
+      queue: queue,
+      sessionId: sessionId,
+      idleExpiresMs: idleExpiresMs,
+      maxExpiresMs: maxExpiresMs,
+      backgroundExpiresMs: backgroundExpiresMs,
+      logger: logger,
+    );
+  } catch (e) {
+    logger.error('Failed to persist session expiry: $e');
+  }
+};
+
 /// Retention is best-effort. A cleanup failure must not discard the
 /// otherwise usable persistent queue or prevent recording.
-Future<void> _pruneExpiredData(EventQueue queue, MixpanelLogger logger) async {
-  if (queue is! IndexedDbEventQueue) return;
+Future<void> _pruneExpiredData(
+  IndexedDbEventQueue queue,
+  MixpanelLogger logger,
+) async {
   try {
     final cleanup = await queue.pruneExpiredData(
       DateTime.now().subtract(_webStorageRetention),
@@ -189,7 +195,7 @@ Future<void> _pruneExpiredData(EventQueue queue, MixpanelLogger logger) async {
 /// requirement: a malformed or unreadable metadata record leaves the SDK
 /// recording fresh rather than failing to initialize on every page load.
 Future<ResumableSession?> _checkSessionResume(
-  EventQueue queue, {
+  IndexedDbEventQueue queue, {
   required Duration maxSessionDuration,
   required MixpanelLogger logger,
 }) async {

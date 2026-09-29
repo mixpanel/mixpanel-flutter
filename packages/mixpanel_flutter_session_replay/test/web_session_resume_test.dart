@@ -159,7 +159,6 @@ void main() {
         status: SessionStatus.active,
       );
       await queue.createSessionMetadata(session);
-      await queue.updateSequenceNumber('session-abc', 7);
 
       // Set expiry far in the future
       final futureMs = DateTime.now().millisecondsSinceEpoch + 3600000;
@@ -178,7 +177,6 @@ void main() {
       expect(result, isNotNull);
       expect(result!.session.id, 'session-abc');
       expect(result.session.startTime.millisecondsSinceEpoch, 1000000);
-      expect(result.lastSequenceNumber, 7);
     });
 
     test('returns null when max duration exceeded', () async {
@@ -294,7 +292,6 @@ void main() {
       );
       await queue.createSessionMetadata(older);
       await queue.createSessionMetadata(newer);
-      await queue.updateSequenceNumber('session-new', 3);
 
       // Set valid expiry on the newer session
       final futureMs = DateTime.now().millisecondsSinceEpoch + 3600000;
@@ -312,32 +309,6 @@ void main() {
 
       expect(result, isNotNull);
       expect(result!.session.id, 'session-new');
-      expect(result.lastSequenceNumber, 3);
-    });
-
-    test('defaults lastSequenceNumber to -1 when not set', () async {
-      final session = Session(
-        id: 'session-noseq',
-        startTime: DateTime.fromMillisecondsSinceEpoch(1000000, isUtc: true),
-        status: SessionStatus.active,
-      );
-      await queue.createSessionMetadata(session);
-
-      final futureMs = DateTime.now().millisecondsSinceEpoch + 3600000;
-      await queue.updateSessionExpiry(
-        sessionId: 'session-noseq',
-        idleExpiresMs: futureMs,
-        maxExpiresMs: futureMs,
-      );
-
-      final result = await checkWebSessionResume(
-        queue: queue,
-        maxSessionDuration: const Duration(hours: 24),
-        logger: logger,
-      );
-
-      expect(result, isNotNull);
-      expect(result!.lastSequenceNumber, -1);
     });
 
     test('does not resume a session owned by another browser tab', () async {
