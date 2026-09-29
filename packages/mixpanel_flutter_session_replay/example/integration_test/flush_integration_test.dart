@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
 import 'package:integration_test/integration_test.dart';
 import 'package:mixpanel_flutter_session_replay/mixpanel_flutter_session_replay.dart';
 
@@ -87,6 +88,18 @@ void main() {
     // meta event, so only the captures below are counted.
     await tester.runAsync(() => Future.delayed(Duration(milliseconds: 2000)));
     await tester.runAsync(() => sdk.flush());
+
+    // The session opens with exactly one meta event, ahead of its snapshots.
+    final openingTypes = [
+      for (final request in uploadRequests)
+        for (final event in _decodeEvents(request)) event['type'],
+    ];
+    expect(openingTypes.first, 4, reason: 'The session starts with meta');
+    expect(openingTypes.where((type) => type == 4), hasLength(1));
+    expect(openingTypes.skip(1), everyElement(2));
+    final openingReplayIds = uploadRequests
+        .map((r) => r.url.queryParameters['replay_id'])
+        .toSet();
     uploadRequests.clear();
 
     // Trigger 3 automatic captures with 500ms+ gaps (CaptureScheduler rate limit)
@@ -103,18 +116,16 @@ void main() {
       hasLength(1),
       reason: 'All captures should go out in a single upload',
     );
-    final events =
-        jsonDecode(utf8.decode(gzip.decode(uploadRequests.single.bodyBytes)))
-            as List;
     expect(
-      events.map((event) => (event as Map<String, dynamic>)['type']),
+      _decodeEvents(uploadRequests.single).map((event) => event['type']),
       [2, 2, 2],
-      reason: 'One full snapshot per capture',
+      reason: 'One full snapshot per capture, and no second meta event',
     );
 
-    final replayIds = uploadRequests
-        .map((r) => r.url.queryParameters['replay_id'])
-        .toSet();
+    final replayIds = {
+      ...openingReplayIds,
+      ...uploadRequests.map((r) => r.url.queryParameters['replay_id']),
+    };
     expect(replayIds.length, 1, reason: 'All batches should share a session');
     expect(replayIds.first, isNotEmpty);
   });
@@ -199,3 +210,8 @@ void main() {
     },
   );
 }
+
+/// The rrweb events in an upload request's gzipped JSON body.
+List<Map<String, dynamic>> _decodeEvents(http.Request request) =>
+    (jsonDecode(utf8.decode(gzip.decode(request.bodyBytes))) as List)
+        .cast<Map<String, dynamic>>();
