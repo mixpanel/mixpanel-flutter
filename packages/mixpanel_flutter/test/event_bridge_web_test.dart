@@ -80,7 +80,7 @@ void main() {
     return sub;
   }
 
-  test('on_track forwards decorated properties without changing the event',
+  test('should forward decorated properties unchanged when on_track runs',
       () async {
     final hook = await initWithHook();
     final received = <MixpanelEvent>[];
@@ -107,7 +107,9 @@ void main() {
     await sub.cancel();
   });
 
-  test('on_track forwards JS dates without dropping the event', () async {
+  test(
+      'should keep the event when on_track receives properties with JS '
+      'dates', () async {
     final hook = await initWithHook();
     final received = <MixpanelEvent>[];
     final sub = await subscribe(received);
@@ -136,8 +138,9 @@ void main() {
     await sub.cancel();
   });
 
-  test('subscribing starts and cancelling stops the bridge over the channel',
-      () async {
+  test(
+      'should start the bridge when subscribed and stop it when the '
+      'subscription is cancelled', () async {
     final hook = await initWithHook();
     final properties = <String, Object?>{'count': 1}.jsify() as JSObject;
 
