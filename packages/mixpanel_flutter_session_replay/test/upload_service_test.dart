@@ -1305,6 +1305,44 @@ void main() {
           );
         },
       );
+      test(
+        'does not upload past the flush cutoff while skipping a leased session',
+        () async {
+          // GIVEN a contended session another tab is draining ahead of this
+          // tab's own session, which keeps recording while the flush runs
+          final leaseQueue = _RecordingDuringCommitQueue()
+            ..busySessionIds.add('contended-session');
+          await leaseQueue.initialize();
+          for (final (id, timestamp) in [
+            ('contended-session', 1000),
+            ('own-session', 2000),
+          ]) {
+            await leaseQueue.createSessionMetadata(
+              Session(
+                id: id,
+                startTime: DateTime.fromMillisecondsSinceEpoch(
+                  timestamp,
+                  isUtc: true,
+                ),
+                status: SessionStatus.active,
+              ),
+            );
+            await leaseQueue.add(_interactionAt(id, timestamp + 1));
+          }
+          final service = createService(eventQueue: leaseQueue);
+
+          // WHEN a flush runs
+          await service.flush();
+
+          // THEN only the event that existed when the flush began is sent;
+          // the one recorded afterward waits for the next flush
+          expect(leaseQueue.commitCount, 1);
+          final remaining = await leaseQueue.fetchOldestHeader(
+            excludeSessionIds: {'contended-session'},
+          );
+          expect(remaining?.timestamp.millisecondsSinceEpoch, 9000);
+        },
+      );
     });
 
     group('storage failures', () {
@@ -1413,5 +1451,37 @@ class _FailingHeaderQueue extends InMemoryEventQueue {
       throw StateError('IndexedDB connection is closed');
     }
     return super.fetchOldestHeader(excludeSessionIds: excludeSessionIds);
+  }
+}
+
+SessionReplayEvent _interactionAt(String sessionId, int timestampMs) =>
+    SessionReplayEvent(
+      sessionId: sessionId,
+      distinctId: 'user-1',
+      timestamp: DateTime.fromMillisecondsSinceEpoch(timestampMs, isUtc: true),
+      type: EventType.interaction,
+      payload: InteractionPayload(interactionType: 7, x: 1, y: 2),
+    );
+
+/// Lease queue whose own session records a new event each time a batch is
+/// committed, as a replay that keeps recording during a flush does. Bounded
+/// so a flush that ignores its cutoff fails the test instead of hanging it.
+class _RecordingDuringCommitQueue extends LeaseEventQueue {
+  var _recorded = 0;
+
+  @override
+  Future<void> commitUploadedBatch({
+    required List<PersistedSessionReplayEvent> events,
+    required String sessionId,
+    required int sequenceNumber,
+  }) async {
+    await super.commitUploadedBatch(
+      events: events,
+      sessionId: sessionId,
+      sequenceNumber: sequenceNumber,
+    );
+    if (_recorded++ < 3) {
+      await add(_interactionAt('own-session', 9000 + _recorded - 1));
+    }
   }
 }

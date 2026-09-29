@@ -310,7 +310,7 @@ class UploadService {
           break;
         }
 
-        final result = await _uploadBatch();
+        final result = await _uploadBatch(notAfter: _flushCutoffTimestamp);
 
         if (result == UploadResult.success) {
           _consecutiveFailures = 0;
@@ -362,7 +362,13 @@ class UploadService {
   /// the next eligible one, so one contended expired session cannot hold
   /// back this runtime's own replay. Returns [UploadResult.busy] only when
   /// every session with queued events is leased elsewhere.
-  Future<UploadResult> _uploadBatch() async {
+  ///
+  /// With [notAfter], a session whose oldest event is newer is not uploaded
+  /// either. The caller checks its cutoff against the oldest event overall,
+  /// which may belong to a leased session, so a session reached by skipping
+  /// past a lease must be checked here or a flush could keep uploading
+  /// events recorded after it began.
+  Future<UploadResult> _uploadBatch({DateTime? notAfter}) async {
     final busySessions = <String>{};
     while (true) {
       // The queue decides which events this runtime may upload: on web that
@@ -377,7 +383,8 @@ class UploadService {
         _logger.error('Failed to read the upload queue: $e');
         return UploadResult.networkError;
       }
-      if (oldestEvent == null) {
+      if (oldestEvent == null ||
+          (notAfter != null && oldestEvent.timestamp.isAfter(notAfter))) {
         return busySessions.isEmpty ? UploadResult.success : UploadResult.busy;
       }
 
