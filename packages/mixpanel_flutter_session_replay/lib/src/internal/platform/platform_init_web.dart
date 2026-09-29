@@ -1,6 +1,7 @@
 export 'platform_init_types.dart';
 
 import '../capture/rendered_surface_frame_acquirer.dart';
+import '../debug_mask_overlay.dart';
 import '../storage/event_queue_interface.dart';
 import '../storage/event_queue_factory_web.dart';
 import '../storage/indexed_db_event_queue.dart';
@@ -110,6 +111,9 @@ Future<PlatformInitResult> platformInit({
             }
           },
       backgroundBehavior: web.onBackground,
+      // Capture reads the presented Flutter canvas, which would include
+      // anything painted in-tree.
+      debugMaskOverlayFactory: OutOfSurfaceDebugMaskOverlay.new,
     );
   } catch (_) {
     await surfaceCapture?.dispose();

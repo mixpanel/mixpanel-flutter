@@ -1,6 +1,7 @@
 import 'dart:math' show Random;
 import 'package:clock/clock.dart';
-import 'package:flutter/foundation.dart' show listEquals, visibleForTesting;
+import 'package:flutter/foundation.dart'
+    show ValueListenable, listEquals, visibleForTesting;
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 
@@ -12,6 +13,7 @@ import '../models/session_event.dart' show TouchPosition;
 import '../models/session.dart';
 import 'background_task_manager.dart';
 import 'capture/capture_invalidation.dart';
+import 'debug_mask_overlay.dart';
 import 'event_recorder.dart';
 import 'screenshot_capturer.dart';
 import 'triggers/trigger_service.dart';
@@ -62,9 +64,18 @@ class SessionReplayCoordinator implements WidgetCoordinator {
   /// What a pause or stop means for captures already in flight.
   final CaptureInvalidation _captureInvalidation = CaptureInvalidation();
 
+  final DebugMaskOverlayFactory _debugMaskOverlayFactory;
+
   @override
-  bool get capturesRenderedSurface =>
-      _screenshotCapturer.capturesRenderedSurface;
+  DebugMaskOverlay createDebugMaskOverlay({
+    required ValueListenable<List<MaskRegionInfo>> regions,
+    required DebugOverlayColors colors,
+    required RenderBox? Function() boundary,
+  }) => _debugMaskOverlayFactory(
+    regions: regions,
+    colors: colors,
+    boundary: boundary,
+  );
 
   // Store the result of the settings check
   RemoteEnablementState _remoteEnablementState = RemoteEnablementState.pending;
@@ -123,6 +134,8 @@ class SessionReplayCoordinator implements WidgetCoordinator {
     IdleTimeoutTimer? idleTimer,
     Duration? maxSessionDuration,
     required ReplayBackgroundBehavior backgroundBehavior,
+    DebugMaskOverlayFactory debugMaskOverlayFactory =
+        InTreeDebugMaskOverlay.new,
     Future<void> Function(
       String sessionId,
       int idleExpiresMs,
@@ -142,6 +155,7 @@ class SessionReplayCoordinator implements WidgetCoordinator {
        _remoteSettingsMode = remoteSettingsMode,
        _debugOptions = debugOptions,
        _backgroundBehavior = backgroundBehavior,
+       _debugMaskOverlayFactory = debugMaskOverlayFactory,
        _persistIdleExpiry = persistIdleExpiry {
     _lifetime = SessionLifetime(
       idleTimer: idleTimer,

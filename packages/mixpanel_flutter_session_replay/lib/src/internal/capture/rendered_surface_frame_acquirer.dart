@@ -56,9 +56,6 @@ class RenderedSurfaceFrameAcquirer extends FrameAcquirer {
   bool get isAvailable => _surface.isAvailable;
 
   @override
-  bool get readsPresentedSurface => true;
-
-  @override
   Future<FrameSourceStatus> prepare(Size logicalSize) async {
     return switch (await _surface.waitUntilRenderedSurfaceAvailable(
       logicalSize,

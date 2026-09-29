@@ -32,9 +32,6 @@ class ScreenshotCapturer {
 
   final FrameAcquirer _acquirer;
 
-  /// Whether capture reads the already-rendered platform surface.
-  bool get capturesRenderedSurface => _acquirer.readsPresentedSurface;
-
   /// Optional wireframe emitter. When non-null, wireframes are collected on
   /// the same walk as mask detection and enqueued alongside each screenshot.
   final WireframeEmitter? _wireframeEmitter;

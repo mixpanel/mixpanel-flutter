@@ -18,11 +18,6 @@ abstract class FrameAcquirer {
   /// false after a permanent failure so capture stops before any work.
   bool get isAvailable;
 
-  /// Whether pixels are read from the surface the platform already presented,
-  /// rather than rendered from Flutter's layer tree. Anything painted over
-  /// the app in-tree then ends up in the replay.
-  bool get readsPresentedSurface => false;
-
   /// Runs before the mask walk, once Flutter has finished painting.
   ///
   /// Synchronous by default so capture does not yield between the paint

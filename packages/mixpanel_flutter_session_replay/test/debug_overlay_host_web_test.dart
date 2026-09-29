@@ -1,6 +1,7 @@
 @TestOn('browser')
 library;
 
+import 'package:mixpanel_flutter_session_replay/src/internal/debug_mask_overlay.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/platform/debug_overlay_host.dart';
@@ -186,7 +187,7 @@ void main() {
     // GIVEN a rendered-surface capture with one stable mask region
     final coordinator = FakeWidgetCoordinator(
       recordingState: RecordingState.recording,
-      capturesRenderedSurface: true,
+      debugMaskOverlayFactory: OutOfSurfaceDebugMaskOverlay.new,
     );
     coordinator.maskRegionsNotifier.value = [
       MaskRegionInfo(const Rect.fromLTWH(0, 0, 10, 10), MaskSource.auto),

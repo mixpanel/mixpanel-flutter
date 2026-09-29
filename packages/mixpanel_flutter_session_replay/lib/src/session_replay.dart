@@ -306,6 +306,7 @@ class MixpanelSessionReplay {
           maxSessionDuration: platformResult.maxSessionDuration,
           backgroundBehavior: platformResult.backgroundBehavior,
           persistIdleExpiry: platformResult.persistIdleExpiry,
+          debugMaskOverlayFactory: platformResult.debugMaskOverlayFactory,
         );
 
         // Wire up the coordinator and shared HTTP client to the instance

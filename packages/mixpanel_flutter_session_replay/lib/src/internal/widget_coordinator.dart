@@ -1,9 +1,12 @@
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 
+import '../models/debug_overlay_colors.dart';
 import '../models/masking_directive.dart';
 import '../models/results.dart';
 import '../models/session_event.dart' show TouchPosition;
+import 'debug_mask_overlay.dart';
 import 'settings/settings_service.dart';
 import 'logger.dart';
 
@@ -25,8 +28,13 @@ abstract class WidgetCoordinator {
   /// Whether app is currently in foreground
   bool get isAppInForeground;
 
-  /// Whether screenshots read the already-rendered platform surface.
-  bool get capturesRenderedSurface;
+  /// Creates the debug mask overlay for a capture boundary, drawn wherever
+  /// this coordinator's capture cannot see it.
+  DebugMaskOverlay createDebugMaskOverlay({
+    required ValueListenable<List<MaskRegionInfo>> regions,
+    required DebugOverlayColors colors,
+    required RenderBox? Function() boundary,
+  });
 
   /// Logger instance
   MixpanelLogger get logger;

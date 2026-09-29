@@ -6,12 +6,10 @@ import 'package:flutter/foundation.dart' show kDebugMode;
 
 import '../internal/widget_coordinator.dart';
 import '../internal/capture/capture_scheduler.dart';
-import '../internal/platform/debug_overlay_host.dart';
+import '../internal/debug_mask_overlay.dart';
 import '../internal/settings/settings_service.dart';
 import '../models/debug_overlay_colors.dart';
-import '../models/masking_directive.dart';
 import '../models/results.dart';
-import 'mask_overlay.dart';
 
 /// Internal widget that monitors frame changes and schedules snapshots
 class FrameMonitor extends StatefulWidget {
@@ -36,11 +34,9 @@ class _FrameMonitorState extends State<FrameMonitor> {
   final GlobalKey _repaintBoundaryKey = GlobalKey();
   late final CaptureScheduler _scheduler;
 
-  /// True where capture reads a shared rendered surface (web) rather than this
-  /// widget's [RepaintBoundary]. The overlay widget would be captured there, so
-  /// it is drawn outside the Flutter surface by [_debugOverlayHost] instead.
-  late final bool _capturesRenderedSurface;
-  DebugOverlayHost? _debugOverlayHost;
+  /// Debug mask overlay, drawn wherever the coordinator's capture cannot see
+  /// it. Null unless the overlay is enabled.
+  DebugMaskOverlay? _debugOverlay;
 
   @override
   void initState() {
@@ -49,19 +45,17 @@ class _FrameMonitorState extends State<FrameMonitor> {
     // Create timing scheduler (private to this widget)
     _scheduler = CaptureScheduler(logger: widget.coordinator.logger);
 
-    _capturesRenderedSurface = widget.coordinator.capturesRenderedSurface;
-    if (_capturesRenderedSurface && _debugOverlayEnabled) {
-      _debugOverlayHost = createDebugOverlayHost();
-    }
-    if (_debugOverlayHost != null) {
-      widget.coordinator.maskRegionsNotifier.addListener(_onMaskRegionsChanged);
-      // The notifier only fires on change, and the coordinator suppresses a
-      // capture whose regions match the stored ones. Paint the current value
-      // once so a host attached to an already-populated notifier is not blank
-      // until the layout happens to move.
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _onMaskRegionsChanged();
-      });
+    final overlayColors = widget.debugOptions?.overlayColors;
+    if (kDebugMode && overlayColors != null) {
+      _debugOverlay = widget.coordinator.createDebugMaskOverlay(
+        regions: widget.coordinator.maskRegionsNotifier,
+        colors: overlayColors,
+        boundary: () {
+          final boundary = _repaintBoundaryKey.currentContext
+              ?.findRenderObject();
+          return boundary is RenderBox ? boundary : null;
+        },
+      );
     }
 
     // Listen to frame notifications from parent widget
@@ -74,34 +68,10 @@ class _FrameMonitorState extends State<FrameMonitor> {
     });
   }
 
-  bool get _debugOverlayEnabled =>
-      kDebugMode && widget.debugOptions?.overlayColors != null;
-
-  /// Redraws the out-of-surface overlay. Touching the DOM directly keeps this
-  /// off Flutter's build pipeline, so the overlay cannot schedule the frame
-  /// that would trigger the next capture.
-  void _onMaskRegionsChanged() {
-    final host = _debugOverlayHost;
-    final colors = widget.debugOptions?.overlayColors;
-    if (host == null || colors == null) return;
-    final boundary = _repaintBoundaryKey.currentContext?.findRenderObject();
-    if (boundary is! RenderBox || !boundary.hasSize) return;
-    host.update(
-      regions: widget.coordinator.maskRegionsNotifier.value,
-      colors: colors,
-      boundaryOrigin: boundary.localToGlobal(Offset.zero),
-      boundarySize: boundary.size,
-    );
-  }
-
   void _onFrame() {
     if (!mounted) return;
 
-    // The region coordinates are local to the capture boundary. Refresh the
-    // out-of-surface web overlay on every rendered frame so scrolling,
-    // resizing, or moving that boundary cannot leave otherwise-unchanged
-    // regions at stale viewport coordinates.
-    _onMaskRegionsChanged();
+    _debugOverlay?.onFrame();
 
     // Skip processing if remotely disabled
     if (widget.coordinator.remoteEnablementState ==
@@ -194,43 +164,17 @@ class _FrameMonitorState extends State<FrameMonitor> {
   @override
   void dispose() {
     widget.frameNotifier.removeListener(_onFrame);
-    // Unconditional: removeListener is a no-op for a listener never added, so
-    // this cannot desync from the registration condition above.
-    widget.coordinator.maskRegionsNotifier.removeListener(
-      _onMaskRegionsChanged,
-    );
-    _debugOverlayHost?.dispose();
+    _debugOverlay?.dispose();
     _scheduler.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    Widget child = RepaintBoundary(
+    final child = RepaintBoundary(
       key: _repaintBoundaryKey,
       child: widget.child,
     );
-
-    // Conditionally wrap with mask overlay for debugging (only in debug mode).
-    // Skipped where capture reads the rendered surface — the overlay would end
-    // up in the replay, so it is drawn outside that surface instead. Skipped
-    // there even when no host could be created, so the diagnostic paint can
-    // never leak into an upload.
-    final overlayColors = widget.debugOptions?.overlayColors;
-    if (overlayColors != null && kDebugMode && !_capturesRenderedSurface) {
-      child = ValueListenableBuilder<List<MaskRegionInfo>>(
-        valueListenable: widget.coordinator.maskRegionsNotifier,
-        builder: (context, maskRegions, child) {
-          return MaskOverlay(
-            maskRegions: maskRegions,
-            colors: overlayColors,
-            child: child!,
-          );
-        },
-        child: child,
-      );
-    }
-
-    return child;
+    return _debugOverlay?.wrap(child) ?? child;
   }
 }

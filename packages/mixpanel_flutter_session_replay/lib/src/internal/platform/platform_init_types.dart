@@ -1,5 +1,6 @@
 import '../session/resumable_session.dart';
 import '../../models/configuration.dart';
+import '../debug_mask_overlay.dart';
 import '../screenshot_capturer.dart';
 import '../storage/event_queue_interface.dart';
 import 'gzip_compressor.dart';
@@ -38,6 +39,9 @@ class PlatformInitResult {
   /// Configured behavior when the app or page leaves the foreground.
   final ReplayBackgroundBehavior backgroundBehavior;
 
+  /// Draws the debug mask overlay where [screenshotCapturer] cannot see it.
+  final DebugMaskOverlayFactory debugMaskOverlayFactory;
+
   const PlatformInitResult({
     required this.queue,
     required this.screenshotCapturer,
@@ -48,6 +52,7 @@ class PlatformInitResult {
     this.resumableSession,
     this.persistIdleExpiry,
     required this.backgroundBehavior,
+    required this.debugMaskOverlayFactory,
   });
 
   /// Releases every platform resource this result holds.

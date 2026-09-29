@@ -1,3 +1,4 @@
+import 'package:mixpanel_flutter_session_replay/src/internal/debug_mask_overlay.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/capture/rendered_surface_frame_acquirer.dart';
 import 'dart:async';
 
@@ -1348,7 +1349,7 @@ void main() {
       // into the Flutter tree would be baked into the replay
       final fake = FakeWidgetCoordinator(
         recordingState: RecordingState.recording,
-        capturesRenderedSurface: true,
+        debugMaskOverlayFactory: OutOfSurfaceDebugMaskOverlay.new,
       );
       final frameNotifier = ChangeNotifier();
       fake.onCaptureSnapshot = () {
@@ -1382,7 +1383,7 @@ void main() {
       // schedule is what drives the next capture.
       final fake = FakeWidgetCoordinator(
         recordingState: RecordingState.recording,
-        capturesRenderedSurface: true,
+        debugMaskOverlayFactory: OutOfSurfaceDebugMaskOverlay.new,
       );
       final frameNotifier = ChangeNotifier();
 
@@ -1576,11 +1577,7 @@ class _GatedCaptureCoordinator extends FakeWidgetCoordinator {
 /// Drives the production [ScreenshotCapturer] through the web surface path so
 /// a widget test observes the frames the real capture code requests.
 class _CapturingCoordinator extends FakeWidgetCoordinator {
-  _CapturingCoordinator()
-    : super(
-        recordingState: RecordingState.recording,
-        capturesRenderedSurface: true,
-      );
+  _CapturingCoordinator() : super(recordingState: RecordingState.recording);
 
   final ScreenshotCapturer capturer = ScreenshotCapturer(
     directive: MaskingDirective(autoMaskTypes: const {}),
