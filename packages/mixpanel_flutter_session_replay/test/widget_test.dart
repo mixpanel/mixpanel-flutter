@@ -194,115 +194,11 @@ void main() {
       ]);
     });
 
-    testWidgets('should record a mouse click as rrweb mouse events on web', (
-      tester,
-    ) async {
-      // GIVEN
-      final fake = FakeWidgetCoordinator(
-        recordingState: RecordingState.recording,
-      );
-
-      await tester.pumpWidget(
-        MaterialApp(
-          home: InteractionDetector(
-            coordinator: fake,
-            recordsMouseAsMouse: true,
-            child: Container(
-              width: 200,
-              height: 200,
-              color: const Color(0xFFFFFFFF),
-            ),
-          ),
-        ),
-      );
-
-      // WHEN
-      final center = tester.getCenter(find.byType(Container));
-      final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
-      await gesture.down(center);
-      await tester.pump();
-      await gesture.up();
-
-      // THEN
-      expect(fake.capturedInteractions.map((i) => i.interactionType), [
-        RRWebMouseInteraction.mouseDown,
-        RRWebMouseInteraction.mouseUp,
-        RRWebMouseInteraction.click,
-      ]);
-    });
-
-    testWidgets('does not emit click after a mouse drag', (tester) async {
-      // GIVEN
-      final fake = FakeWidgetCoordinator(
-        recordingState: RecordingState.recording,
-      );
-      await tester.pumpWidget(
-        MaterialApp(
-          home: InteractionDetector(
-            coordinator: fake,
-            recordsMouseAsMouse: true,
-            child: Container(
-              width: 200,
-              height: 200,
-              color: const Color(0xFFFFFFFF),
-            ),
-          ),
-        ),
-      );
-
-      // WHEN
-      final center = tester.getCenter(find.byType(Container));
-      final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
-      await gesture.down(center);
-      await gesture.moveTo(center + const Offset(40, 0));
-      await gesture.up();
-
-      // THEN
-      expect(fake.capturedInteractions.map((i) => i.interactionType), [
-        RRWebMouseInteraction.mouseDown,
-        RRWebMouseInteraction.mouseUp,
-      ]);
-      expect(fake.capturedTouchMoves, isEmpty);
-    });
-
-    testWidgets('does not emit click when a mouse gesture is cancelled', (
-      tester,
-    ) async {
-      final fake = FakeWidgetCoordinator(
-        recordingState: RecordingState.recording,
-      );
-      await tester.pumpWidget(
-        MaterialApp(
-          home: InteractionDetector(
-            coordinator: fake,
-            recordsMouseAsMouse: true,
-            child: Container(
-              key: const Key('cancel-target'),
-              width: 200,
-              height: 200,
-              color: const Color(0xFFFFFFFF),
-            ),
-          ),
-        ),
-      );
-
-      final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
-      await gesture.down(
-        tester.getCenter(find.byKey(const Key('cancel-target'))),
-      );
-      await gesture.cancel();
-
-      expect(fake.capturedInteractions.map((i) => i.interactionType), [
-        RRWebMouseInteraction.mouseDown,
-        RRWebMouseInteraction.mouseUp,
-      ]);
-    });
-
     testWidgets(
-      'should record a mouse press as touch events on native platforms',
+      'should record a mouse press as touch events when using a mouse',
       (tester) async {
-        // GIVEN a native platform (macOS), which records every pointer as
-        // touch with sampled moves, as the native SDKs do
+        // GIVEN a mouse, which every platform (web and macOS included)
+        // records as touch with sampled moves
         final fake = FakeWidgetCoordinator(
           recordingState: RecordingState.recording,
         );
@@ -310,7 +206,6 @@ void main() {
           MaterialApp(
             home: InteractionDetector(
               coordinator: fake,
-              recordsMouseAsMouse: false,
               child: Container(
                 width: 200,
                 height: 200,
@@ -342,10 +237,9 @@ void main() {
     );
 
     testWidgets(
-      'should record a secondary mouse button as touch on native platforms',
+      'should record a secondary mouse button as touch when it is pressed',
       (tester) async {
-        // GIVEN a native platform, where every mouse button was recorded
-        // before web support and still is
+        // GIVEN a mouse, whose buttons are all recorded like touches
         final fake = FakeWidgetCoordinator(
           recordingState: RecordingState.recording,
         );
@@ -353,7 +247,6 @@ void main() {
           MaterialApp(
             home: InteractionDetector(
               coordinator: fake,
-              recordsMouseAsMouse: false,
               child: Container(
                 width: 200,
                 height: 200,
@@ -373,7 +266,7 @@ void main() {
         await tester.pump();
         await gesture.up();
 
-        // THEN it is recorded as a touch, unchanged from native behavior
+        // THEN it is recorded as a touch
         expect(fake.capturedInteractions.map((i) => i.interactionType), [
           RRWebMouseInteraction.touchStart,
           RRWebMouseInteraction.touchEnd,

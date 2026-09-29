@@ -74,9 +74,9 @@ Future<void> main(List<String> args) async {
           !decoded.whereType<Map<String, dynamic>>().any(
             (event) =>
                 event['data'] is Map<String, dynamic> &&
-                (event['data'] as Map<String, dynamic>)['type'] == 2,
+                (event['data'] as Map<String, dynamic>)['type'] == 7,
           )) {
-        throw StateError('Recovery upload omitted the rrweb click event');
+        throw StateError('Recovery upload omitted the rrweb touch event');
       }
       if (request.headers.value(HttpHeaders.authorizationHeader) == null) {
         throw StateError('Upload omitted the authorization header');

@@ -167,7 +167,7 @@ void main() {
           timestamp: DateTime.now().toUtc(),
           type: EventType.interaction,
           payload: InteractionPayload(
-            interactionType: RRWebMouseInteraction.click,
+            interactionType: RRWebMouseInteraction.touchStart,
             x: 40,
             y: 80,
           ),
