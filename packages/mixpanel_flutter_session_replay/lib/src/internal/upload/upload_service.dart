@@ -255,7 +255,11 @@ class UploadService {
   ///
   /// Returns a [FlushResult] indicating the operation completed. Note that flush
   /// is a best-effort operation that may partially succeed.
-  Future<FlushResult> flush() async {
+  Future<FlushResult> flush() => _flush();
+
+  /// [notAfter] caps the cutoff at the time a caller first asked to flush,
+  /// when that request had to wait for another upload first.
+  Future<FlushResult> _flush({DateTime? notAfter}) async {
     // Check remote settings state
     final remoteState = getRemoteEnablementState();
     if (remoteState != RemoteEnablementState.enabled) {
@@ -273,8 +277,11 @@ class UploadService {
       // A periodic single-batch upload is running. Returning now would skip
       // the full flush, for example on page hide; wait for it, then flush.
       if (_oneBatchInFlight case final inFlight?) {
+        final requestedAt = notAfter ?? clock.now();
         await inFlight;
-        return flush();
+        // Keep this request's cutoff: events recorded while it waited are
+        // left for the next flush, as for any flush.
+        return _flush(notAfter: requestedAt);
       }
       return FlushResult();
     }
@@ -310,7 +317,10 @@ class UploadService {
         return result;
       }
 
-      _flushCutoffTimestamp = newestEvent.timestamp;
+      _flushCutoffTimestamp =
+          notAfter != null && newestEvent.timestamp.isAfter(notAfter)
+          ? notAfter
+          : newestEvent.timestamp;
       _logger.debug(
         'Flush starting - will upload events with timestamp <= $_flushCutoffTimestamp',
       );

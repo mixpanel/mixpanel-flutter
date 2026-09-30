@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:clock/clock.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart' as http_testing;
@@ -1425,6 +1426,58 @@ void main() {
           // THEN the next attempt uploads at once: no request was ever sent,
           // so there was nothing to back off from
           expect(uploads, 1);
+        },
+      );
+
+      test(
+        'should keep its cutoff when a flush waits for a periodic upload',
+        () async {
+          // GIVEN a periodic upload whose request is in flight
+          final requestedAt = DateTime.utc(2026, 1, 1, 12);
+          await seedQueue(eventCount: 2);
+          final release = Completer<void>();
+          var uploads = 0;
+          final service = createService(
+            eventQueue: eventQueue,
+            maxEventsPerBatch: 1,
+            // Old seeded events would otherwise trigger periodic catch-up
+            // uploads, which are not what this test measures.
+            flushInterval: const Duration(days: 36500),
+            httpClient: http_testing.MockClient((request) async {
+              uploads++;
+              if (uploads == 1) await release.future;
+              return http.Response('', 200);
+            }),
+          );
+          final periodic = service.flushOneBatch();
+          await pumpEventQueue();
+
+          // WHEN a flush is requested, and recording adds an event while it
+          // waits
+          final flushing = withClock(
+            Clock.fixed(requestedAt),
+            () => service.flush(),
+          );
+          await eventQueue.add(
+            SessionReplayEvent(
+              sessionId: testSessionId,
+              distinctId: testDistinctId,
+              timestamp: requestedAt.add(const Duration(seconds: 1)),
+              type: EventType.interaction,
+              payload: InteractionPayload(interactionType: 7, x: 1, y: 2),
+            ),
+          );
+          release.complete();
+          await periodic;
+          await flushing;
+
+          // THEN the flush drains only what existed when it was requested
+          expect(uploads, 2);
+          final remaining = await eventQueue.fetchOldestHeader();
+          expect(
+            remaining?.timestamp,
+            requestedAt.add(const Duration(seconds: 1)),
+          );
         },
       );
 
