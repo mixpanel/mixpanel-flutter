@@ -762,6 +762,50 @@ void main() {
         },
       );
 
+      testWidgets('should enter the foreground when mounted while the window '
+          'is unfocused', (tester) async {
+        // GIVEN a visible page whose focus moved to the address bar, devtools
+        // or an iframe before the SDK finished initializing
+        tester.binding.handleAppLifecycleStateChanged(
+          AppLifecycleState.inactive,
+        );
+        addTearDown(
+          () => tester.binding.handleAppLifecycleStateChanged(
+            AppLifecycleState.resumed,
+          ),
+        );
+        final fake = FakeWidgetCoordinator(leavesForegroundWhenInactive: false);
+
+        // WHEN the observer mounts
+        await tester.pumpWidget(
+          MaterialApp(
+            home: LifecycleObserver(coordinator: fake, child: const SizedBox()),
+          ),
+        );
+
+        // THEN the page counts as foreground at once, as in later transitions,
+        // rather than waiting for focus to return
+        expect(fake.onAppForegroundedCallCount, 1);
+      });
+
+      testWidgets('should enter the foreground when a hidden page becomes '
+          'visible without focus', (tester) async {
+        // GIVEN a hidden page
+        final fake = await pumpWebObserver(tester);
+        tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+        await tester.pump();
+        expect(fake.onAppBackgroundedCallCount, 1);
+
+        // WHEN it becomes visible while another window has focus
+        tester.binding.handleAppLifecycleStateChanged(
+          AppLifecycleState.inactive,
+        );
+        await tester.pump();
+
+        // THEN it re-enters the foreground without waiting for focus
+        expect(fake.onAppForegroundedCallCount, 2);
+      });
+
       testWidgets(
         'should leave the foreground once when the page is hidden after a '
         'blur',
@@ -783,6 +827,28 @@ void main() {
           expect(fake.onAppBackgroundedCallCount, 1);
         },
       );
+    });
+
+    testWidgets('should not enter the foreground when mounted inactive on '
+        'native', (tester) async {
+      // GIVEN a native app that is inactive, the first step of backgrounding
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      addTearDown(
+        () => tester.binding.handleAppLifecycleStateChanged(
+          AppLifecycleState.resumed,
+        ),
+      );
+      final fake = FakeWidgetCoordinator();
+
+      // WHEN the observer mounts
+      await tester.pumpWidget(
+        MaterialApp(
+          home: LifecycleObserver(coordinator: fake, child: const SizedBox()),
+        ),
+      );
+
+      // THEN it waits for resumed, as before web support
+      expect(fake.onAppForegroundedCallCount, 0);
     });
 
     testWidgets('calls onAppForegrounded when resuming from inactive', (

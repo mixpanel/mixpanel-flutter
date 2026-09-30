@@ -41,14 +41,15 @@ class _LifecycleObserverState extends State<LifecycleObserver>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
 
-    // Check initial lifecycle state and start uploads if resumed
+    // Enter the foreground if the app is already there when mounted. On web
+    // that includes a visible page whose window has lost focus, since the SDK
+    // may finish initializing while focus is in the address bar or devtools.
     final initialState = WidgetsBinding.instance.lifecycleState;
-    if (initialState == AppLifecycleState.resumed) {
+    if (initialState != null && _isForegroundState(initialState)) {
       widget.coordinator.logger.info(
-        'LifecycleObserver detected initial resume state',
+        'LifecycleObserver detected initial foreground state: $initialState',
       );
-      widget.coordinator.onAppForegrounded();
-      _isInForeground = true;
+      _enterForeground();
     }
     _lastState = initialState;
     // Flutter normally maps document visibility into AppLifecycleState, but a
@@ -79,41 +80,39 @@ class _LifecycleObserverState extends State<LifecycleObserver>
       'LifecycleObserver detected state change: $_lastState → $state',
     );
 
-    // Get visibility levels for comparison
-    final currentLevel = _getVisibilityLevel(state);
-    final lastLevel = _lastState != null
-        ? _getVisibilityLevel(_lastState!)
-        : null;
-
-    // Detect the first transition into a background state. Mobile commonly
-    // passes resumed -> inactive -> hidden, and inactive is where it leaves.
-    // Web leaves only when the page is hidden, which may come straight from
-    // resumed or after a blur (inactive). Crossing the threshold, rather than
-    // any drop, produces exactly one background callback for each shape.
-    final backgroundLevel = _getVisibilityLevel(
-      widget.coordinator.leavesForegroundWhenInactive
-          ? AppLifecycleState.inactive
-          : AppLifecycleState.hidden,
-    );
-    if (lastLevel != null &&
-        lastLevel > backgroundLevel &&
-        currentLevel <= backgroundLevel) {
+    // Detect crossing the foreground threshold in either direction. Mobile
+    // commonly passes resumed -> inactive -> hidden, and inactive is where it
+    // leaves. Web leaves only when the page is hidden, which may come straight
+    // from resumed or after a blur (inactive). Crossing the threshold, rather
+    // than any drop, produces exactly one callback for each shape.
+    final wasInForeground =
+        _lastState != null && _isForegroundState(_lastState!);
+    final isInForeground = _isForegroundState(state);
+    if (wasInForeground && !isInForeground) {
       widget.coordinator.logger.info(
         'LifecycleObserver detected app leaving the foreground',
       );
       _leaveForeground();
-    }
-
-    // Detect transition to resumed
-    // Trigger if: no previous state OR coming from a LESS visible state
-    if (state == AppLifecycleState.resumed &&
-        (lastLevel == null || lastLevel < currentLevel)) {
-      widget.coordinator.logger.info('LifecycleObserver detected app resuming');
+    } else if (!wasInForeground && isInForeground) {
+      widget.coordinator.logger.info(
+        'LifecycleObserver detected app entering the foreground',
+      );
       _enterForeground();
     }
 
     _lastState = state;
   }
+
+  /// Whether [state] is above the coordinator's background threshold. Native
+  /// counts only resumed as foreground; web also counts inactive, a visible
+  /// page whose window lost focus.
+  bool _isForegroundState(AppLifecycleState state) =>
+      _getVisibilityLevel(state) >
+      _getVisibilityLevel(
+        widget.coordinator.leavesForegroundWhenInactive
+            ? AppLifecycleState.inactive
+            : AppLifecycleState.hidden,
+      );
 
   void _leaveForeground() {
     if (!_isInForeground) return;
