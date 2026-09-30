@@ -510,6 +510,9 @@ class SessionReplayCoordinator implements WidgetCoordinator {
         _settingsService
             .fetchRemoteSettings()
             .then((result) {
+              // The fetch can outlive the coordinator (re-initialization
+              // disposes it), and every step below uses disposed services.
+              if (_isDisposed) return;
               _remoteEnablementState = result.isRecordingEnabled
                   ? RemoteEnablementState.enabled
                   : RemoteEnablementState.disabled;
@@ -1176,6 +1179,11 @@ class SessionReplayCoordinator implements WidgetCoordinator {
 
     // STEP 1: Stop all captures (prevents race condition with flush)
     _isDisposed = true;
+    // On web the super property lives for the whole page, so a replay ID
+    // left registered would tag every later event with a dead replay.
+    if (_recordingState != RecordingState.notRecording) {
+      SessionReplaySender.unregister('\$mp_replay_id');
+    }
     _recordingState = RecordingState.notRecording;
     _logger.debug(
       'Marked as disposed - no more captures will be accepted',

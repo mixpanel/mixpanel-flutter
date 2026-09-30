@@ -1239,6 +1239,44 @@ void main() {
         expect(calls, isNot(contains('unregisterSuperProperty')));
       });
 
+      test(
+        'should unregister \$mp_replay_id when disposed while recording',
+        () async {
+          // GIVEN a recording session, with sender traffic captured
+          final calls = recordSenderCalls();
+          final coordinator = createCoordinator(autoRecordSessionsPercent: 0);
+          coordinator.startRecording(sessionsPercent: 100);
+          await pumpEventQueue();
+          expect(calls, contains('registerSuperProperties'));
+
+          // WHEN the SDK is disposed, for example on re-initialization
+          await coordinator.dispose();
+
+          // THEN later events are not tagged with the dead replay
+          expect(calls, contains('unregisterSuperProperty'));
+        },
+      );
+
+      test(
+        'should ignore a settings answer that arrives after dispose',
+        () async {
+          // GIVEN the first foreground's settings fetch in flight
+          final coordinator = createCoordinator(autoRecordSessionsPercent: 100);
+          coordinator.onAppForegrounded();
+
+          // WHEN the coordinator is disposed before the answer lands
+          await coordinator.dispose();
+          await pumpEventQueue();
+
+          // THEN the answer is not applied to the disposed coordinator
+          expect(
+            coordinator.remoteEnablementState,
+            RemoteEnablementState.pending,
+          );
+          expect(coordinator.recordingState, RecordingState.notRecording);
+        },
+      );
+
       test('native ends the session on background', () async {
         // GIVEN a native coordinator with the default stop policy
         final coordinator = createCoordinator(
