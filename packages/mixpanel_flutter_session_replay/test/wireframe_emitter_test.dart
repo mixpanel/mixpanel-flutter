@@ -5,6 +5,7 @@ import 'package:mixpanel_flutter_session_replay/src/internal/logger.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/wireframe/wireframe_emitter.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/configuration.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/masking_directive.dart';
+import 'package:mixpanel_flutter_session_replay/src/models/session_event.dart' show WireframePayload;
 import 'package:mixpanel_flutter_session_replay/src/models/wireframe.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/wireframes_options.dart';
 
@@ -773,6 +774,36 @@ void main() {
       expect(discarded, isNotNull);
       expect(accepted, isNotNull);
     });
+
+    test(
+      'should not adopt a discarded frame as the baseline when a later frame '
+      'is deduped',
+      () {
+        // GIVEN an accepted "A" frame, then a "B" frame whose capture was
+        // discarded (for example across a pause), so B was never uploaded
+        final emitter = WireframeEmitter(
+          sensitiveRules: const [],
+          debugEmitter: null,
+          logger: logger,
+        );
+        WireframePayload? emitText(String text) => emitter.emit(
+          rawElements: [el(text: text)],
+          maskRegions: const [],
+          viewport: defaultViewport,
+          timestamp: defaultTimestamp,
+        );
+        emitText('A');
+        emitter.commitPending();
+        expect(emitText('B'), isNotNull);
+
+        // WHEN the next frame repeats A (deduped) and is accepted
+        expect(emitText('A'), isNull);
+        emitter.commitPending();
+
+        // THEN B is still published when it appears, since it never shipped
+        expect(emitText('B'), isNotNull);
+      },
+    );
 
     test('commitPending makes the accepted frame the dedup baseline', () {
       final emitter = WireframeEmitter(

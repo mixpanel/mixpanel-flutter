@@ -120,6 +120,11 @@ class WireframeEmitter {
     // untouched (an empty screen, say) still changes the render and must emit.
     final payloadHash = payload.wireHash;
     if (_lastSessionId == sessionId && _lastPayloadHash == payloadHash) {
+      // This frame ships no wireframe, so committing it must not promote an
+      // earlier emit whose frame was discarded (and never uploaded) to the
+      // baseline.
+      _pendingSessionId = null;
+      _pendingPayloadHash = null;
       return null;
     }
     _pendingSessionId = sessionId;
