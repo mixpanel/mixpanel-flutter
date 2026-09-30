@@ -64,7 +64,10 @@ class WebGzipWorker {
     }
   }
 
-  Future<Uint8List> compress(Uint8List bytes) async {
+  ///
+  /// [timeout] starts once this request leaves the queue, so time spent
+  /// waiting behind a slow compression never counts against it.
+  Future<Uint8List> compress(Uint8List bytes, {Duration? timeout}) async {
     final previous = _tail;
     final done = Completer<void>();
     _tail = done.future;
@@ -83,7 +86,9 @@ class WebGzipWorker {
         _WorkerMessage(inputBuffer: inputBuffer),
         [inputBuffer].toJS,
       );
-      return await completer.future;
+      return await (timeout == null
+          ? completer.future
+          : completer.future.timeout(timeout));
     } finally {
       done.complete();
     }

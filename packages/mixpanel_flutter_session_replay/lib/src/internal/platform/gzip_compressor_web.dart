@@ -52,7 +52,7 @@ class WebGzipCompressor implements GzipCompressor {
     try {
       worker = _worker ??= WebGzipWorker.create();
       if (worker == null) throw UnsupportedError('Web Worker creation failed');
-      await worker.compress(Uint8List(0)).timeout(_workerTimeout);
+      await worker.compress(Uint8List(0), timeout: _workerTimeout);
       if (identical(_worker, worker)) _initialized = true;
     } catch (error) {
       // Judge only the worker this attempt used; a restart may have replaced it.
@@ -79,9 +79,10 @@ class WebGzipCompressor implements GzipCompressor {
     try {
       worker = _worker ??= WebGzipWorker.create();
       if (worker == null) throw UnsupportedError('Web Worker creation failed');
-      return await worker
-          .compress(Uint8List.fromList(bytes))
-          .timeout(_workerTimeout);
+      return await worker.compress(
+        Uint8List.fromList(bytes),
+        timeout: _workerTimeout,
+      );
     } catch (error) {
       // A request that started on a worker this instance has since replaced
       // must not tear down the replacement.

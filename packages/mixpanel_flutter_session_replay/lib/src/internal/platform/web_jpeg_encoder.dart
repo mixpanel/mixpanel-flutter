@@ -11,6 +11,12 @@ import 'web_image_worker.dart';
 /// owns only worker resources.
 class WebJpegEncoder {
   static const _workerTimeout = Duration(seconds: 5);
+
+  /// Consecutive encoding failures after which the worker is not recreated
+  /// again, so a failure the browser repeats deterministically disables
+  /// capture instead of rebuilding the worker and logging on every frame.
+  static const maxConsecutiveFailures = 3;
+  int _consecutiveFailures = 0;
   final MixpanelLogger _logger;
   final double jpegQuality;
   WebImageWorker? _worker;
@@ -74,12 +80,22 @@ class WebJpegEncoder {
         maskRects: maskRects,
       );
       transferred = true;
-      return await work.timeout(_workerTimeout);
+      final encoded = await work.timeout(_workerTimeout);
+      _consecutiveFailures = 0;
+      return encoded;
     } catch (error) {
       if (!transferred) imageBitmap.close();
-      _logger.warning('Web JPEG encoding failed; restarting worker: $error');
       _worker?.dispose();
       _worker = null;
+      if (++_consecutiveFailures >= maxConsecutiveFailures) {
+        _workerUnavailable = true;
+        _logger.error(
+          'Web JPEG encoding failed $_consecutiveFailures times in a row; '
+          'disabling replay capture: $error',
+        );
+      } else {
+        _logger.warning('Web JPEG encoding failed; restarting worker: $error');
+      }
       return null;
     }
   }

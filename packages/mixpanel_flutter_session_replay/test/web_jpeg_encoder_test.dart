@@ -60,4 +60,65 @@ void main() {
     expect(pixel.g, closeTo(204, 8));
     expect(pixel.b, closeTo(204, 8));
   });
+
+  test('should stop recreating the worker after repeated failures', () async {
+    // GIVEN an initialized encoder
+    final encoder = WebJpegEncoder(logger: MixpanelLogger(LogLevel.none));
+    addTearDown(encoder.dispose);
+    await encoder.initialize();
+
+    // WHEN encoding keeps failing the same way (a bitmap that can no longer
+    // be transferred to the worker)
+    for (var i = 0; i < WebJpegEncoder.maxConsecutiveFailures; i++) {
+      final bitmap = await _redBitmap(2);
+      bitmap.close();
+      final result = await encoder.encode(
+        imageBitmap: bitmap,
+        width: 2,
+        height: 2,
+        maskRects: const [],
+      );
+      expect(result, isNull);
+    }
+
+    // THEN capture is disabled instead of rebuilding the worker every frame
+    expect(encoder.isAvailable, isFalse);
+  });
+
+  test('should keep the worker after a failure followed by success', () async {
+    // GIVEN one failed encode
+    final encoder = WebJpegEncoder(logger: MixpanelLogger(LogLevel.none));
+    addTearDown(encoder.dispose);
+    await encoder.initialize();
+    final closed = await _redBitmap(2);
+    closed.close();
+    await encoder.encode(
+      imageBitmap: closed,
+      width: 2,
+      height: 2,
+      maskRects: const [],
+    );
+
+    // WHEN encoding then succeeds, and fails again below the limit
+    final ok = await encoder.encode(
+      imageBitmap: await _redBitmap(2),
+      width: 2,
+      height: 2,
+      maskRects: const [],
+    );
+    for (var i = 0; i < WebJpegEncoder.maxConsecutiveFailures - 1; i++) {
+      final bitmap = await _redBitmap(2);
+      bitmap.close();
+      await encoder.encode(
+        imageBitmap: bitmap,
+        width: 2,
+        height: 2,
+        maskRects: const [],
+      );
+    }
+
+    // THEN the success reset the count, so the encoder is still available
+    expect(ok, isNotNull);
+    expect(encoder.isAvailable, isTrue);
+  });
 }
