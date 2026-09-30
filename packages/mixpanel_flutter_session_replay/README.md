@@ -182,6 +182,8 @@ We recommend using automatic sampling for most use cases. Use [manual capture](#
 
 To enable Session Replay, set `autoRecordSessionsPercent` between 0.0 and 100.0. At 0.0, no sessions are recorded. At 100.0, all sessions are recorded.
 
+On iOS, Android and macOS, the sampling decision is made each time the app enters the foreground without an active replay. On web, as in Mixpanel JS, it is made once per page load: switching tabs does not sample again.
+
 To start, we recommend using a 100% sampling rate to ensure replay capture is behaving as expected, then adjust according to your specific analytics needs.
 
 ```dart
@@ -285,9 +287,11 @@ When `remoteSettingsMode` is `strict` or `fallback`, valid remote
 `WebOptions` durations. Values are milliseconds. Missing or invalid fields keep
 the app-provided values; native replay durations are unaffected.
 
-After a web replay ends due to inactivity, a pointer press, wheel scroll,
-trackpad gesture, or keyboard input triggers a fresh sampling decision to start
-a new replay. Keyboard activity detection does not record the keys or typed text.
+After a web replay ends due to inactivity or reaching `maxSessionDuration`, a
+pointer press, wheel scroll, trackpad gesture, or keyboard input starts a new
+replay. As in Mixpanel JS, the new replay is not sampled again, so this applies
+to replays started with `.startRecording()` too. Keyboard activity detection
+does not record the keys or typed text.
 
 On web, as in Mixpanel JS, a replay is not affected by the page being hidden
 or the window losing focus. It continues across tab switches, keeps

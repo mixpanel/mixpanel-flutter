@@ -129,9 +129,9 @@ class WebOptions {
   /// Reset by user input only (pointer, keyboard, wheel, trackpad), never by
   /// screen changes, matching mixpanel-js: a screen that repaints on its own
   /// still idles out.
-  /// When the timeout fires, recording stops. With `autoRecordSessionsPercent`
-  /// above zero, the next user interaction starts a newly sampled session;
-  /// with manual recording, call `startRecording()` again.
+  /// When the timeout fires, the replay ends, and the next user interaction
+  /// starts a new one. As in mixpanel-js, the new replay is not sampled
+  /// again, so a replay started with `startRecording()` also restarts.
   /// Overridden by a valid remote `record_idle_timeout_ms` when remote
   /// settings are enabled.
   ///
@@ -141,7 +141,8 @@ class WebOptions {
   /// Maximum total duration of a single session (default: 24 hours).
   ///
   /// Hard cap regardless of user activity. When exceeded, the current session
-  /// ends and a new session starts on the next user interaction.
+  /// ends and a new session starts on the next user interaction, without
+  /// sampling again.
   /// Overridden by a valid remote `record_max_ms` when remote settings are
   /// enabled.
   final Duration maxSessionDuration;
