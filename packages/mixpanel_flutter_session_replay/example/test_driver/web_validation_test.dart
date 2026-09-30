@@ -42,6 +42,10 @@ Future<void> main(List<String> args) async {
         );
         await File('${artifactDirectory.path}/$name').writeAsBytes(body);
         artifactCount++;
+        if (name.startsWith('failure_')) {
+          stderr.writeln('Test failure reported by the app:');
+          stderr.writeln(utf8.decode(body, allowMalformed: true));
+        }
         if (standalone && name == 'performance.json') {
           validationComplete.complete();
         }

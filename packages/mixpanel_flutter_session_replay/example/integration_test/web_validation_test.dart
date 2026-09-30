@@ -53,6 +53,13 @@ const _enforcePerformanceBudget = bool.fromEnvironment(
 void main() {
   final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
   binding.framePolicy = LiveTestWidgetsFlutterBindingFramePolicy.fullyLive;
+  // The web driver only receives an opaque FlutterErrorDetails, so also post
+  // each failure's text to it; the driver prints it into the CI log.
+  final reportToBinding = reportTestException;
+  reportTestException = (details, testDescription) {
+    unawaited(_postFailure(testDescription, details));
+    reportToBinding(details, testDescription);
+  };
 
   testWidgets(
     'real browser capture, IndexedDB, gzip, and HTTP upload pipeline',
@@ -708,6 +715,22 @@ img.Image _drawMaskCoordinateOverlay(
     );
   }
   return annotated;
+}
+
+Future<void> _postFailure(String testDescription, FlutterErrorDetails details) {
+  final name = testDescription
+      .toLowerCase()
+      .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
+      .replaceAll(RegExp(r'^_+|_+$'), '');
+  final text =
+      '$testDescription\n\n${details.exceptionAsString()}\n\n${details.stack}';
+  return http
+      .post(
+        Uri.parse('$_uploadServer/artifact/failure_$name.txt'),
+        headers: {'Content-Type': 'text/plain'},
+        body: utf8.encode(text),
+      )
+      .then((_) {}, onError: (_) {});
 }
 
 Future<void> _postArtifact(
