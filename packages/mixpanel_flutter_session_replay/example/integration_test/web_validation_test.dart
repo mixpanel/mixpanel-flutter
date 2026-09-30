@@ -56,10 +56,14 @@ void main() {
   // The web driver only receives an opaque FlutterErrorDetails, so also post
   // each failure's text to it; the driver prints it into the CI log.
   final reportToBinding = reportTestException;
+  final pendingFailureReports = <Future<void>>[];
   reportTestException = (details, testDescription) {
-    unawaited(_postFailure(testDescription, details));
+    pendingFailureReports.add(_postFailure(testDescription, details));
     reportToBinding(details, testDescription);
   };
+  // The driver closes its receiver once results arrive, which is after this
+  // runs, so a failure in the last test still reaches the log.
+  tearDownAll(() => Future.wait(pendingFailureReports));
 
   testWidgets(
     'real browser capture, IndexedDB, gzip, and HTTP upload pipeline',
