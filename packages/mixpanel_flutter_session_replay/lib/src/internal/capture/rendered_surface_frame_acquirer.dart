@@ -66,8 +66,8 @@ class RenderedSurfaceFrameAcquirer extends FrameAcquirer {
   @override
   bool get followsUpFramesDuringCapture => true;
 
-  /// Discovers the surface, then synchronizes skwasm before masks are read.
-  /// CanvasKit uses only the browser presentation wait in [acquire].
+  /// Prepares a readable surface, then synchronizes skwasm before masks are read.
+  /// The surface owns any browser-specific repaint and presentation waits.
   @override
   Future<FrameSourceStatus> prepare(Size logicalSize) async {
     final availability = await _surface.waitUntilRenderedSurfaceAvailable(

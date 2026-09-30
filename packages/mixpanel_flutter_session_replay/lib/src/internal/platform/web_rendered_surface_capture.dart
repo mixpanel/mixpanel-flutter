@@ -3,6 +3,8 @@ import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
 import 'dart:typed_data';
 import 'dart:ui' show Rect, Size;
+import 'package:flutter/foundation.dart' show kIsWasm;
+import 'package:flutter/scheduler.dart';
 import 'package:web/web.dart' as web;
 import '../capture/rendered_surface_capture.dart';
 import '../logger.dart';
@@ -30,6 +32,10 @@ class WebRenderedSurfaceCapture extends RenderedSurfaceCapture {
   /// distinct cause rather than once per frame while the layout persists.
   String? _lastSkipReason;
 
+  // CanvasKit uses an on-screen WebGL context on Safari and Firefox.
+  // Without preserveDrawingBuffer, its pixels expire after presentation.
+  bool _requiresSameFrameSnapshot = false;
+
   WebRenderedSurfaceCapture({
     required MixpanelLogger logger,
     double jpegQuality = 0.8,
@@ -47,7 +53,7 @@ class WebRenderedSurfaceCapture extends RenderedSurfaceCapture {
     var lookup = _SurfaceLookup.of(logicalSize);
     if (lookup.isReady) {
       _lastSkipReason = null;
-      return RenderedSurfaceAvailability.available;
+      return _prepareReadableSurface(lookup.matches.single);
     }
     // Only a surface that may still appear is worth waiting for. An ambiguous
     // layout (several matching canvases, or several Flutter views) will not
@@ -56,12 +62,15 @@ class WebRenderedSurfaceCapture extends RenderedSurfaceCapture {
     // surface discovery only; ScreenshotCapturer establishes a fresh Flutter
     // end-of-frame afterward.
     if (!lookup.isAmbiguous) {
-      final attempts = lookup.hasNoCanvas ? _coldStartFrames : _resizeFrames;
+      final attempts = lookup.hasNoVisibleCanvas
+          ? _coldStartFrames
+          : _resizeFrames;
       for (var attempt = 0; attempt < attempts; attempt++) {
         await _nextAnimationFrame();
         lookup = _SurfaceLookup.of(logicalSize);
         if (lookup.isReady) {
           _lastSkipReason = null;
+          await _prepareReadableSurface(lookup.matches.single);
           return RenderedSurfaceAvailability.availableAfterBrowserFrame;
         }
         if (lookup.isAmbiguous) break;
@@ -69,6 +78,25 @@ class WebRenderedSurfaceCapture extends RenderedSurfaceCapture {
     }
     _reportSkip(lookup.describeSkip(logicalSize));
     return RenderedSurfaceAvailability.unavailable;
+  }
+
+  Future<RenderedSurfaceAvailability> _prepareReadableSurface(
+    web.HTMLCanvasElement canvas,
+  ) async {
+    _requiresSameFrameSnapshot =
+        !kIsWasm &&
+        (canvas.getContext('webgl2') != null ||
+            canvas.getContext('webgl') != null);
+    if (_requiresSameFrameSnapshot) {
+      // Register after Flutter's requested frame so rasterization runs before
+      // this callback, but snapshot before the browser clears the WebGL buffer.
+      // This must happen before the mask walk: requesting a frame afterward
+      // would perpetually re-arm the capture scheduler on a static screen.
+      SchedulerBinding.instance.scheduleFrame();
+      await _nextAnimationFrame();
+      return RenderedSurfaceAvailability.availableAfterBrowserFrame;
+    }
+    return RenderedSurfaceAvailability.available;
   }
 
   /// Logs a skipped capture once per distinct cause. Capture is attempted on
@@ -88,7 +116,11 @@ class WebRenderedSurfaceCapture extends RenderedSurfaceCapture {
   }
 
   @override
-  Future<void> waitForRenderedSurfacePresentation() => _nextAnimationFrame();
+  Future<void> waitForRenderedSurfacePresentation() async {
+    // WebGL preparation already waited for its rendering frame. Crossing
+    // another browser frame here would read a cleared buffer on static screens.
+    if (!_requiresSameFrameSnapshot) await _nextAnimationFrame();
+  }
 
   @override
   Future<CapturedSurface?> capture({
@@ -167,14 +199,19 @@ class _SurfaceLookup {
     required this.canvases,
     required this.matches,
     required this.hasMultipleViews,
+    required this.hasNoVisibleCanvas,
   });
 
   factory _SurfaceLookup.of(Size logicalSize) {
     const tolerance = 2.0;
     final (canvases, hasMultipleViews) = _flutterCanvases();
+    var hasNoVisibleCanvas = true;
     final matches = canvases
         .where((canvas) {
           final bounds = canvas.getBoundingClientRect();
+          if (bounds.width > 0 && bounds.height > 0) {
+            hasNoVisibleCanvas = false;
+          }
           return (bounds.width - logicalSize.width).abs() <= tolerance &&
               (bounds.height - logicalSize.height).abs() <= tolerance &&
               bounds.width > 0 &&
@@ -185,6 +222,7 @@ class _SurfaceLookup {
       canvases: canvases,
       matches: matches,
       hasMultipleViews: hasMultipleViews,
+      hasNoVisibleCanvas: hasNoVisibleCanvas,
     );
   }
 
@@ -202,8 +240,9 @@ class _SurfaceLookup {
   /// Waiting cannot resolve this layout.
   bool get isAmbiguous => hasMultipleViews || matches.length > 1;
 
-  /// No Flutter canvas has been published yet.
-  bool get hasNoCanvas => canvases.isEmpty;
+  /// No Flutter canvas has presented yet. skwasm may mount a zero-sized canvas
+  /// before its first raster completes; that is cold startup, not a resize.
+  final bool hasNoVisibleCanvas;
 
   String describeSkip(Size logicalSize) {
     final size = '${logicalSize.width}x${logicalSize.height}';

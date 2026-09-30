@@ -297,6 +297,48 @@ void main() {
     expect(watch.elapsedMilliseconds, lessThan(200));
   });
 
+  test('waits for a mounted canvas to publish its first rendered size', () async {
+    // GIVEN skwasm has mounted a canvas but has not rasterized its first frame.
+    final canvas = _appendCanvas(
+      logicalWidth: 0,
+      logicalHeight: 0,
+      backingWidth: 300,
+      backingHeight: 150,
+    );
+    canvas.getContext('2d');
+    addTearDown(() => _removeCanvasHost(canvas));
+    final surface = WebRenderedSurfaceCapture(
+      logger: MixpanelLogger(LogLevel.none),
+    );
+    addTearDown(surface.dispose);
+    await surface.initialize();
+
+    // WHEN first presentation takes longer than the two-frame resize window.
+    var frames = 0;
+    var callbackId = 0;
+    void publishAfterFrames(num _) {
+      if (++frames == 5) {
+        canvas.style
+          ..width = '59px'
+          ..height = '41px';
+      } else {
+        callbackId = web.window.requestAnimationFrame(publishAfterFrames.toJS);
+      }
+    }
+
+    callbackId = web.window.requestAnimationFrame(publishAfterFrames.toJS);
+    addTearDown(() => web.window.cancelAnimationFrame(callbackId));
+    final availability = await surface.waitUntilRenderedSurfaceAvailable(
+      const Size(59, 41),
+    );
+
+    // THEN an unpainted canvas receives the bounded cold-start wait.
+    expect(
+      availability,
+      RenderedSurfaceAvailability.availableAfterBrowserFrame,
+    );
+  });
+
   test('two same-sized canvases fail fast', () async {
     final first = _appendCanvas(
       logicalWidth: 59,

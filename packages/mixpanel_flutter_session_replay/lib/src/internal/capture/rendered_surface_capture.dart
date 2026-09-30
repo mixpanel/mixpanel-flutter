@@ -9,10 +9,15 @@ abstract class RenderedSurfaceCapture {
   bool get isAvailable;
   double get maximumCapturePixelRatio => 1;
 
+  /// Discovers the surface and requests any fresh rendering needed before
+  /// reading masks. WebGL buffers can expire after browser presentation, so
+  /// callers must proceed to snapshot without unrelated asynchronous work.
   Future<RenderedSurfaceAvailability> waitUntilRenderedSurfaceAvailable(
     Size logicalSize,
   ) async => RenderedSurfaceAvailability.available;
 
+  /// Waits for presentation only when the prepared surface needs it and its
+  /// readable buffer survives it.
   Future<void> waitForRenderedSurfacePresentation() async {}
 
   /// Returns an owned snapshot ready for mask validation, or null if the source
