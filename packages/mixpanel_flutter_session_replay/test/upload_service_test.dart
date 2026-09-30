@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:http/http.dart' as http;
+import 'package:http/testing.dart' as http_testing;
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/storage/event_queue_interface.dart';
@@ -1388,6 +1390,76 @@ void main() {
         await expectLater(service.flushOneBatch(), completes);
         await expectLater(service.flushOneBatch(), completes);
       });
+
+      test(
+        'should not back off uploads when the queue could not be read',
+        () async {
+          // GIVEN a queue whose reads fail transiently, then recover
+          final queue = _ToggleFailingQueue()..failing = true;
+          await queue.initialize();
+          await queue.createSessionMetadata(
+            Session(
+              id: testSessionId,
+              startTime: DateTime.fromMillisecondsSinceEpoch(1000, isUtc: true),
+              status: SessionStatus.active,
+            ),
+          );
+          await queue.add(_interactionAt(testSessionId, 2000));
+          var uploads = 0;
+          final service = createService(
+            eventQueue: queue,
+            httpClient: http_testing.MockClient((request) async {
+              uploads++;
+              return http.Response('', 200);
+            }),
+          );
+
+          // WHEN several periodic uploads hit the storage error, enough to
+          // trigger backoff had they been network failures
+          for (var i = 0; i < 3; i++) {
+            await service.flushOneBatch();
+          }
+          queue.failing = false;
+          await service.flushOneBatch();
+
+          // THEN the next attempt uploads at once: no request was ever sent,
+          // so there was nothing to back off from
+          expect(uploads, 1);
+        },
+      );
+
+      test(
+        'should run a full flush when called during a periodic upload',
+        () async {
+          // GIVEN a periodic single-batch upload whose request is in flight,
+          // with more events queued behind it
+          await seedQueue(eventCount: 3);
+          final release = Completer<void>();
+          var uploads = 0;
+          final service = createService(
+            eventQueue: eventQueue,
+            maxEventsPerBatch: 1,
+            httpClient: http_testing.MockClient((request) async {
+              uploads++;
+              if (uploads == 1) await release.future;
+              return http.Response('', 200);
+            }),
+          );
+          final periodic = service.flushOneBatch();
+          await pumpEventQueue();
+
+          // WHEN a full flush is requested meanwhile, as on page hide
+          final flushing = service.flush();
+          release.complete();
+          await periodic;
+          await flushing;
+
+          // THEN the flush waited for the periodic upload and then drained
+          // the rest of the queue instead of returning at once
+          expect(uploads, 3);
+          expect(await eventQueue.fetchOldestHeader(), isNull);
+        },
+      );
     });
 
     group('dispose', () {
@@ -1484,5 +1556,19 @@ class _RecordingDuringCommitQueue extends LeaseEventQueue {
     if (_recorded++ < 3) {
       await add(_interactionAt('own-session', 9000 + _recorded - 1));
     }
+  }
+}
+
+/// In-memory queue whose reads fail while [failing] is set, as IndexedDB's
+/// do while its connection is being reopened.
+class _ToggleFailingQueue extends InMemoryEventQueue {
+  bool failing = false;
+
+  @override
+  Future<QueuedEventHeader?> fetchOldestHeader({
+    Set<String> excludeSessionIds = const {},
+  }) {
+    if (failing) throw StateError('IndexedDB connection is closed');
+    return super.fetchOldestHeader(excludeSessionIds: excludeSessionIds);
   }
 }

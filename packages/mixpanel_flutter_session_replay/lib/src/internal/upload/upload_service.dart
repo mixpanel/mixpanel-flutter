@@ -24,6 +24,10 @@ enum UploadResult {
 
   /// Every session with queued events is being uploaded by another runtime.
   busy,
+
+  /// Local storage could not be read, so no request was sent. Retried on the
+  /// next attempt without the network backoff.
+  storageError,
 }
 
 /// Service for uploading session replay events to Mixpanel
@@ -68,6 +72,9 @@ class UploadService {
 
   /// Mutex to ensure serial flush execution (prevents concurrent flushes)
   bool _isFlushing = false;
+
+  /// Completes when the periodic single-batch upload in progress ends.
+  Future<void>? _oneBatchInFlight;
 
   /// Completer for coordinating concurrent flush calls
   Completer<FlushResult>? _flushCompleter;
@@ -186,6 +193,8 @@ class UploadService {
     }
 
     _isFlushing = true;
+    final oneBatch = Completer<void>();
+    _oneBatchInFlight = oneBatch.future;
 
     try {
       // Check backoff
@@ -234,6 +243,8 @@ class UploadService {
       _logger.error('Periodic flush aborted by a storage error: $e');
     } finally {
       _isFlushing = false;
+      _oneBatchInFlight = null;
+      oneBatch.complete();
     }
   }
 
@@ -259,7 +270,12 @@ class UploadService {
       if (_flushCompleter != null) {
         return await _flushCompleter!.future;
       }
-      // This shouldn't happen but return success if completer is null for some reason
+      // A periodic single-batch upload is running. Returning now would skip
+      // the full flush, for example on page hide; wait for it, then flush.
+      if (_oneBatchInFlight case final inFlight?) {
+        await inFlight;
+        return flush();
+      }
       return FlushResult();
     }
 
@@ -381,7 +397,7 @@ class UploadService {
         );
       } catch (e) {
         _logger.error('Failed to read the upload queue: $e');
-        return UploadResult.networkError;
+        return UploadResult.storageError;
       }
       if (oldestEvent == null ||
           (notAfter != null && oldestEvent.timestamp.isAfter(notAfter))) {
@@ -415,7 +431,7 @@ class UploadService {
         return await _uploadNextBatch(oldestEvent);
       } catch (e) {
         _logger.error('Failed to coordinate replay upload: $e');
-        return UploadResult.networkError;
+        return UploadResult.storageError;
       } finally {
         if (acquired) {
           try {
