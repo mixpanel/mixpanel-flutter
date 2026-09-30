@@ -1,3 +1,4 @@
+import 'package:mixpanel_flutter_session_replay/src/internal/capture/raster_completion_barrier.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/debug_mask_overlay.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/capture/rendered_surface_frame_acquirer.dart';
 import 'dart:async';
@@ -32,7 +33,10 @@ import 'package:mixpanel_flutter_session_replay/src/widgets/unmask_widget.dart';
 import 'helpers/fake_widget_coordinator.dart';
 import 'helpers/in_memory_event_queue.dart';
 
+import 'helpers/raster_test_binding.dart';
+
 void main() {
+  RasterTestBinding();
   // ─────────────────────────────────────────────────────────────────────
   // MixpanelMask / MixpanelUnmask (no dependencies needed)
   // ─────────────────────────────────────────────────────────────────────
@@ -1421,6 +1425,7 @@ void main() {
         // GIVEN the production capturer behind a FrameMonitor, notified on
         // every frame exactly as MixpanelSessionReplayWidget does
         final coordinator = _CapturingCoordinator();
+        addTearDown(coordinator.capturer.dispose);
         final frameNotifier = ChangeNotifier();
         var notifying = true;
         var framesDuringCapture = 0;
@@ -1451,6 +1456,26 @@ void main() {
           1,
           reason: 'the web capture draws the frame it requested mid-capture',
         );
+
+        // GIVEN the first raster report is batched, request one reporting
+        // frame while still preparing, then simulate the engine acknowledgement.
+        await tester.binding.delayed(const Duration(milliseconds: 120));
+        expect(tester.binding.hasScheduledFrame, isTrue);
+        await tester.pump();
+        tester.platformDispatcher.onReportTimings!([
+          FrameTiming(
+            vsyncStart: 0,
+            buildStart: 1,
+            buildFinish: 2,
+            rasterStart: 3,
+            rasterFinish: 4,
+            rasterFinishWallTime: 4,
+            frameNumber: tester.platformDispatcher.frameData.frameNumber,
+          ),
+        ]);
+        await tester.idle();
+        expect(coordinator.lastResult, isA<CaptureSuccess>());
+        expect(framesDuringCapture, 2);
 
         // WHEN the screen stays static: time passes, and a frame is drawn
         // only when the SDK itself requests one
@@ -1744,7 +1769,7 @@ class _CapturingCoordinator extends FakeWidgetCoordinator {
     debugOverlayEnabled: false,
     frameAcquirer: RenderedSurfaceFrameAcquirer(
       _StaticSurfaceCapture(),
-      awaitFreshFrame: true,
+      rasterCompletion: RasterCompletionBarrier(),
     ),
   );
   final SessionManager sessionManager = SessionManager();
@@ -1758,7 +1783,7 @@ class _CapturingCoordinator extends FakeWidgetCoordinator {
     captureSnapshotCallCount++;
     inFlight = true;
     try {
-      await capturer.capture(
+      lastResult = await capturer.capture(
         boundary,
         boundaryElement: boundaryElement,
         getCurrentSession: sessionManager.getCurrentSession,
@@ -1769,6 +1794,8 @@ class _CapturingCoordinator extends FakeWidgetCoordinator {
       inFlight = false;
     }
   }
+
+  CaptureResult? lastResult;
 
   /// Whether a capture is running right now.
   bool inFlight = false;

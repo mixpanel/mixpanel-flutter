@@ -1,6 +1,7 @@
 @TestOn('browser')
 library;
 
+import 'package:mixpanel_flutter_session_replay/src/internal/capture/raster_completion_barrier.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/capture/rendered_surface_frame_acquirer.dart';
 import 'dart:async';
 import 'dart:js_interop';
@@ -51,7 +52,7 @@ const _enforcePerformanceBudget = bool.fromEnvironment(
 );
 
 void main() {
-  final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+  final binding = _RasterValidationBinding();
   binding.framePolicy = LiveTestWidgetsFlutterBindingFramePolicy.fullyLive;
   // The web driver only receives an opaque FlutterErrorDetails, so also post
   // each failure's text to it; the driver prints it into the CI log.
@@ -85,17 +86,17 @@ void main() {
         logger: MixpanelLogger(LogLevel.none),
       );
       await compressor.initialize();
-      addTearDown(compressor.dispose);
       final capturer = ScreenshotCapturer(
         directive: MaskingDirective(autoMaskTypes: const {AutoMaskedView.text}),
         logger: MixpanelLogger(LogLevel.none),
         debugOverlayEnabled: false,
         frameAcquirer: RenderedSurfaceFrameAcquirer(
           compressor,
-          awaitFreshFrame: kIsWasm,
+          rasterCompletion: kIsWasm ? RasterCompletionBarrier() : null,
         ),
       );
 
+      addTearDown(capturer.dispose);
       final boundary = await _pumpScene(tester, complexity: 48);
       await _waitForBrowserFrames(2);
       final capture = await _captureWhenSurfaceReady(
@@ -271,17 +272,17 @@ void main() {
       logger: MixpanelLogger(LogLevel.none),
     );
     await compressor.initialize();
-    addTearDown(compressor.dispose);
     final capturer = ScreenshotCapturer(
       directive: MaskingDirective(autoMaskTypes: const {}),
       logger: MixpanelLogger(LogLevel.none),
       debugOverlayEnabled: true,
       frameAcquirer: RenderedSurfaceFrameAcquirer(
         compressor,
-        awaitFreshFrame: kIsWasm,
+        rasterCompletion: kIsWasm ? RasterCompletionBarrier() : null,
       ),
     );
 
+    addTearDown(capturer.dispose);
     final boundaryKey = GlobalKey();
     final sceneKey = GlobalKey<_MotionMaskSceneState>();
     await tester.pumpWidget(
@@ -371,6 +372,235 @@ void main() {
     debugPrint('WEB_MOTION_MASK_VALIDATION ${jsonEncode(manifest)}');
   });
 
+  testWidgets('should capture a static screen without live test frames', (
+    tester,
+  ) async {
+    final surface = WebRenderedSurfaceCapture(
+      logger: MixpanelLogger(LogLevel.none),
+    );
+    await surface.initialize();
+    final capturer = ScreenshotCapturer(
+      directive: MaskingDirective(autoMaskTypes: const {}),
+      logger: MixpanelLogger(LogLevel.none),
+      debugOverlayEnabled: false,
+      frameAcquirer: RenderedSurfaceFrameAcquirer(
+        surface,
+        rasterCompletion: kIsWasm ? RasterCompletionBarrier() : null,
+      ),
+    );
+    addTearDown(capturer.dispose);
+    final key = GlobalKey();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RepaintBoundary(
+          key: key,
+          child: const _ReplacementMaskScene(masked: false),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final element = key.currentContext! as Element;
+    final boundary = element.findRenderObject()! as RenderRepaintBoundary;
+    final handle = _BoundaryHandle(boundary: boundary, element: element);
+    final samples = <Map<String, Object?>>[];
+    // The default live binding renders continuously. Stop that artificial loop
+    // so a missing timing report cannot be rescued by unrelated test frames.
+    binding.emulateAppFrameScheduling = true;
+    try {
+      await Future<void>.delayed(const Duration(milliseconds: 150));
+      for (var i = 0; i < 5; i++) {
+        final watch = Stopwatch()..start();
+        final result = await _capture(tester, capturer, handle);
+        expect(result, isA<CaptureSuccess>());
+        final decoded = img.decodeJpg((result as CaptureSuccess).data)!;
+        expect(_countSensitiveChroma(decoded), 0);
+        expect(
+          decoded.getPixel(decoded.width ~/ 2, decoded.height ~/ 2).g,
+          greaterThan(150),
+        );
+        samples.add({'capture_ms': watch.elapsedMilliseconds});
+      }
+      final frames = binding.drawnFrames;
+      await Future<void>.delayed(const Duration(milliseconds: 600));
+      expect(
+        binding.drawnFrames,
+        frames,
+        reason: 'raster reporting must not keep requesting idle frames',
+      );
+      await _postArtifact(
+        'static_raster_completion.json',
+        utf8.encode(jsonEncode({'wasm': kIsWasm, 'captures': samples})),
+        'application/json',
+      );
+    } finally {
+      binding.emulateAppFrameScheduling = false;
+    }
+  });
+
+  testWidgets(
+    'should not retain sensitive pixels when a masked route is replaced',
+    (tester) async {
+      final surface = WebRenderedSurfaceCapture(
+        logger: MixpanelLogger(LogLevel.none),
+      );
+      await surface.initialize();
+      final capturer = ScreenshotCapturer(
+        directive: MaskingDirective(autoMaskTypes: const {}),
+        logger: MixpanelLogger(LogLevel.none),
+        debugOverlayEnabled: false,
+        frameAcquirer: RenderedSurfaceFrameAcquirer(
+          surface,
+          rasterCompletion: kIsWasm ? RasterCompletionBarrier() : null,
+        ),
+      );
+      addTearDown(capturer.dispose);
+      final boundaryKey = GlobalKey();
+      final navigatorKey = GlobalKey<NavigatorState>();
+      await tester.pumpWidget(
+        MaterialApp(
+          navigatorKey: navigatorKey,
+          builder: (_, child) =>
+              RepaintBoundary(key: boundaryKey, child: child!),
+          home: const _ReplacementMaskScene(masked: true),
+        ),
+      );
+      final element = boundaryKey.currentContext! as Element;
+      final boundary = element.findRenderObject()! as RenderRepaintBoundary;
+      final handle = _BoundaryHandle(boundary: boundary, element: element);
+      void replace(Widget scene) {
+        unawaited(
+          navigatorKey.currentState!.pushReplacement<void, void>(
+            PageRouteBuilder<void>(
+              transitionDuration: Duration.zero,
+              reverseTransitionDuration: Duration.zero,
+              pageBuilder: (_, _, _) => scene,
+            ),
+          ),
+        );
+      }
+
+      final samples = <Map<String, Object?>>[];
+      var immediateAccepted = 0;
+      for (final heavyPaint in [false, true]) {
+        for (var attempt = 0; attempt < 8; attempt++) {
+          // GIVEN sensitive pixels really presented on the old route. Reading
+          // the unmasked synthetic source makes this a non-vacuous pixel test.
+          replace(const _ReplacementMaskScene(masked: true));
+          await tester.pumpAndSettle();
+          await _waitForBrowserFrames(2);
+          final source = await surface.capture(
+            logicalSize: boundary.size,
+            outputWidth: boundary.size.width.ceil(),
+            outputHeight: boundary.size.height.ceil(),
+          );
+          expect(source, isNotNull);
+          try {
+            final bytes = await source!.encode(maskRects: const []);
+            expect(bytes, isNotNull);
+            expect(
+              _countSensitiveChroma(img.decodeJpg(bytes!)!),
+              greaterThan(100),
+            );
+          } finally {
+            source?.dispose();
+          }
+
+          // WHEN the new route removes every mask, capture immediately after
+          // Flutter paints it. Do not settle or add a browser-frame wait here:
+          // only the production acquirer's presentation barriers protect us.
+          replace(_ReplacementMaskScene(masked: false, heavyPaint: heavyPaint));
+          await tester.pump();
+          final captureWatch = Stopwatch()..start();
+          final immediate = await _capture(tester, capturer, handle);
+          captureWatch.stop();
+          final name = 'replacement_${heavyPaint ? 'heavy' : 'plain'}_$attempt';
+          if (immediate is CaptureSuccess) {
+            immediateAccepted++;
+            final decoded = img.decodeJpg(immediate.data)!;
+            final leaked = _countSensitiveChroma(decoded);
+            await _postArtifact('$name.jpg', immediate.data, 'image/jpeg');
+            await _postArtifact(
+              '$name.json',
+              utf8.encode(
+                jsonEncode({
+                  'wasm': kIsWasm,
+                  'mask_count': immediate.maskCount,
+                  'leaked_pixels': leaked,
+                  'capture_ms': captureWatch.elapsedMilliseconds,
+                  'mask_validation_us': capturer
+                      .lastPostSnapshotMaskValidationTime
+                      ?.inMicroseconds,
+                }),
+              ),
+              'application/json',
+            );
+            expect(
+              immediate.maskCount,
+              0,
+              reason: 'new route must have no masks',
+            );
+            expect(leaked, 0, reason: 'old route pixels survived in $name');
+            final center = decoded.getPixel(
+              decoded.width ~/ 2,
+              decoded.height ~/ 2,
+            );
+            expect(
+              center.g,
+              greaterThan(150),
+              reason: 'new route marker absent in $name',
+            );
+            expect(
+              center.r,
+              lessThan(80),
+              reason: 'new route marker absent in $name',
+            );
+            samples.add({
+              'name': name,
+              'accepted': true,
+              'leaked_pixels': leaked,
+            });
+          } else {
+            expect(immediate, isA<CaptureFailure>());
+            expect(
+              (immediate as CaptureFailure).error,
+              CaptureError.maskDetectionFailed,
+            );
+            samples.add({
+              'name': name,
+              'accepted': false,
+              'reason': immediate.errorMessage,
+            });
+          }
+
+          // THEN capture must also recover once the destination is settled;
+          // rejecting every frame must not make the test pass.
+          await tester.pumpAndSettle();
+          final settled = await _captureWhenSurfaceReady(
+            tester,
+            capturer,
+            handle,
+          );
+          expect(settled, isA<CaptureSuccess>());
+          final success = settled as CaptureSuccess;
+          expect(success.maskCount, 0);
+          expect(_countSensitiveChroma(img.decodeJpg(success.data)!), 0);
+        }
+      }
+      expect(immediateAccepted, greaterThan(0));
+      final results = {
+        'wasm': kIsWasm,
+        'immediate_accepted': immediateAccepted,
+        'samples': samples,
+      };
+      await _postArtifact(
+        'route_replacement.json',
+        utf8.encode(const JsonEncoder.withIndent('  ').convert(results)),
+        'application/json',
+      );
+      debugPrint('WEB_ROUTE_MASK_VALIDATION ${jsonEncode(results)}');
+    },
+  );
+
   testWidgets('capture keeps browser frame delivery within budget', (
     tester,
   ) async {
@@ -379,10 +609,9 @@ void main() {
       capturePixelRatioLimit: _benchmarkCapturePixelRatioLimit,
     );
     await compressor.initialize();
-    addTearDown(compressor.dispose);
     final acquirer = RenderedSurfaceFrameAcquirer(
       compressor,
-      awaitFreshFrame: kIsWasm,
+      rasterCompletion: kIsWasm ? RasterCompletionBarrier() : null,
     );
     final capturer = ScreenshotCapturer(
       directive: MaskingDirective(
@@ -393,6 +622,7 @@ void main() {
       frameAcquirer: acquirer,
     );
 
+    addTearDown(capturer.dispose);
     final results = <String, Object?>{
       'browser': web.window.navigator.userAgent,
       'logical_viewport':
@@ -490,6 +720,60 @@ void main() {
       'application/json',
     );
   });
+}
+
+class _ReplacementMaskScene extends StatelessWidget {
+  const _ReplacementMaskScene({required this.masked, this.heavyPaint = false});
+
+  final bool masked;
+  final bool heavyPaint;
+
+  @override
+  Widget build(BuildContext context) => ColoredBox(
+    color: const Color(0xffeeeeee),
+    child: Stack(
+      fit: StackFit.expand,
+      children: [
+        if (heavyPaint) CustomPaint(painter: _ReplacementRasterLoad()),
+        Center(
+          child: masked
+              ? const MixpanelMask(
+                  child: SizedBox(
+                    width: 240,
+                    height: 160,
+                    child: ColoredBox(color: Color(0xffff00ff)),
+                  ),
+                )
+              : const SizedBox(
+                  width: 240,
+                  height: 160,
+                  child: ColoredBox(color: Color(0xff00cc00)),
+                ),
+        ),
+      ],
+    ),
+  );
+}
+
+/// Real raster work, rather than a Dart delay: on skwasm this is rendered off
+/// the UI thread and stresses the interval between paint and presentation.
+class _ReplacementRasterLoad extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = const Color(0x60606060)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 12);
+    for (var i = 0; i < 2000; i++) {
+      canvas.drawCircle(
+        Offset((i * 73.0) % size.width, (i * 47.0) % size.height),
+        24,
+        paint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_ReplacementRasterLoad oldDelegate) => false;
 }
 
 class _BenchmarkWebRenderedSurfaceCapture extends WebRenderedSurfaceCapture {
@@ -1205,5 +1489,41 @@ class _BenchmarkScene extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+/// Can suppress the live test binding's unconditional frame loop while keeping
+/// framework-requested frames, including the barrier's requests, operational.
+class _RasterValidationBinding extends IntegrationTestWidgetsFlutterBinding {
+  bool emulateAppFrameScheduling = false;
+  int drawnFrames = 0;
+
+  @override
+  void handleDrawFrame() {
+    drawnFrames++;
+    final policy = framePolicy;
+    if (emulateAppFrameScheduling) {
+      framePolicy = LiveTestWidgetsFlutterBindingFramePolicy.benchmark;
+    }
+    try {
+      super.handleDrawFrame();
+    } finally {
+      framePolicy = policy;
+    }
+  }
+
+  @override
+  void scheduleFrame() {
+    // benchmark suppresses scheduleFrame too; only its automatic draw loop
+    // should be suppressed, so preserve genuine framework scheduling.
+    final policy = framePolicy;
+    if (emulateAppFrameScheduling) {
+      framePolicy = LiveTestWidgetsFlutterBindingFramePolicy.fullyLive;
+    }
+    try {
+      super.scheduleFrame();
+    } finally {
+      framePolicy = policy;
+    }
   }
 }
