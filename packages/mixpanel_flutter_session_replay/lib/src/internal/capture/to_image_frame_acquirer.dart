@@ -61,11 +61,11 @@ class ToImageFrameAcquirer extends FrameAcquirer {
       '${rawImage.width}x${rawImage.height} raster)',
     );
 
-    final rasterMaskRegions = scaleMaskRegions(
-      request.maskRegions,
-      scaleX: rawImage.width / logicalSize.width,
-      scaleY: rawImage.height / logicalSize.height,
-    );
+    // toImage(pixelRatio: 1) renders at logical coordinates and only rounds
+    // the raster up to whole pixels, so masks are painted exactly where they
+    // were detected. Scaling them by raster size over logical size would
+    // shift them off a fractional-width boundary's content.
+    final rasterMaskRegions = request.maskRegions;
 
     final maskPaintStart = clock.now();
     final ui.Image maskedImage;

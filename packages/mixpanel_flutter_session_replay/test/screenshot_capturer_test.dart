@@ -17,6 +17,8 @@ import 'package:mixpanel_flutter_session_replay/src/models/configuration.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/masking_directive.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/results.dart';
 
+import 'package:mixpanel_flutter_session_replay/src/widgets/widgets.dart';
+
 import 'utils/golden_test_utils.dart';
 
 class _UnavailableCompressor extends ImageCompressor {
@@ -153,6 +155,74 @@ void main() {
         ),
         closeTo(0.192, 0.000001),
       );
+    });
+
+    testWidgets('should cover the whole masked widget when the boundary has a '
+        'fractional width', (tester) async {
+      // GIVEN a boundary whose logical width is fractional, as on devices
+      // with a fractional device pixel ratio, so toImage() rounds the
+      // raster up without stretching its content
+      final key = GlobalKey();
+      await tester.pumpWidget(
+        Directionality(
+          textDirection: TextDirection.ltr,
+          child: Align(
+            alignment: Alignment.topLeft,
+            child: RepaintBoundary(
+              key: key,
+              child: const SizedBox(
+                width: 200.5,
+                height: 40,
+                child: Stack(
+                  children: [
+                    Positioned(
+                      left: 100,
+                      top: 0,
+                      width: 60,
+                      height: 40,
+                      child: MixpanelMask(
+                        child: ColoredBox(color: Color(0xFFFF0000)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      final element = key.currentContext! as Element;
+      final boundary = element.findRenderObject()! as RenderRepaintBoundary;
+      final compressor = _RecordingCompressor();
+      final capturer = ScreenshotCapturer(
+        directive: MaskingDirective(autoMaskTypes: const {}),
+        logger: MixpanelLogger(LogLevel.none),
+        debugOverlayEnabled: false,
+        frameAcquirer: ToImageFrameAcquirer(
+          compressor,
+          logger: MixpanelLogger(LogLevel.none),
+        ),
+      );
+
+      // WHEN the frame is captured
+      final pending = tester.runAsync(
+        () => capturer.capture(
+          boundary,
+          boundaryElement: element,
+          getCurrentSession: SessionManager().getCurrentSession,
+          getDistinctId: () => 'screenshot-capturer-test-distinct-id',
+        ),
+      );
+      await tester.pump();
+      final result = await pending;
+
+      // THEN the mask is painted at the widget's own coordinates, so the
+      // widget's first and last pixel columns are fully covered
+      expect(result, isA<CaptureSuccess>());
+      expect(compressor.width, 201);
+      expect(compressor.pixelAt(100, 20), [0xcc, 0xcc, 0xcc, 0xff]);
+      expect(compressor.pixelAt(159, 20), [0xcc, 0xcc, 0xcc, 0xff]);
     });
 
     testWidgets('native capture does not re-walk masks after toImage', (
