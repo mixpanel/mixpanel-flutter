@@ -67,7 +67,10 @@ connect-src 'self' https://api.mixpanel.com;
 ```
 
 `child-src` is a compatibility fallback for browsers or policies that do not
-honor `worker-src`. For EU or India residency, allow `https://api-eu.mixpanel.com` or
+honor `worker-src`. A policy that enforces Trusted Types
+(`require-trusted-types-for 'script'`) also blocks these `blob:` workers. In
+either case the SDK does not record, and logs why, rather than falling back
+to encoding on the main thread. For EU or India residency, allow `https://api-eu.mixpanel.com` or
 `https://api-in.mixpanel.com` instead. If `serverUrl` points at a proxy, its
 origin must be in `connect-src`. The application should be served over HTTPS
 in production (localhost remains suitable for development).
