@@ -80,6 +80,21 @@ void main() {
     return sub;
   }
 
+  test('should pass the event through when on_track gets a non-string name',
+      () async {
+    final hook = await initWithHook();
+    final received = <MixpanelEvent>[];
+    final sub = await subscribe(received);
+
+    final name = 42.toJS;
+    final result = hook.callAsFunction(null, name, null) as JSArray<JSAny?>;
+    await Future<void>.delayed(Duration.zero);
+
+    expect(result.toDart[0], same(name));
+    expect(received, isEmpty);
+    await sub.cancel();
+  });
+
   test('should forward decorated properties unchanged when on_track runs',
       () async {
     final hook = await initWithHook();
