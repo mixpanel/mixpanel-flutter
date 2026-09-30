@@ -87,10 +87,22 @@ class IndexedDbEventQueue
   }
 
   /// Opens the database, creating or upgrading its schema as needed.
+  /// Longest an open request may go without completing.
+  static const openTimeout = Duration(seconds: 10);
+
   Future<web.IDBDatabase> _openDatabase() async {
     final completer = Completer<web.IDBDatabase>();
     final request = web.window.indexedDB.open(_dbName, _schemaVersion);
     Timer? blockedTimer;
+    // Some browsers (a known WebKit bug class) can leave an open request
+    // without any event. Fail instead of hanging, so initialization can fall
+    // back to memory storage and queued writes are not held forever. A
+    // success that arrives later closes the connection it opened.
+    final openTimer = Timer(openTimeout, () {
+      if (!completer.isCompleted) {
+        completer.completeError(StateError('Opening IndexedDB timed out'));
+      }
+    });
 
     request.onupgradeneeded = (web.IDBVersionChangeEvent event) {
       final db = (event.target as web.IDBRequest).result as web.IDBDatabase;
@@ -148,6 +160,7 @@ class IndexedDbEventQueue
 
     request.onsuccess = (web.Event event) {
       blockedTimer?.cancel();
+      openTimer.cancel();
       final openedDb =
           (event.target as web.IDBRequest).result as web.IDBDatabase;
       if (completer.isCompleted) {
@@ -160,6 +173,7 @@ class IndexedDbEventQueue
 
     request.onerror = (web.Event event) {
       blockedTimer?.cancel();
+      openTimer.cancel();
       if (!completer.isCompleted) {
         completer.completeError(StateError('Failed to open IndexedDB'));
       }
