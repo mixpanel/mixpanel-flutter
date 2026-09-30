@@ -62,8 +62,13 @@ void main() {
     reportToBinding(details, testDescription);
   };
   // The driver closes its receiver once results arrive, which is after this
-  // runs, so a failure in the last test still reaches the log.
-  tearDownAll(() => Future.wait(pendingFailureReports));
+  // runs, so a failure in the last test still reaches the log. Bounded, so a
+  // stalled report can never keep the suite from finishing.
+  tearDownAll(
+    () => Future.wait(
+      pendingFailureReports,
+    ).timeout(const Duration(seconds: 5), onTimeout: () => const []),
+  );
 
   testWidgets(
     'real browser capture, IndexedDB, gzip, and HTTP upload pipeline',
