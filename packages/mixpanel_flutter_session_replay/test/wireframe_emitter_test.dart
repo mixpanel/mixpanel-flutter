@@ -5,7 +5,8 @@ import 'package:mixpanel_flutter_session_replay/src/internal/logger.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/wireframe/wireframe_emitter.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/configuration.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/masking_directive.dart';
-import 'package:mixpanel_flutter_session_replay/src/models/session_event.dart' show WireframePayload;
+import 'package:mixpanel_flutter_session_replay/src/models/session_event.dart'
+    show WireframePayload;
 import 'package:mixpanel_flutter_session_replay/src/models/wireframe.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/wireframes_options.dart';
 
