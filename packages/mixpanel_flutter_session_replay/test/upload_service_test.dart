@@ -1482,6 +1482,49 @@ void main() {
       );
 
       test(
+        'should upload an already-queued event when the clock has moved back',
+        () async {
+          // GIVEN a queued event stamped after the wall clock, as after a
+          // clock rollback during a gesture, and a periodic upload in flight
+          final now = DateTime.utc(2026, 1, 1, 12);
+          await seedQueue(eventCount: 1);
+          await eventQueue.add(
+            SessionReplayEvent(
+              sessionId: testSessionId,
+              distinctId: testDistinctId,
+              timestamp: now.add(const Duration(seconds: 10)),
+              type: EventType.interaction,
+              payload: InteractionPayload(interactionType: 7, x: 1, y: 2),
+            ),
+          );
+          final release = Completer<void>();
+          var uploads = 0;
+          final service = createService(
+            eventQueue: eventQueue,
+            maxEventsPerBatch: 1,
+            flushInterval: const Duration(days: 36500),
+            httpClient: http_testing.MockClient((request) async {
+              uploads++;
+              if (uploads == 1) await release.future;
+              return http.Response('', 200);
+            }),
+          );
+          final periodic = service.flushOneBatch();
+          await pumpEventQueue();
+
+          // WHEN a flush is requested meanwhile
+          final flushing = withClock(Clock.fixed(now), () => service.flush());
+          release.complete();
+          await periodic;
+          await flushing;
+
+          // THEN the event queued before the request is uploaded too
+          expect(uploads, 2);
+          expect(await eventQueue.fetchOldestHeader(), isNull);
+        },
+      );
+
+      test(
         'should run a full flush when called during a periodic upload',
         () async {
           // GIVEN a periodic single-batch upload whose request is in flight,

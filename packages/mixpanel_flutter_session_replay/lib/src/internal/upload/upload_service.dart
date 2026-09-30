@@ -267,23 +267,44 @@ class UploadService {
       return FlushResult();
     }
 
-    // If already flushing, update cutoff to now and wait for completion
+    // Already flushing: this request still covers every event queued when
+    // it was made. That cutoff is the newest queued event's timestamp, not the
+    // wall clock: event timestamps are anchored to a monotonic clock, so after
+    // a clock rollback an already-queued event can be later than "now".
     if (_isFlushing) {
       _logger.debug('Already flushing, extending cutoff and waiting');
-      _flushCutoffTimestamp = clock.now();
-      if (_flushCompleter != null) {
-        return await _flushCompleter!.future;
+      final DateTime? requested;
+      try {
+        requested =
+            notAfter ?? (await eventQueue.fetchNewestHeader())?.timestamp;
+      } catch (e) {
+        _logger.error('Flush aborted by a storage error: $e');
+        return FlushResult();
+      }
+      // Nothing was queued when this flush was requested.
+      if (requested == null) return FlushResult();
+      if (_flushCompleter case final running?) {
+        final cutoff = _flushCutoffTimestamp;
+        if (cutoff == null || requested.isAfter(cutoff)) {
+          _flushCutoffTimestamp = requested;
+        }
+        return await running.future;
       }
       // A periodic single-batch upload is running. Returning now would skip
-      // the full flush, for example on page hide; wait for it, then flush.
-      if (_oneBatchInFlight case final inFlight?) {
-        final requestedAt = notAfter ?? clock.now();
+      // the full flush, for example on page hide; wait for it, then flush up
+      // to this request's cutoff, leaving events recorded meanwhile for the
+      // next flush, as for any flush.
+      // The header read above yields, so the upload may already be done;
+      // then the service is idle and this request simply flushes.
+      final inFlight = _oneBatchInFlight;
+      if (inFlight != null) {
         await inFlight;
-        // Keep this request's cutoff: events recorded while it waited are
-        // left for the next flush, as for any flush.
-        return _flush(notAfter: requestedAt);
+      } else if (_isFlushing) {
+        // Busy with nothing to wait on: never expected, but recursing here
+        // could not make progress.
+        return FlushResult();
       }
-      return FlushResult();
+      return _flush(notAfter: requested);
     }
 
     _isFlushing = true;
