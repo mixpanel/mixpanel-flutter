@@ -50,10 +50,14 @@ const _enforcePerformanceBudget = bool.fromEnvironment(
   'ENFORCE_WEB_PERFORMANCE_BUDGET',
   defaultValue: true,
 );
+// Expensive raster workloads and benchmarks are for controlled local runs.
+// CI still exercises ordinary capture, masking, route changes, and uploads.
+const _runStressTests = bool.fromEnvironment('RUN_WEB_STRESS_TESTS');
 
 void main() {
   final binding = _RasterValidationBinding();
   binding.framePolicy = LiveTestWidgetsFlutterBindingFramePolicy.fullyLive;
+  binding.reportData = {'stress_tests_enabled': _runStressTests};
   // The web driver only receives an opaque FlutterErrorDetails, so also post
   // each failure's text to it; the driver prints it into the CI log.
   final reportToBinding = reportTestException;
@@ -65,11 +69,17 @@ void main() {
   // The driver closes its receiver once results arrive, which is after this
   // runs, so a failure in the last test still reaches the log. Bounded, so a
   // stalled report can never keep the suite from finishing.
-  tearDownAll(
-    () => Future.wait(
+  tearDownAll(() async {
+    await Future.wait(
       pendingFailureReports,
-    ).timeout(const Duration(seconds: 5), onTimeout: () => const []),
-  );
+    ).timeout(const Duration(seconds: 5), onTimeout: () => const []);
+    // The standalone receiver must also finish when benchmarks are skipped.
+    await _postArtifact(
+      'validation_complete.json',
+      utf8.encode(jsonEncode({'stress_tests_enabled': _runStressTests})),
+      'application/json',
+    );
+  });
 
   testWidgets(
     'real browser capture, IndexedDB, gzip, and HTTP upload pipeline',
@@ -242,28 +252,34 @@ void main() {
     },
   );
 
-  testWidgets('animated scrolling control runs without replay capture', (
-    tester,
-  ) async {
-    final sceneKey = GlobalKey<_MotionMaskSceneState>();
-    await tester.pumpWidget(MaterialApp(home: _MotionMaskScene(key: sceneKey)));
-    await tester.pumpAndSettle();
-    await _waitForBrowserFrames(2);
+  testWidgets(
+    'animated scrolling control runs without replay capture',
+    (tester) async {
+      final sceneKey = GlobalKey<_MotionMaskSceneState>();
+      await tester.pumpWidget(
+        MaterialApp(home: _MotionMaskScene(key: sceneKey)),
+      );
+      await tester.pumpAndSettle();
+      await _waitForBrowserFrames(2);
 
-    final monitor = _RafMonitor()..start();
-    final longTaskMonitor = _LongTaskMonitor()..start();
-    sceneKey.currentState!.startMotion();
-    await Future<void>.delayed(const Duration(seconds: 4));
-    sceneKey.currentState!.stopMotion();
-    final metrics = monitor.stop(longTasks: longTaskMonitor.stop());
+      final monitor = _RafMonitor()..start();
+      final longTaskMonitor = _LongTaskMonitor()..start();
+      sceneKey.currentState!.startMotion();
+      await Future<void>.delayed(const Duration(seconds: 4));
+      sceneKey.currentState!.stopMotion();
+      final metrics = monitor.stop(longTasks: longTaskMonitor.stop());
 
-    await _postArtifact(
-      'animated_no_capture.json',
-      utf8.encode(const JsonEncoder.withIndent('  ').convert(metrics.toJson())),
-      'application/json',
-    );
-    debugPrint('WEB_ANIMATED_NO_CAPTURE ${jsonEncode(metrics.toJson())}');
-  });
+      await _postArtifact(
+        'animated_no_capture.json',
+        utf8.encode(
+          const JsonEncoder.withIndent('  ').convert(metrics.toJson()),
+        ),
+        'application/json',
+      );
+      debugPrint('WEB_ANIMATED_NO_CAPTURE ${jsonEncode(metrics.toJson())}');
+    },
+    skip: !_runStressTests,
+  );
 
   testWidgets('masks real pixels during simultaneous animation and scrolling', (
     tester,
@@ -481,7 +497,7 @@ void main() {
 
       final samples = <Map<String, Object?>>[];
       var immediateAccepted = 0;
-      for (final heavyPaint in [false, true]) {
+      for (final heavyPaint in [false, if (_runStressTests) true]) {
         for (var attempt = 0; attempt < 8; attempt++) {
           // GIVEN sensitive pixels really presented on the old route. Reading
           // the unmasked synthetic source makes this a non-vacuous pixel test.
@@ -737,7 +753,7 @@ void main() {
       utf8.encode(const JsonEncoder.withIndent('  ').convert(results)),
       'application/json',
     );
-  });
+  }, skip: !_runStressTests);
 }
 
 class _ReplacementMaskScene extends StatelessWidget {

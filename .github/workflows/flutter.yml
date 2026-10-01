@@ -188,7 +188,7 @@ jobs:
         working-directory: packages/mixpanel_flutter_session_replay/example
 
   validate-session-replay-web-browsers:
-    name: SR Web Pipeline & Performance (${{ matrix.browser }}/${{ matrix.renderer }})
+    name: SR Web Pipeline & Masking (${{ matrix.browser }}/${{ matrix.renderer }})
     needs: [test-session-replay-web]
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 25
@@ -266,15 +266,15 @@ jobs:
           done
           cat "$RUNNER_TEMP/webdriver.log"
           exit 1
-      - name: Validate real browser pipeline and collect performance metrics
+      - name: Validate real browser pipeline and masking
         shell: bash
         run: |
           browser_args=()
           if [ "${{ matrix.browser }}" = chrome ]; then
             browser_args+=(--chrome-binary="${{ steps.setup-chrome.outputs.chrome-path }}")
           fi
-          # Shared runners cannot provide stable timing budgets. Keep metrics
-          # as artifacts; enforce budgets in controlled local/device runs.
+          # Heavy raster stress and performance benchmarks are local opt-ins.
+          # CI retains normal capture, masking, route, and upload validation.
           flutter drive -d web-server \
             --browser-name=${{ matrix.browser }} \
             --browser-dimension=1920x1080 \
@@ -284,9 +284,9 @@ jobs:
             --driver=test_driver/web_validation_test.dart \
             --target=integration_test/web_validation_test.dart \
             --timeout=300 \
-            --dart-define=ENFORCE_WEB_PERFORMANCE_BUDGET=false
+            --dart-define=RUN_WEB_STRESS_TESTS=false
         working-directory: packages/mixpanel_flutter_session_replay/example
-      - name: Upload web validation metrics
+      - name: Upload web validation artifacts
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         with:
