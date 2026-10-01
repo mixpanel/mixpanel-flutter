@@ -15,7 +15,9 @@ void main() {
     '': '',
   };
   for (final entry in cases.entries) {
-    test('normalizes ${entry.key} to ${entry.value}', () {
+    final expected = entry.value.isEmpty ? 'an empty OS' : entry.value;
+    final input = entry.key.isEmpty ? 'empty' : entry.key;
+    test('should return $expected when the user agent is $input', () {
       expect(browserOperatingSystem(entry.key), entry.value);
     });
   }
