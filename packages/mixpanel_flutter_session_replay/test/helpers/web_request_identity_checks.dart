@@ -60,7 +60,7 @@ Future<void> checkWebRequestIdentity(
   );
   expect(settingsUri!.path, '/settings');
   for (final params in [settingsUri!.queryParameters, recordParams]) {
-    expect(params['mp_lib'], 'flutter-sr-web');
+    expect(params['mp_lib'], 'flutter-sr');
     expect(params['\$os'], expectedOs);
     expect(params.containsKey('\$os'), expectedOs != null);
   }
