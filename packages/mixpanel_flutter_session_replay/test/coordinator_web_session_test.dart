@@ -45,14 +45,6 @@ void main() {
     late ScreenshotCapturer screenshotCapturer;
     late MixpanelLogger logger;
 
-    /// Persistence of the most recently created coordinator.
-    late StoredSessionPersistence persistence;
-
-    /// Offers [session] to the most recently created coordinator for resume,
-    /// as platform init does for a replay a previous page load left behind.
-    void stageResume(Session session, {DateTime? idleExpiry}) => persistence
-        .stageResume(ResumableSession(session, idleExpiry: idleExpiry));
-
     SessionReplayCoordinator createCoordinator({
       double autoRecordSessionsPercent = 0,
       RemoteSettingsMode remoteSettingsMode = RemoteSettingsMode.disabled,
@@ -63,8 +55,10 @@ void main() {
       Future<void> Function(String, int, int)? persistIdleExpiry,
       EventRecorder? recorder,
       ScreenshotCapturer? capturer,
+      ResumableSession? resumable,
     }) {
-      persistence = StoredSessionPersistence(
+      final persistence = StoredSessionPersistence(
+        resumable: resumable,
         write: persistIdleExpiry ?? (_, _, _) async {},
         logger: logger,
       );
@@ -195,22 +189,23 @@ void main() {
           final now = DateTime.utc(2026, 9, 28, 12);
           final idleExpiry = now.add(const Duration(minutes: 2));
           final writes = <(String, int, int)>[];
+
           final coordinator = createCoordinator(
             idleTimeout: const Duration(minutes: 30),
             maxSessionDuration: const Duration(hours: 24),
             persistIdleExpiry: (id, idle, max) async {
               writes.add((id, idle, max));
             },
+            resumable: ResumableSession(
+              Session(
+                id: 'valid-reload',
+                startTime: now,
+                status: SessionStatus.active,
+              ),
+              idleExpiry: idleExpiry,
+            ),
           );
           addTearDown(coordinator.dispose);
-          stageResume(
-            Session(
-              id: 'valid-reload',
-              startTime: now,
-              status: SessionStatus.active,
-            ),
-            idleExpiry: idleExpiry,
-          );
           await withClock(Clock.fixed(now), () async {
             coordinator.onAppForegrounded();
             await pumpEventQueue();
@@ -224,22 +219,22 @@ void main() {
         'expired staged idle deadline is not resumed after settings',
         () async {
           final start = DateTime.utc(2026, 9, 28, 12);
+
           final coordinator = createCoordinator(
             autoRecordSessionsPercent: 100,
             idleTimeout: const Duration(minutes: 30),
             maxSessionDuration: const Duration(hours: 24),
-          );
-          addTearDown(coordinator.dispose);
-          withClock(Clock.fixed(start), () {
-            stageResume(
+            resumable: ResumableSession(
               Session(
                 id: 'expired-staged',
                 startTime: start,
                 status: SessionStatus.active,
               ),
               idleExpiry: start.add(const Duration(seconds: 1)),
-            );
-          });
+            ),
+          );
+          addTearDown(coordinator.dispose);
+
           await withClock(
             Clock.fixed(start.add(const Duration(seconds: 2))),
             () async {
@@ -276,9 +271,10 @@ void main() {
             startTime: DateTime.now().toUtc(),
             status: SessionStatus.active,
           );
-          final coordinator = createCoordinator();
 
-          stageResume(session);
+          final coordinator = createCoordinator(
+            resumable: ResumableSession(session),
+          );
 
           expect(coordinator.recordingState, RecordingState.notRecording);
           expect(coordinator.replayId, isNull);
@@ -304,18 +300,19 @@ void main() {
           logger: logger,
           httpClient: createFakeSettingsClient(isEnabled: true),
         );
+
         final coordinator = createCoordinator(
           autoRecordSessionsPercent: 100,
           maxSessionDuration: const Duration(hours: 24),
           persistIdleExpiry: (id, idle, max) async {
             persisted.add((id, idle, max));
           },
-        );
-        stageResume(
-          Session(
-            id: 'staged-session',
-            startTime: DateTime.now().toUtc(),
-            status: SessionStatus.active,
+          resumable: ResumableSession(
+            Session(
+              id: 'staged-session',
+              startTime: DateTime.now().toUtc(),
+              status: SessionStatus.active,
+            ),
           ),
         );
         coordinator.onAppForegrounded();
@@ -339,8 +336,10 @@ void main() {
           startTime: DateTime.now().toUtc(),
           status: SessionStatus.active,
         );
-        final coordinator = createCoordinator();
-        stageResume(session);
+
+        final coordinator = createCoordinator(
+          resumable: ResumableSession(session),
+        );
 
         coordinator.stopRecording();
         coordinator.onAppForegrounded();
@@ -906,11 +905,7 @@ void main() {
               sdkConfig: {'record_max_ms': 600000},
             ),
           );
-          final coordinator = createCoordinator(
-            autoRecordSessionsPercent: 100,
-            remoteSettingsMode: RemoteSettingsMode.fallback,
-            maxSessionDuration: const Duration(hours: 24),
-          );
+
           final now = DateTime.utc(2026, 1, 1, 12);
           final stale = Session(
             id: 'stale-web-session',
@@ -919,8 +914,13 @@ void main() {
           );
 
           // WHEN the remote 10-minute cap arrives before resumption
+          final coordinator = createCoordinator(
+            autoRecordSessionsPercent: 100,
+            remoteSettingsMode: RemoteSettingsMode.fallback,
+            maxSessionDuration: const Duration(hours: 24),
+            resumable: ResumableSession(stale),
+          );
           await withClock(Clock.fixed(now), () async {
-            stageResume(stale);
             coordinator.onAppForegrounded();
             await pumpEventQueue();
           });
@@ -986,10 +986,7 @@ void main() {
         () async {
           // GIVEN a persisted session whose 30 minute idle deadline is 2
           // minutes away
-          final coordinator = createCoordinator(
-            autoRecordSessionsPercent: 100,
-            idleTimeout: const Duration(minutes: 30),
-          );
+
           final now = DateTime.utc(2026, 1, 1, 12);
           final storedDeadline = now.add(const Duration(minutes: 2));
           final session = Session(
@@ -999,8 +996,12 @@ void main() {
           );
 
           // WHEN it resumes, then goes away for 5 minutes
+          final coordinator = createCoordinator(
+            autoRecordSessionsPercent: 100,
+            idleTimeout: const Duration(minutes: 30),
+            resumable: ResumableSession(session, idleExpiry: storedDeadline),
+          );
           await withClock(Clock.fixed(now), () async {
-            stageResume(session, idleExpiry: storedDeadline);
             coordinator.onAppForegrounded();
             await pumpEventQueue();
             expect(coordinator.replayId, 'resumed-with-deadline');
@@ -1027,10 +1028,7 @@ void main() {
         'resuming without a stored deadline falls back to a full window',
         () async {
           // GIVEN a resume that carries no persisted deadline
-          final coordinator = createCoordinator(
-            autoRecordSessionsPercent: 100,
-            idleTimeout: const Duration(minutes: 30),
-          );
+
           final now = DateTime.utc(2026, 1, 1, 12);
           final session = Session(
             id: 'resumed-no-deadline',
@@ -1039,8 +1037,12 @@ void main() {
           );
 
           // WHEN it resumes and returns 5 minutes later
+          final coordinator = createCoordinator(
+            autoRecordSessionsPercent: 100,
+            idleTimeout: const Duration(minutes: 30),
+            resumable: ResumableSession(session),
+          );
           await withClock(Clock.fixed(now), () async {
-            stageResume(session);
             coordinator.onAppForegrounded();
             await pumpEventQueue();
             coordinator.onAppBackgrounded();
@@ -1554,17 +1556,18 @@ void main() {
       test('stop expires a staged resumable session', () async {
         // GIVEN a persisted session waiting for remote settings
         final persisted = <(String, int, int)>[];
+
         final coordinator = createCoordinator(
           maxSessionDuration: const Duration(hours: 24),
           persistIdleExpiry: (id, idle, max) async {
             persisted.add((id, idle, max));
           },
-        );
-        stageResume(
-          Session(
-            id: 'staged-session',
-            startTime: DateTime.now().toUtc(),
-            status: SessionStatus.active,
+          resumable: ResumableSession(
+            Session(
+              id: 'staged-session',
+              startTime: DateTime.now().toUtc(),
+              status: SessionStatus.active,
+            ),
           ),
         );
         final now = DateTime.utc(2026, 1, 1);

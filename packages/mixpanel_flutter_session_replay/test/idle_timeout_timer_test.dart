@@ -14,7 +14,7 @@ void main() {
         );
 
         // WHEN
-        timer.start();
+        timer.resetWith(timer.timeout);
         async.elapse(const Duration(minutes: 30));
 
         // THEN
@@ -34,7 +34,7 @@ void main() {
         );
 
         // WHEN
-        timer.start();
+        timer.resetWith(timer.timeout);
         async.elapse(const Duration(minutes: 29));
 
         // THEN
@@ -44,7 +44,7 @@ void main() {
       });
     });
 
-    test('reset extends the timeout', () {
+    test('resetWith extends the timeout', () {
       fakeAsync((async) {
         // GIVEN
         var callCount = 0;
@@ -54,9 +54,11 @@ void main() {
         );
 
         // WHEN
-        timer.start();
+        timer.resetWith(timer.timeout);
         async.elapse(const Duration(minutes: 20));
-        timer.reset(); // reset at 20 min — should fire at 50 min total
+        timer.resetWith(
+          timer.timeout,
+        ); // reset at 20 min — should fire at 50 min total
         async.elapse(const Duration(minutes: 20));
 
         // THEN — still within new timeout window
@@ -82,7 +84,7 @@ void main() {
         );
 
         // WHEN
-        timer.start();
+        timer.resetWith(timer.timeout);
         async.elapse(const Duration(minutes: 15));
         timer.stop();
         async.elapse(const Duration(minutes: 30));
@@ -104,7 +106,7 @@ void main() {
         );
 
         // WHEN
-        timer.start();
+        timer.resetWith(timer.timeout);
         async.elapse(const Duration(minutes: 15));
         timer.dispose();
         async.elapse(const Duration(minutes: 30));
@@ -124,7 +126,7 @@ void main() {
         );
 
         // WHEN
-        timer.start();
+        timer.resetWith(timer.timeout);
         async.elapse(const Duration(hours: 1));
 
         // THEN
@@ -134,7 +136,7 @@ void main() {
       });
     });
 
-    test('fires only once per start cycle', () {
+    test('fires only once per reset cycle', () {
       fakeAsync((async) {
         // GIVEN
         var callCount = 0;
@@ -144,7 +146,7 @@ void main() {
         );
 
         // WHEN
-        timer.start();
+        timer.resetWith(timer.timeout);
         async.elapse(const Duration(minutes: 30));
 
         // THEN — only fires once, not repeatedly

@@ -54,6 +54,7 @@ class IndexedDbEventQueue
   web.IDBDatabase? _db;
   bool _disposed = false;
   bool _initialized = false;
+  Future<void>? _initializing;
   Future<void>? _reopening;
   DateTime? _reopenRetryAfter;
 
@@ -78,12 +79,31 @@ class IndexedDbEventQueue
 
   @override
   Future<void> initialize() async {
-    _attach(await _openDatabase());
+    if (_disposed) throw StateError('EventQueue has been disposed');
+    if (_initialized) return;
+    await (_initializing ??= _initialize().whenComplete(
+      () => _initializing = null,
+    ));
+  }
+
+  Future<void> _initialize() async {
+    final db = await _openDatabase();
+    if (_disposed) {
+      db.close();
+      throw StateError('EventQueue has been disposed');
+    }
+    _attach(db);
 
     // Synchronize a transactional size record used by every open tab. A
     // process-local counter alone can allow concurrent tabs to exceed quota.
-    _currentSizeBytes = await _synchronizeTotalSize();
-    _initialized = true;
+    try {
+      _currentSizeBytes = await _synchronizeTotalSize();
+      if (_disposed) throw StateError('EventQueue has been disposed');
+      _initialized = true;
+    } catch (_) {
+      _dropConnection(db);
+      rethrow;
+    }
   }
 
   /// Opens the database, creating or upgrading its schema as needed.
@@ -95,8 +115,8 @@ class IndexedDbEventQueue
     final request = web.window.indexedDB.open(_dbName, _schemaVersion);
     Timer? blockedTimer;
     // Some browsers (a known WebKit bug class) can leave an open request
-    // without any event. Fail instead of hanging, so initialization can fall
-    // back to memory storage and queued writes are not held forever. A
+    // without any event. Fail instead of hanging, so initialization reports
+    // unavailable storage and queued writes are not held forever. A
     // success that arrives later closes the connection it opened.
     final openTimer = Timer(openTimeout, () {
       if (!completer.isCompleted) {
@@ -361,62 +381,6 @@ class IndexedDbEventQueue
   }
 
   @override
-  Future<PersistedSessionReplayEvent?> fetchOldest() async {
-    await _ensureOpen();
-    final blocked = await _foreignLiveSessionIds();
-
-    final txn = _transaction(_eventsStore.toJS, 'readonly');
-    final store = txn.objectStore(_eventsStore);
-    final request = store.openCursor();
-
-    return _completeFromRequest(txn, request, 'Failed to fetch oldest event', (
-      result,
-      completer,
-    ) {
-      if (_isNullish(result)) {
-        completer.complete(null);
-        return;
-      }
-      final cursor = result as web.IDBCursorWithValue;
-      final row = _jsToRow(cursor.value);
-      if (blocked.contains(row['session_id'])) {
-        cursor.continue_();
-        return;
-      }
-      row['id'] = (cursor.key as JSNumber).toDartInt;
-      completer.complete(PersistedSessionReplayEvent.fromDbRow(row));
-    });
-  }
-
-  @override
-  Future<PersistedSessionReplayEvent?> fetchNewest() async {
-    await _ensureOpen();
-    final blocked = await _foreignLiveSessionIds();
-
-    final txn = _transaction(_eventsStore.toJS, 'readonly');
-    final store = txn.objectStore(_eventsStore);
-    final request = store.openCursor(null, 'prev');
-
-    return _completeFromRequest(txn, request, 'Failed to fetch newest event', (
-      result,
-      completer,
-    ) {
-      if (_isNullish(result)) {
-        completer.complete(null);
-        return;
-      }
-      final cursor = result as web.IDBCursorWithValue;
-      final row = _jsToRow(cursor.value);
-      if (blocked.contains(row['session_id'])) {
-        cursor.continue_();
-        return;
-      }
-      row['id'] = (cursor.key as JSNumber).toDartInt;
-      completer.complete(PersistedSessionReplayEvent.fromDbRow(row));
-    });
-  }
-
-  @override
   Future<QueuedEventHeader?> fetchOldestHeader({
     Set<String> excludeSessionIds = const {},
   }) => _fetchHeader('next', excludeSessionIds: excludeSessionIds);
@@ -490,6 +454,11 @@ class IndexedDbEventQueue
         return;
       }
 
+      if (batch.isNotEmpty && batch.length >= maxCount) {
+        completer.complete(batch);
+        return;
+      }
+
       final cursor = result as web.IDBCursorWithValue;
       final row = _jsToRow(cursor.value);
       row['id'] = (cursor.primaryKey as JSNumber).toDartInt;
@@ -504,9 +473,8 @@ class IndexedDbEventQueue
 
       final dataSize = _asInt(row['data_size']);
 
-      // Check size/count limits (always include at least one event)
-      if (batch.isNotEmpty &&
-          (totalBytes + dataSize > maxBytes || batch.length >= maxCount)) {
+      // Check the byte limit (always include at least one event).
+      if (batch.isNotEmpty && totalBytes + dataSize > maxBytes) {
         completer.complete(batch);
         return;
       }
@@ -758,7 +726,12 @@ class IndexedDbEventQueue
     metadataRequest.onsuccess = (web.Event event) {
       final result = (event.target as web.IDBRequest).result;
       if (_isNullish(result)) {
-        txn.abort();
+        // The server already accepted this batch. Missing metadata must not
+        // roll back its deletion and cause the same events to be sent again.
+        _logger.warning(
+          'Session metadata missing after upload; removing accepted events '
+          'without updating the sequence number',
+        );
         return;
       }
 
@@ -793,10 +766,11 @@ class IndexedDbEventQueue
   }
 
   /// Remove events older than [cutoff] and unreferenced session metadata from
-  /// the same period.
+  /// the same period, plus upload leases that have expired as of now.
   ///
-  /// Event deletion, metadata cleanup, and quota reconstruction share one
-  /// transaction. A key-only timestamp cursor avoids loading expired JPEGs.
+  /// Event deletion, metadata and lease cleanup, and quota reconstruction
+  /// share one transaction. A key-only timestamp cursor avoids loading
+  /// expired JPEGs.
   Future<RetentionCleanupResult> pruneExpiredData(DateTime cutoff) async {
     await _ensureOpen();
 
@@ -815,6 +789,26 @@ class IndexedDbEventQueue
     var removedEvents = 0;
     var removedSessions = 0;
     var remainingSize = _currentSizeBytes;
+
+    // A closed tab cannot release its upload claim. Prune expired claims
+    // independently of event retention, while keeping live claims intact.
+    // The readwrite transaction also serializes this with lease renewal.
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    final leases = coordinationStore.openCursor(
+      web.IDBKeyRange.lowerBound(_uploadLeaseKeyPrefix.toJS),
+    );
+    leases.onsuccess = (web.Event event) {
+      final result = (event.target as web.IDBRequest).result;
+      if (_isNullish(result)) return;
+      final cursor = result as web.IDBCursorWithValue;
+      final key = (cursor.key as JSString).toDart;
+      if (!key.startsWith(_uploadLeaseKeyPrefix)) return;
+      final lease = (cursor.value.dartify()! as Map).cast<String, dynamic>();
+      if ((_asNullableInt(lease['expires_at']) ?? 0) <= nowMs) {
+        cursor.delete();
+      }
+      cursor.continue_();
+    }.toJS;
 
     final expiredEvents = eventsStore
         .index(_eventTimestampIndex)

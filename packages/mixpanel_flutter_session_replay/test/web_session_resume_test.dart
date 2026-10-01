@@ -66,7 +66,6 @@ void main() {
           sessionId: 'resumable',
           idleExpiresMs: idle,
           maxExpiresMs: max,
-          logger: logger,
         );
 
         // WHEN the next page load checks for a resumable session
@@ -394,7 +393,6 @@ void main() {
           sessionId: 'session-roundtrip',
           idleExpiresMs: futureMs,
           maxExpiresMs: futureMs,
-          logger: logger,
         );
 
         // Verify the expiry is readable and session is resumable

@@ -69,19 +69,21 @@ class FrameRequest {
 
   /// Re-checks the masks against the current render tree. An acquirer whose
   /// pixels can lag the mask walk must pass it before encoding.
-  final MaskLayoutFence fence;
+  /// Created only when read; native acquisition does not need this fence.
+  late final MaskLayoutFence fence = _createFence();
+  final MaskLayoutFence Function() _createFence;
 
   /// True once recording stopped or paused. Polled after every await before
   /// pixels are acquired and before they are encoded.
   final bool Function() isCancelled;
 
-  const FrameRequest({
+  FrameRequest({
     required this.boundary,
     required this.logicalSize,
     required this.maskRegions,
-    required this.fence,
+    required MaskLayoutFence Function() createFence,
     required this.isCancelled,
-  });
+  }) : _createFence = createFence;
 }
 
 sealed class FrameAcquisition {

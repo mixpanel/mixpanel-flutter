@@ -208,15 +208,17 @@ class ScreenshotCapturer {
       }
 
       final logicalSize = boundary.size;
-      final fence = MaskLayoutFence(
+      final observedFrameTimeStamp =
+          SchedulerBinding.instance.currentSystemFrameTimeStamp;
+      MaskLayoutFence? fence;
+      MaskLayoutFence createFence() => fence ??= MaskLayoutFence(
         directive: captureDirective,
         trackUnmaskBounds: debugOverlayEnabled,
         boundary: boundary,
         boundaryElement: boundaryElement,
         observed: maskResult,
         observedViewport: logicalSize,
-        observedFrameTimeStamp:
-            SchedulerBinding.instance.currentSystemFrameTimeStamp,
+        observedFrameTimeStamp: observedFrameTimeStamp,
       );
 
       // No await between the mask walk and this call: an acquirer that
@@ -226,11 +228,11 @@ class ScreenshotCapturer {
           boundary: boundary,
           logicalSize: logicalSize,
           maskRegions: maskRegions,
-          fence: fence,
+          createFence: createFence,
           isCancelled: cancelled,
         ),
       );
-      lastPostSnapshotMaskValidationTime = fence.lastCheckTime;
+      lastPostSnapshotMaskValidationTime = fence?.lastCheckTime;
 
       switch (acquisition) {
         case FrameRejected(:final failure):

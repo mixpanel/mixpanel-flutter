@@ -108,8 +108,8 @@ class PayloadSerializer {
       'replay_length_ms': replayLength.toString(),
       'replay_start_time': replayStartTime.toString(),
       '\$lib_version': sdkVersion,
-      '\$os': operatingSystem,
-      'mp_lib': 'flutter-sr',
+      if (operatingSystem.isNotEmpty) '\$os': operatingSystem,
+      'mp_lib': sdkLibrary,
     };
   }
 

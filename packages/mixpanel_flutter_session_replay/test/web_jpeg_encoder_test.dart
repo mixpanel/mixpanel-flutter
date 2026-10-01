@@ -1,13 +1,16 @@
 @TestOn('browser')
 library;
 
+import 'dart:async';
 import 'dart:js_interop';
+import 'dart:js_interop_unsafe';
 import 'dart:ui' show Rect;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
 import 'package:mixpanel_flutter_session_replay/src/internal/logger.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/platform/web_jpeg_encoder.dart';
+import 'package:mixpanel_flutter_session_replay/src/internal/platform/web_image_worker.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/configuration.dart';
 import 'package:web/web.dart' as web;
 
@@ -23,6 +26,49 @@ Future<web.ImageBitmap> _redBitmap(int size) {
 }
 
 void main() {
+  for (final eventType in ['error', 'messageerror']) {
+    test('worker $eventType rejects pending encoding immediately', () async {
+      // GIVEN a worker whose browser message delivery fails
+      final prototype =
+          (globalContext['Worker'] as JSObject)['prototype'] as JSObject;
+      final originalPostMessage = prototype['postMessage'];
+      addTearDown(() => prototype['postMessage'] = originalPostMessage);
+      final web.Event event = eventType == 'messageerror'
+          ? web.MessageEvent(eventType, web.MessageEventInit(cancelable: true))
+          : web.Event(eventType, web.EventInit(cancelable: true));
+      prototype['postMessage'] =
+          ((web.Worker worker, JSAny? message, JSAny? transfer) {
+            scheduleMicrotask(() => worker.dispatchEvent(event));
+          }).toJSCaptureThis;
+      final worker = WebImageWorker.create()!;
+      addTearDown(worker.dispose);
+      final bitmap = await _redBitmap(2);
+      addTearDown(() => bitmap.close());
+
+      // WHEN the browser reports the error during encoding
+      final pending = worker.processImageBitmap(
+        imageBitmap: bitmap,
+        width: 2,
+        height: 2,
+        jpegQuality: 1,
+        maskRects: const [],
+      );
+
+      // THEN it fails without waiting for the encoder's five-second timeout
+      await expectLater(
+        pending.timeout(const Duration(seconds: 1)),
+        throwsA(
+          isA<Exception>().having(
+            (e) => e.toString(),
+            'message',
+            contains('Worker $eventType'),
+          ),
+        ),
+      );
+      expect(event.defaultPrevented, isTrue);
+    });
+  }
+
   test('Web Worker initializes and encodes a bitmap as JPEG', () async {
     final encoder = WebJpegEncoder(logger: MixpanelLogger(LogLevel.none));
     addTearDown(encoder.dispose);

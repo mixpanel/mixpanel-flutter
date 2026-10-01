@@ -33,6 +33,29 @@ Future<void> _deleteDatabase(String name) {
   return completer.future;
 }
 
+/// Inspect persisted coordination keys without adding a production test API.
+Future<List<String>> _readCoordinationKeys(String dbName) {
+  final completer = Completer<List<String>>();
+  final request = web.window.indexedDB.open(dbName);
+  request.onsuccess = (web.Event event) {
+    final db = (event.target as web.IDBRequest).result as web.IDBDatabase;
+    final txn = db.transaction('coordination'.toJS, 'readonly');
+    final keys = txn.objectStore('coordination').getAllKeys();
+    txn.oncomplete = (web.Event _) {
+      db.close();
+      completer.complete((keys.result.dartify()! as List).cast<String>());
+    }.toJS;
+    txn.onabort = (web.Event _) {
+      db.close();
+      completer.completeError(StateError('Failed to read coordination keys'));
+    }.toJS;
+  }.toJS;
+  request.onerror = (web.Event _) {
+    completer.completeError(StateError('Failed to open $dbName'));
+  }.toJS;
+  return completer.future;
+}
+
 /// Write a raw event row, bypassing the queue's serialization, so tests can
 /// store data the current SDK version cannot parse.
 Future<void> _insertRawEventRow(String dbName, Map<String, dynamic> row) {
@@ -105,6 +128,63 @@ Future<void> _createVersionTwoDatabase(String name) {
 }
 
 void main() {
+  group('Initialization lifecycle', () {
+    const token = 'initialization-lifecycle';
+    late IndexedDbEventQueue storage;
+
+    setUp(() {
+      storage = IndexedDbEventQueue(
+        token: token,
+        logger: MixpanelLogger(LogLevel.none),
+      );
+    });
+
+    tearDown(() async {
+      await storage.dispose();
+      await _deleteDatabase(_dbNameForToken(token));
+    });
+
+    test('should reject initialization when already disposed', () async {
+      // GIVEN a disposed queue
+      await storage.dispose();
+
+      // WHEN initialization is requested, THEN it cannot revive the queue
+      await expectLater(storage.initialize(), throwsStateError);
+    });
+
+    test('should reject initialization when disposed during open', () async {
+      // GIVEN an IndexedDB open that has not completed
+      final initialization = storage.initialize();
+      final rejected = expectLater(initialization, throwsStateError);
+
+      // WHEN the queue is disposed before the browser completes the open
+      await storage.dispose();
+
+      // THEN initialization fails rather than attaching a late connection
+      await rejected;
+    });
+
+    test(
+      'should remain usable after concurrent and repeated initialization',
+      () async {
+        // GIVEN two callers initializing the same queue
+        await Future.wait([storage.initialize(), storage.initialize()]);
+        final session = Session(
+          id: 'initialized-session',
+          startTime: DateTime.now(),
+          status: SessionStatus.active,
+        );
+        await storage.createSessionMetadata(session);
+
+        // WHEN another caller initializes the queue again
+        await storage.initialize();
+
+        // THEN persisted state remains available
+        expect((await storage.getSessionMetadata(session.id))?.id, session.id);
+      },
+    );
+  });
+
   group('Database Naming', () {
     test('initializes database with sanitized token name', () async {
       final token = 'my-project-token';
@@ -115,7 +195,7 @@ void main() {
       await storage.initialize();
 
       // Verify the queue is usable (implicitly tests database creation)
-      final oldest = await storage.fetchOldest();
+      final oldest = await storage.fetchOldestHeader();
       expect(oldest, isNull);
 
       await storage.dispose();
@@ -131,7 +211,7 @@ void main() {
       await storage.initialize();
 
       // Verify the queue is usable with sanitized name
-      final oldest = await storage.fetchOldest();
+      final oldest = await storage.fetchOldestHeader();
       expect(oldest, isNull);
 
       await storage.dispose();
@@ -265,16 +345,6 @@ void main() {
         throwsA(isNot(isA<TimeoutException>())),
       );
 
-      test('fetchOldest fails instead of hanging', () async {
-        // GIVEN a stored row the current SDK cannot deserialize
-        await _insertRawEventRow(_dbNameForToken(token), unknownTypeRow);
-
-        // WHEN / THEN the read completes with an error rather than never
-        // completing, which would otherwise wedge the upload service.
-        await expectFailsPromptly(storage.fetchOldest());
-        await expectFailsPromptly(storage.fetchNewest());
-      });
-
       test('fetchBatch fails instead of hanging', () async {
         await _insertRawEventRow(_dbNameForToken(token), unknownTypeRow);
 
@@ -290,7 +360,14 @@ void main() {
 
       test('the queue stays usable after a failed read', () async {
         await _insertRawEventRow(_dbNameForToken(token), unknownTypeRow);
-        await expectFailsPromptly(storage.fetchOldest());
+        await expectFailsPromptly(
+          storage.fetchBatch(
+            sessionId: 'future-session',
+            distinctId: 'user-1',
+            maxBytes: 1024,
+            maxCount: 10,
+          ),
+        );
 
         // Header reads never touch the payload and keep working.
         final header = await storage.fetchOldestHeader();
@@ -470,7 +547,7 @@ void main() {
         // tab never drains another tab's live replay
         expect((await storage.fetchOldestHeader())?.sessionId, 'mine');
         expect((await storage.fetchNewestHeader())?.sessionId, 'mine');
-        expect((await storage.fetchOldest())?.sessionId, 'mine');
+        expect((await storage.fetchOldestHeader())?.sessionId, 'mine');
         // AND the other tab sees only its own
         expect((await otherTab.fetchOldestHeader())?.sessionId, 'other-live');
       });
@@ -572,6 +649,48 @@ void main() {
     });
 
     group('Cross-tab upload lease', () {
+      test(
+        'prunes expired lease rows while preserving active claims',
+        () async {
+          // GIVEN an abandoned expired claim and a still-active upload
+          await storage.acquireUploadLease(
+            ownerId: 'closed-tab',
+            sessionId: 'expired-session',
+            ttl: Duration.zero,
+          );
+          await storage.acquireUploadLease(
+            ownerId: 'active-tab',
+            sessionId: 'active-session',
+            ttl: const Duration(days: 1),
+          );
+          expect(
+            await _readCoordinationKeys(_dbNameForToken(token)),
+            contains('upload_lease:expired-session'),
+          );
+
+          // WHEN initialization-time retention cleanup runs, leases use their
+          // own expiry rather than the five-day event retention cutoff
+          await storage.pruneExpiredData(
+            DateTime.now().subtract(const Duration(days: 5)),
+          );
+
+          // THEN the expired row is physically removed, but the active claim
+          // and shared quota bookkeeping remain
+          expect(
+            await _readCoordinationKeys(_dbNameForToken(token)),
+            unorderedEquals(['storage_size', 'upload_lease:active-session']),
+          );
+          expect(
+            await storage.acquireUploadLease(
+              ownerId: 'another-tab',
+              sessionId: 'active-session',
+              ttl: const Duration(minutes: 2),
+            ),
+            isFalse,
+          );
+        },
+      );
+
       test('allows only one queue instance to own the lease', () async {
         final secondTab = IndexedDbEventQueue(
           token: token,
@@ -750,9 +869,18 @@ void main() {
         ))?.startTime.millisecondsSinceEpoch,
         1000,
       );
-      final event = await reopened.fetchOldest();
-      expect(event, isNotNull);
-      expect((event!.payload as ScreenshotPayload).imageData, <int>[1, 2, 3]);
+      final batch = await reopened.fetchBatch(
+        sessionId: 'session1',
+        distinctId: 'user1',
+        maxBytes: 5000000,
+        maxCount: 1,
+      );
+      expect(batch, hasLength(1));
+      expect((batch.single.payload as ScreenshotPayload).imageData, <int>[
+        1,
+        2,
+        3,
+      ]);
     });
 
     test(
@@ -788,7 +916,7 @@ void main() {
           sequenceNumber: 4,
         );
 
-        expect(await storage.fetchOldest(), isNull);
+        expect(await storage.fetchOldestHeader(), isNull);
         expect(await storage.getLastSequenceNumber(sessionId), 4);
       },
     );
@@ -828,13 +956,14 @@ void main() {
       );
 
       // THEN the batch is removed but the newer sequence number is kept
-      expect(await storage.fetchOldest(), isNull);
+      expect(await storage.fetchOldestHeader(), isNull);
       expect(await storage.getLastSequenceNumber(sessionId), 5);
     });
 
     test(
-      'rolls back batch deletion when session metadata is missing',
+      'removes an uploaded batch when session metadata is missing',
       () async {
+        // GIVEN queued events whose session metadata is missing
         await storage.add(
           SessionReplayEvent(
             sessionId: 'missing-metadata',
@@ -851,16 +980,15 @@ void main() {
           maxCount: 10,
         );
 
-        await expectLater(
-          storage.commitUploadedBatch(
-            events: batch,
-            sessionId: 'missing-metadata',
-            sequenceNumber: 4,
-          ),
-          throwsStateError,
+        // WHEN the server has accepted the batch
+        await storage.commitUploadedBatch(
+          events: batch,
+          sessionId: 'missing-metadata',
+          sequenceNumber: 4,
         );
 
-        expect(await storage.fetchOldest(), isNotNull);
+        // THEN accepted events cannot be selected for another upload
+        expect(await storage.fetchOldestHeader(), isNull);
         expect(await storage.getLastSequenceNumber('missing-metadata'), -1);
       },
     );
@@ -974,7 +1102,7 @@ void main() {
       await storage.add(interaction(200));
 
       // THEN the connection is reopened on a fresh database and keeps working
-      final oldest = await storage.fetchOldest();
+      final oldest = await storage.fetchOldestHeader();
       expect(oldest?.timestamp.millisecondsSinceEpoch, 200);
     });
 

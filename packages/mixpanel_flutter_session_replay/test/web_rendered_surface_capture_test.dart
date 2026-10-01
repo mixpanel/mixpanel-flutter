@@ -1,7 +1,9 @@
 @TestOn('browser')
 library;
 
+import 'dart:async';
 import 'dart:js_interop';
+import 'dart:js_interop_unsafe';
 import 'package:mixpanel_flutter_session_replay/src/internal/capture/rendered_surface_capture.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/platform/web_rendered_surface_capture.dart';
 import 'dart:ui' show Rect, Size;
@@ -15,6 +17,156 @@ import 'package:mixpanel_flutter_session_replay/src/models/configuration.dart';
 import 'package:web/web.dart' as web;
 
 void main() {
+  for (final backing in [
+    const Size(240, 160), // Uniform 2x density.
+    const Size(240, 80), // Twice the CSS aspect ratio.
+    const Size(120, 160), // Half the CSS aspect ratio.
+    const Size(241, 159), // Fractional-density rounding.
+  ]) {
+    test(
+      'masks align with displayed pixels for $backing backing size',
+      () async {
+        // GIVEN content displayed at a known logical position, regardless of
+        // the backing store's independent horizontal and vertical resolution
+        const logicalSize = Size(120, 80);
+        const sensitive = Rect.fromLTWH(72, 24, 32, 32);
+        final canvas = _appendCanvas(
+          logicalWidth: 120,
+          logicalHeight: 80,
+          backingWidth: backing.width.toInt(),
+          backingHeight: backing.height.toInt(),
+        );
+        addTearDown(() => _removeCanvasHost(canvas));
+        final context =
+            canvas.getContext('2d')! as web.CanvasRenderingContext2D;
+        context.scale(
+          backing.width / logicalSize.width,
+          backing.height / logicalSize.height,
+        );
+        context.fillStyle = '#ffffff'.toJS;
+        context.fillRect(0, 0, logicalSize.width, logicalSize.height);
+        context.fillStyle = '#ff0000'.toJS;
+        context.fillRect(
+          sensitive.left,
+          sensitive.top,
+          sensitive.width,
+          sensitive.height,
+        );
+        final capture = WebRenderedSurfaceCapture(
+          logger: MixpanelLogger(LogLevel.none),
+          jpegQuality: 1,
+        );
+        addTearDown(capture.dispose);
+        await capture.initialize();
+
+        // WHEN pixels and mask coordinates are downscaled to half logical size
+        final unmasked = img.decodeJpg(
+          (await _captureAndEncode(
+            capture,
+            logicalSize: logicalSize,
+            outputWidth: 60,
+            outputHeight: 40,
+          ))!,
+        )!;
+        final masked = img.decodeJpg(
+          (await _captureAndEncode(
+            capture,
+            logicalSize: logicalSize,
+            outputWidth: 60,
+            outputHeight: 40,
+            maskRects: [
+              Rect.fromLTRB(
+                sensitive.left / 2,
+                sensitive.top / 2,
+                sensitive.right / 2,
+                sensitive.bottom / 2,
+              ),
+            ],
+          ))!,
+        )!;
+
+        // THEN the control contains real sensitive pixels and masking removes
+        // them at the correct output coordinates, even with a mismatched ratio
+        int sensitivePixels(img.Image image) => image
+            .where((pixel) => pixel.r > 180 && pixel.g < 80 && pixel.b < 80)
+            .length;
+        expect(sensitivePixels(unmasked), greaterThan(100));
+        expect(sensitivePixels(masked), 0);
+        final center = masked.getPixel(44, 20);
+        expect(center.r, closeTo(204, 8));
+        expect(center.g, closeTo(204, 8));
+        expect(center.b, closeTo(204, 8));
+        final outside = masked.getPixel(10, 10);
+        expect(outside.r, greaterThan(240));
+        expect(outside.g, greaterThan(240));
+        expect(outside.b, greaterThan(240));
+      },
+    );
+  }
+
+  test('hiding during the post-snapshot wait closes the bitmap', () async {
+    // GIVEN a visible page and a real captured bitmap
+    var hidden = false;
+    (globalContext['Object'] as JSObject).callMethod(
+      'defineProperty'.toJS,
+      web.document,
+      'hidden'.toJS,
+      {'get': (() => hidden).toJS, 'configurable': true}.jsify(),
+    );
+    addTearDown(() => web.document.delete('hidden'.toJS));
+    final canvas = _appendCanvas(
+      logicalWidth: 73,
+      logicalHeight: 51,
+      backingWidth: 73,
+      backingHeight: 51,
+    );
+    addTearDown(() => _removeCanvasHost(canvas));
+    final capture = WebRenderedSurfaceCapture(
+      logger: MixpanelLogger(LogLevel.none),
+    );
+    addTearDown(capture.dispose);
+    await capture.initialize();
+    final bitmap = await web.window.createImageBitmap(canvas).toDart;
+    addTearDown(() => bitmap.close());
+    final originalCreate = (web.window as JSObject)['createImageBitmap'];
+    (web.window as JSObject)['createImageBitmap'] =
+        ((JSAny source, JSAny options) => Future.value(bitmap).toJS).toJS;
+    addTearDown(
+      () => (web.window as JSObject)['createImageBitmap'] = originalCreate,
+    );
+
+    // WHEN the page hides while its animation callback is suspended
+    final originalRequest = (web.window as JSObject)['requestAnimationFrame'];
+    final originalCancel = (web.window as JSObject)['cancelAnimationFrame'];
+    addTearDown(() {
+      (web.window as JSObject)['requestAnimationFrame'] = originalRequest;
+      (web.window as JSObject)['cancelAnimationFrame'] = originalCancel;
+    });
+    var cancelled = false;
+    (web.window as JSObject)['requestAnimationFrame'] = ((JSFunction callback) {
+      scheduleMicrotask(() {
+        hidden = true;
+        web.document.dispatchEvent(web.Event('visibilitychange'));
+      });
+      return 123;
+    }).toJS;
+    (web.window as JSObject)['cancelAnimationFrame'] = ((int id) {
+      cancelled = id == 123;
+    }).toJS;
+    final result = await capture
+        .capture(
+          logicalSize: const Size(73, 51),
+          outputWidth: 73,
+          outputHeight: 51,
+        )
+        .timeout(const Duration(seconds: 1));
+
+    // THEN capture finishes without a browser frame and releases its bitmap
+    expect(result, isNull);
+    expect(cancelled, isTrue);
+    expect(bitmap.width, 0);
+  });
+
   test(
     'rendered surface capture scales a DPR canvas and encodes real pixels',
     () async {

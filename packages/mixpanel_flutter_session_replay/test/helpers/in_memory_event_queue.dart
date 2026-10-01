@@ -60,18 +60,10 @@ class InMemoryEventQueue implements EventQueue {
     }
   }
 
-  @override
   Future<PersistedSessionReplayEvent?> fetchOldest() async {
     _checkNotDisposed();
     if (_events.isEmpty) return null;
     return _events.first;
-  }
-
-  @override
-  Future<PersistedSessionReplayEvent?> fetchNewest() async {
-    _checkNotDisposed();
-    if (_events.isEmpty) return null;
-    return _events.last;
   }
 
   @override

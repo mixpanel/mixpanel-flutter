@@ -148,34 +148,6 @@ class SqliteEventQueue implements EventQueue {
   }
 
   @override
-  Future<PersistedSessionReplayEvent?> fetchOldest() async {
-    if (_db == null) {
-      throw StateError('Storage not initialized');
-    }
-
-    // Get the oldest event across all sessions (for age checking)
-    final rows = await _db!.query('events', orderBy: 'id ASC', limit: 1);
-
-    if (rows.isEmpty) return null;
-
-    return PersistedSessionReplayEvent.fromDbRow(rows.first);
-  }
-
-  @override
-  Future<PersistedSessionReplayEvent?> fetchNewest() async {
-    if (_db == null) {
-      throw StateError('Storage not initialized');
-    }
-
-    // Get the newest event across all sessions (for flush cutoff)
-    final rows = await _db!.query('events', orderBy: 'id DESC', limit: 1);
-
-    if (rows.isEmpty) return null;
-
-    return PersistedSessionReplayEvent.fromDbRow(rows.first);
-  }
-
-  @override
   Future<QueuedEventHeader?> fetchOldestHeader({
     Set<String> excludeSessionIds = const {},
   }) => _fetchHeader('ASC', excludeSessionIds: excludeSessionIds);

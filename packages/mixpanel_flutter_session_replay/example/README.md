@@ -34,9 +34,9 @@ To run on a physical iOS device, you also need to configure code signing:
 
 ### Running the app
 
-**From VS Code:** Select the "example" launch configuration and press F5. The token is picked up automatically via `dart.flutterRunAdditionalArgs` in `.vscode/settings.json`.
+**From VS Code:** Select the "example" launch configuration and press F5. The token is picked up automatically via `--dart-define-from-file=local.env` in the repo's `.vscode/launch.json`. Changes to `local.env` need a full restart, not a hot reload.
 
-**From the command line:**
+**From the command line** (run from this `example/` directory):
 ```bash
 flutter run --dart-define-from-file=local.env
 ```

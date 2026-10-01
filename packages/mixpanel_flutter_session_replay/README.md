@@ -39,8 +39,9 @@ The web build requires:
 * `OffscreenCanvas`, its 2D context, and JPEG support from `convertToBlob()` in
   a worker
 * `CompressionStream('gzip')` in a worker
-* IndexedDB for durable storage; when IndexedDB is unavailable, the SDK logs a
-  warning and uses a page-lifetime in-memory queue
+* IndexedDB for durable storage; when IndexedDB is unavailable, initialization
+  returns `InitializationError.storageFailure` and no replay is recorded.
+  Screenshots are never buffered in an in-memory fallback queue.
 
 The minimum browser versions above are determined by the newest required API.
 Applications should still test the browser versions and devices represented in

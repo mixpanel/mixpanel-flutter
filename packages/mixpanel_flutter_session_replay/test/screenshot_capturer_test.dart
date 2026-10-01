@@ -64,6 +64,8 @@ class _RecordingCompressor extends ImageCompressor {
 }
 
 class _DirectSurfaceCapture extends RenderedSurfaceCapture {
+  RenderedSurfaceAvailability availability =
+      RenderedSurfaceAvailability.available;
   Size? logicalSize;
   int? outputWidth;
   int? outputHeight;
@@ -77,6 +79,10 @@ class _DirectSurfaceCapture extends RenderedSurfaceCapture {
 
   @override
   bool get isAvailable => true;
+  @override
+  Future<RenderedSurfaceAvailability> waitUntilRenderedSurfaceAvailable(
+    Size logicalSize,
+  ) async => availability;
   @override
   Future<void> waitForRenderedSurfacePresentation() async {
     await duringPresentation?.call();
@@ -991,6 +997,39 @@ void main() {
       expect(capturer.wireframesEnabled, false);
       expect(result.wireframes, isNull);
     });
+
+    testWidgets(
+      'reports a missing surface separately from compression failure',
+      (tester) async {
+        // GIVEN working encoding but no rendered surface to capture
+        final target = await pumpScreen(tester);
+        final surface = _DirectSurfaceCapture()
+          ..availability = RenderedSurfaceAvailability.unavailable;
+        final capturer = ScreenshotCapturer(
+          directive: MaskingDirective(autoMaskTypes: {}),
+          logger: logger,
+          debugOverlayEnabled: false,
+          frameAcquirer: RenderedSurfaceFrameAcquirer(surface),
+        );
+
+        // WHEN surface preparation fails
+        final result = await capturer.capture(
+          target.boundary,
+          boundaryElement: target.element,
+          getCurrentSession: SessionManager().getCurrentSession,
+          getDistinctId: () => 'test-user',
+        );
+
+        // THEN it reports the missing surface without attempting encoding
+        expect(result, isA<CaptureFailure>());
+        expect(
+          (result as CaptureFailure).error,
+          CaptureError.renderBoundaryNotFound,
+        );
+        expect(surface.surfaceCaptureCount, 0);
+        expect(surface.encodedCount, 0);
+      },
+    );
 
     testWidgets('skips frame capture when compression is unavailable', (
       tester,

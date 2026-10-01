@@ -119,7 +119,11 @@ void main() {
           status: SessionStatus.active,
         ),
       );
-      persistence.stageResume(staged);
+      persistence = StoredSessionPersistence(
+        write: (id, idle, max) async => writes.add((id, idle, max)),
+        logger: MixpanelLogger(LogLevel.none),
+        resumable: staged,
+      );
 
       // WHEN / THEN
       expect(persistence.takeResumable(), same(staged));
@@ -129,8 +133,10 @@ void main() {
 
     test('discarding a staged replay expires its record', () {
       // GIVEN
-      persistence.stageResume(
-        ResumableSession(
+      persistence = StoredSessionPersistence(
+        write: (id, idle, max) async => writes.add((id, idle, max)),
+        logger: MixpanelLogger(LogLevel.none),
+        resumable: ResumableSession(
           Session(
             id: 'staged',
             startTime: DateTime.utc(2026),

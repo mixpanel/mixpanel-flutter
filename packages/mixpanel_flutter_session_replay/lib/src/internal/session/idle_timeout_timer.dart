@@ -14,9 +14,6 @@ class IdleTimeoutTimer {
 
   IdleTimeoutTimer({required this.timeout, required this.onTimeout});
 
-  /// Reset the timer. Called on every user activity.
-  void reset() => resetWith(timeout);
-
   /// Arm for an explicit remaining duration rather than the full [timeout].
   ///
   /// Used when resuming a persisted session, whose idle deadline was set
@@ -28,9 +25,6 @@ class IdleTimeoutTimer {
       _timer = Timer(remaining, onTimeout);
     }
   }
-
-  /// Start the timer (called when recording begins).
-  void start() => reset();
 
   /// Stop the timer (called when recording stops).
   void stop() {

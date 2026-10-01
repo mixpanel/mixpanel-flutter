@@ -1,5 +1,5 @@
-// Web stub — no dart:io available.
+// Fallback for platforms without native or browser information.
 
-String get operatingSystemName => 'Web';
+String get operatingSystemName => '';
 
 bool get isMacOsWithoutSandbox => false;

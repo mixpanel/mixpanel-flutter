@@ -75,16 +75,6 @@ class StoredSessionPersistence implements SessionPersistence {
        _logger = logger,
        _resumable = resumable;
 
-  /// Offers [session] for resume once remote settings allow recording.
-  void stageResume(ResumableSession session) {
-    _resumable = session;
-    _logger.info(
-      'Session ${session.session.id} is eligible for resume; waiting for '
-      'remote settings',
-      tag: 'coordinator',
-    );
-  }
-
   @override
   ResumableSession? takeResumable() {
     final resumable = _resumable;

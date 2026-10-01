@@ -1,8 +1,7 @@
 import 'dart:async';
 import 'dart:js_interop';
 import 'dart:typed_data';
-
-import 'package:flutter/rendering.dart';
+import 'dart:ui' show Rect;
 
 import 'package:web/web.dart' as web;
 
@@ -70,6 +69,7 @@ class WebImageWorker {
   WebImageWorker._(this._worker, this._blobUrl) {
     _worker.onmessage = _onMessage.toJS;
     _worker.onerror = _onError.toJS;
+    _worker.addEventListener('messageerror', _onError.toJS);
   }
 
   /// Creates a new Web Worker from an inline Blob URL.
@@ -168,10 +168,11 @@ class WebImageWorker {
   }
 
   void _onError(web.Event event) {
+    event.preventDefault();
     final completer = _pending;
     if (completer == null) return;
     _pending = null;
-    completer.completeError(Exception('Worker execution error'));
+    completer.completeError(Exception('Worker ${event.type}'));
   }
 
   /// Terminates the worker and revokes the Blob URL.

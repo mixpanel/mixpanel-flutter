@@ -8,7 +8,6 @@ import '../debug_mask_overlay.dart';
 import '../storage/event_queue_interface.dart';
 import '../storage/event_queue_factory_web.dart';
 import '../storage/indexed_db_event_queue.dart';
-import '../storage/memory_event_queue.dart';
 import '../logger.dart';
 import '../wireframe/wireframe_emitter.dart';
 import '../../models/masking_directive.dart';
@@ -76,7 +75,7 @@ Future<PlatformInitResult> platformInit({
         write: _deadlineWriter(persistent, logger),
       );
     } else {
-      // Page-lifetime memory storage cannot carry a replay across page loads.
+      // Injected test queues do not provide browser session persistence.
       sessionPersistence = SessionPersistence.none();
     }
 
@@ -123,39 +122,25 @@ Future<PlatformInitResult> platformInit({
   }
 }
 
-/// Opens the injected queue, or the persistent browser queue with an
-/// in-memory fallback when IndexedDB is unavailable.
+/// Opens the injected queue, or the persistent browser queue.
 ///
-/// An injected queue is owned by the SDK from here on, like the queues this
-/// function creates, and is never swapped for the fallback: a caller that
-/// supplied one wants that queue or a failure.
+/// Storage is required for recording. Dispose a failed queue and propagate
+/// the failure so public initialization reports a storage failure.
 Future<EventQueue> _openQueue({
   required EventQueue? injected,
   required String token,
   required int quotaMB,
   required MixpanelLogger logger,
 }) async {
-  if (injected != null) {
-    await injected.initialize();
-    return injected;
-  }
-  final persistent = createWebEventQueue(
-    token: token,
-    quotaMB: quotaMB,
-    logger: logger,
-  );
+  final queue =
+      injected ??
+      createWebEventQueue(token: token, quotaMB: quotaMB, logger: logger);
   try {
-    await persistent.initialize();
-    return persistent;
-  } catch (error) {
-    logger.warning(
-      'IndexedDB unavailable; replay will use page-lifetime memory storage: '
-      '$error',
-    );
-    await persistent.dispose();
-    final memory = MemoryEventQueue(quotaMB: quotaMB, logger: logger);
-    await memory.initialize();
-    return memory;
+    await queue.initialize();
+    return queue;
+  } catch (_) {
+    await queue.dispose();
+    rethrow;
   }
 }
 
@@ -170,7 +155,6 @@ SessionDeadlineWriter _deadlineWriter(
       sessionId: sessionId,
       idleExpiresMs: idleExpiresMs,
       maxExpiresMs: maxExpiresMs,
-      logger: logger,
     );
   } catch (e) {
     logger.error('Failed to persist session expiry: $e');

@@ -20,8 +20,6 @@ void assertUninitializedState(EventQueue storage) {
   );
 
   expect(() => storage.add(event), throwsStateError);
-  expect(() => storage.fetchOldest(), throwsStateError);
-  expect(() => storage.fetchNewest(), throwsStateError);
   expect(() => storage.fetchOldestHeader(), throwsStateError);
   expect(() => storage.fetchNewestHeader(), throwsStateError);
   expect(
@@ -71,9 +69,15 @@ void runEventQueueContractTests(EventQueue Function() getStorage) {
 
       expect(await storage.add(event), isTrue);
 
-      final oldest = await storage.fetchOldest();
-      expect(oldest, isNotNull);
-      expect(oldest!.sessionId, sessionId);
+      final batch = await storage.fetchBatch(
+        sessionId: sessionId,
+        distinctId: 'user1',
+        maxBytes: 5000000,
+        maxCount: 1,
+      );
+      expect(batch, hasLength(1));
+      final oldest = batch.single;
+      expect(oldest.sessionId, sessionId);
       expect(oldest.distinctId, 'user1');
       expect(oldest.timestamp.millisecondsSinceEpoch, 100);
       expect(oldest.type, EventType.interaction);
@@ -130,20 +134,20 @@ void runEventQueueContractTests(EventQueue Function() getStorage) {
         ),
       );
 
-      final stored = await storage.fetchOldest();
-      expect(stored, isNotNull);
-      expect(stored!.payload, isA<ScreenshotPayload>());
+      final batch = await storage.fetchBatch(
+        sessionId: 'binary-session',
+        distinctId: 'user1',
+        maxBytes: 5000000,
+        maxCount: 1,
+      );
+      expect(batch, hasLength(1));
+      final stored = batch.single;
+      expect(stored.payload, isA<ScreenshotPayload>());
       expect((stored.payload as ScreenshotPayload).imageData, bytes);
     });
 
     test('returns null when no events exist', () async {
       final storage = getStorage();
-      final oldest = await storage.fetchOldest();
-      expect(oldest, isNull);
-
-      final newest = await storage.fetchNewest();
-      expect(newest, isNull);
-
       expect(await storage.fetchOldestHeader(), isNull);
       expect(await storage.fetchNewestHeader(), isNull);
     });
@@ -184,7 +188,7 @@ void runEventQueueContractTests(EventQueue Function() getStorage) {
       expect(newest.timestamp.millisecondsSinceEpoch, 200);
     });
 
-    test('fetchNewest returns most recently added event', () async {
+    test('fetchNewestHeader returns most recently added event', () async {
       final storage = getStorage();
       final event1 = SessionReplayEvent(
         sessionId: 'session1',
@@ -204,11 +208,11 @@ void runEventQueueContractTests(EventQueue Function() getStorage) {
       await storage.add(event1);
       await storage.add(event2);
 
-      final newest = await storage.fetchNewest();
+      final newest = await storage.fetchNewestHeader();
       expect(newest, isNotNull);
       expect(newest!.timestamp.millisecondsSinceEpoch, 200);
 
-      final oldest = await storage.fetchOldest();
+      final oldest = await storage.fetchOldestHeader();
       expect(oldest, isNotNull);
       expect(oldest!.timestamp.millisecondsSinceEpoch, 100);
     });
@@ -233,7 +237,7 @@ void runEventQueueContractTests(EventQueue Function() getStorage) {
       }
 
       // Get first 2 events
-      var oldest = await storage.fetchOldest();
+      var oldest = await storage.fetchOldestHeader();
       final batch = await storage.fetchBatch(
         sessionId: oldest!.sessionId,
         distinctId: oldest.distinctId,
@@ -246,7 +250,7 @@ void runEventQueueContractTests(EventQueue Function() getStorage) {
       await storage.remove(batch);
 
       // Should only have 1 event left
-      oldest = await storage.fetchOldest();
+      oldest = await storage.fetchOldestHeader();
       final remaining = await storage.fetchBatch(
         sessionId: oldest!.sessionId,
         distinctId: oldest.distinctId,
@@ -288,7 +292,7 @@ void runEventQueueContractTests(EventQueue Function() getStorage) {
       await storage.add(event2);
 
       // Query for oldest - should return session1 (oldest session)
-      final oldest = await storage.fetchOldest();
+      final oldest = await storage.fetchOldestHeader();
       final batch = await storage.fetchBatch(
         sessionId: oldest!.sessionId,
         distinctId: oldest.distinctId,
@@ -449,7 +453,7 @@ void runEventQueueContractTests(EventQueue Function() getStorage) {
       await storage.removeAll();
 
       // Verify everything is cleared
-      final oldest = await storage.fetchOldest();
+      final oldest = await storage.fetchOldestHeader();
       expect(oldest, isNull);
 
       final seqNum = await storage.getLastSequenceNumber(sessionId);
@@ -502,7 +506,7 @@ void runEventQueueContractTests(EventQueue Function() getStorage) {
       await storage.add(event4);
 
       // Batch 1: Query for oldest (should be anonymous123)
-      var oldest = await storage.fetchOldest();
+      var oldest = await storage.fetchOldestHeader();
       final batch1 = await storage.fetchBatch(
         sessionId: oldest!.sessionId,
         distinctId: oldest.distinctId,
@@ -521,7 +525,7 @@ void runEventQueueContractTests(EventQueue Function() getStorage) {
       await storage.remove(batch1);
 
       // Batch 2: Query for oldest (should now be user@example.com)
-      oldest = await storage.fetchOldest();
+      oldest = await storage.fetchOldestHeader();
       final batch2 = await storage.fetchBatch(
         sessionId: oldest!.sessionId,
         distinctId: oldest.distinctId,
@@ -538,7 +542,7 @@ void runEventQueueContractTests(EventQueue Function() getStorage) {
       await storage.remove(batch2);
 
       // Batch 3: Query for oldest (should now be anonymous123 again, event 4)
-      oldest = await storage.fetchOldest();
+      oldest = await storage.fetchOldestHeader();
       final batch3 = await storage.fetchBatch(
         sessionId: oldest!.sessionId,
         distinctId: oldest.distinctId,
@@ -596,7 +600,7 @@ void runEventQueueContractTests(EventQueue Function() getStorage) {
         // Query with 1500 byte limit
         // Event1 (513 bytes) + Event2 (813 bytes) = 1326 bytes total
         // Event1 + Event2 + Event3 would be 2339 bytes
-        final oldest = await storage.fetchOldest();
+        final oldest = await storage.fetchOldestHeader();
         final batch = await storage.fetchBatch(
           sessionId: oldest!.sessionId,
           distinctId: oldest.distinctId,
@@ -633,7 +637,7 @@ void runEventQueueContractTests(EventQueue Function() getStorage) {
         }
 
         // Query with count limit of 3
-        final oldest = await storage.fetchOldest();
+        final oldest = await storage.fetchOldestHeader();
         final batch = await storage.fetchBatch(
           sessionId: oldest!.sessionId,
           distinctId: oldest.distinctId,
@@ -702,7 +706,7 @@ void runQuotaEnforcementTests(
       await storage.add(largeEvent);
 
       // Verify large event was stored
-      var oldest = await storage.fetchOldest();
+      var oldest = await storage.fetchOldestHeader();
       var batch = await storage.fetchBatch(
         sessionId: oldest!.sessionId,
         distinctId: oldest.distinctId,
@@ -728,7 +732,7 @@ void runQuotaEnforcementTests(
       );
 
       // Should still only have 1 event (second event was dropped)
-      oldest = await storage.fetchOldest();
+      oldest = await storage.fetchOldestHeader();
       batch = await storage.fetchBatch(
         sessionId: oldest!.sessionId,
         distinctId: oldest.distinctId,

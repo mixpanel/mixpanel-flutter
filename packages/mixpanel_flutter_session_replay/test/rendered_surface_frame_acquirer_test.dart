@@ -117,19 +117,20 @@ Future<FrameRequest> _request(
   await tester.pumpWidget(RepaintBoundary(key: key, child: const SizedBox()));
   final element = key.currentContext! as Element;
   final boundary = element.findRenderObject()! as RenderRepaintBoundary;
+  final observedFrameTimeStamp = tester.binding.currentSystemFrameTimeStamp;
   return FrameRequest(
     boundary: boundary,
     logicalSize: boundary.size,
     maskRegions: const [],
     isCancelled: isCancelled ?? () => false,
-    fence: MaskLayoutFence(
+    createFence: () => MaskLayoutFence(
       directive: MaskingDirective(autoMaskTypes: const {}),
       trackUnmaskBounds: false,
       boundary: boundary,
       boundaryElement: element,
       observed: MaskDetectionResult(maskRegions: const []),
       observedViewport: boundary.size,
-      observedFrameTimeStamp: tester.binding.currentSystemFrameTimeStamp,
+      observedFrameTimeStamp: observedFrameTimeStamp,
     ),
   );
 }

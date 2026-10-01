@@ -5,11 +5,11 @@ import 'dart:async';
 import 'dart:js_interop';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mixpanel_flutter_session_replay/mixpanel_flutter_session_replay.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/logger.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/platform/platform_init.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/session/replay_lifecycle_policy.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/storage/indexed_db_event_queue.dart';
-import 'package:mixpanel_flutter_session_replay/src/models/configuration.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/masking_directive.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/session.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/session_event.dart';
@@ -44,6 +44,37 @@ Future<void> _deleteDatabase(String token) {
 }
 
 void main() {
+  test(
+    'fails initialization when persistent storage cannot be opened',
+    () async {
+      // GIVEN a database newer than this SDK can open
+      const token = 'unsupported-database-version';
+      addTearDown(() => _deleteDatabase(token));
+      final opened = Completer<void>();
+      final request = web.window.indexedDB.open('mixpanel_replay_$token', 99);
+      request.onsuccess = (web.Event event) {
+        ((event.target as web.IDBRequest).result as web.IDBDatabase).close();
+        opened.complete();
+      }.toJS;
+      request.onerror = (web.Event event) {
+        opened.completeError(StateError('Failed to create test database'));
+      }.toJS;
+      await opened.future;
+
+      // WHEN the public SDK initializes without an injected test queue
+      final result = await MixpanelSessionReplay.initialize(
+        token: token,
+        distinctId: 'test-user',
+      );
+      addTearDown(() async => result.instance?.coordinator.dispose());
+
+      // THEN replay is disabled rather than buffering screenshots in RAM
+      expect(result.success, isFalse);
+      expect(result.error, InitializationError.storageFailure);
+      expect(result.instance, isNull);
+    },
+  );
+
   test(
     'web initialization preserves queued events when no session can resume',
     () async {

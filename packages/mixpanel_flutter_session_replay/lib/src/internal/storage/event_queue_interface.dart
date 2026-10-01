@@ -64,14 +64,6 @@ abstract class EventQueue {
   /// If metadata already exists for this session, this is a no-op.
   Future<void> createSessionMetadata(Session session);
 
-  /// Get the oldest event across all sessions (for age checking)
-  /// Returns null if no events exist
-  Future<PersistedSessionReplayEvent?> fetchOldest();
-
-  /// Get the newest event across all sessions (for flush cutoff)
-  /// Returns null if no events exist
-  Future<PersistedSessionReplayEvent?> fetchNewest();
-
   /// Get payload-free metadata for the oldest event across all sessions.
   ///
   /// Events of sessions in [excludeSessionIds] are skipped, so an uploader can

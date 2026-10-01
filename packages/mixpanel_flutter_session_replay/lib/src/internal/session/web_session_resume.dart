@@ -68,7 +68,6 @@ Future<void> updateWebSessionExpiry({
   required String sessionId,
   required int idleExpiresMs,
   required int maxExpiresMs,
-  required MixpanelLogger logger,
 }) async {
   await queue.updateSessionExpiry(
     sessionId: sessionId,

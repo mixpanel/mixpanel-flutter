@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:js_interop';
-import 'dart:js_interop_unsafe';
 import 'dart:typed_data';
 import 'dart:ui' show Rect, Size;
 import 'package:flutter/foundation.dart' show kIsWasm;
@@ -50,6 +49,7 @@ class WebRenderedSurfaceCapture extends RenderedSurfaceCapture {
   Future<RenderedSurfaceAvailability> waitUntilRenderedSurfaceAvailable(
     Size logicalSize,
   ) async {
+    if (web.document.hidden) return RenderedSurfaceAvailability.unavailable;
     var lookup = _SurfaceLookup.of(logicalSize);
     if (lookup.isReady) {
       _lastSkipReason = null;
@@ -66,11 +66,18 @@ class WebRenderedSurfaceCapture extends RenderedSurfaceCapture {
           ? _coldStartFrames
           : _resizeFrames;
       for (var attempt = 0; attempt < attempts; attempt++) {
-        await _nextAnimationFrame();
+        if (!await _nextAnimationFrame()) {
+          return RenderedSurfaceAvailability.unavailable;
+        }
         lookup = _SurfaceLookup.of(logicalSize);
         if (lookup.isReady) {
           _lastSkipReason = null;
-          await _prepareReadableSurface(lookup.matches.single);
+          final availability = await _prepareReadableSurface(
+            lookup.matches.single,
+          );
+          if (availability == RenderedSurfaceAvailability.unavailable) {
+            return availability;
+          }
           return RenderedSurfaceAvailability.availableAfterBrowserFrame;
         }
         if (lookup.isAmbiguous) break;
@@ -93,7 +100,9 @@ class WebRenderedSurfaceCapture extends RenderedSurfaceCapture {
       // This must happen before the mask walk: requesting a frame afterward
       // would perpetually re-arm the capture scheduler on a static screen.
       SchedulerBinding.instance.scheduleFrame();
-      await _nextAnimationFrame();
+      if (!await _nextAnimationFrame()) {
+        return RenderedSurfaceAvailability.unavailable;
+      }
       return RenderedSurfaceAvailability.availableAfterBrowserFrame;
     }
     return RenderedSurfaceAvailability.available;
@@ -108,10 +117,23 @@ class WebRenderedSurfaceCapture extends RenderedSurfaceCapture {
     _logger.warning(reason);
   }
 
-  static Future<void> _nextAnimationFrame() {
-    final completer = Completer<void>();
-    void onFrame(num _) => completer.complete();
-    web.window.requestAnimationFrame(onFrame.toJS);
+  static Future<bool> _nextAnimationFrame() {
+    if (web.document.hidden) return Future.value(false);
+    final completer = Completer<bool>();
+    late final int frameId;
+    late final JSFunction onVisibilityChange;
+    void finish(bool presented) {
+      if (completer.isCompleted) return;
+      web.window.cancelAnimationFrame(frameId);
+      web.document.removeEventListener('visibilitychange', onVisibilityChange);
+      completer.complete(presented);
+    }
+
+    onVisibilityChange = ((web.Event _) {
+      if (web.document.hidden) finish(false);
+    }).toJS;
+    web.document.addEventListener('visibilitychange', onVisibilityChange);
+    frameId = web.window.requestAnimationFrame(((num _) => finish(true)).toJS);
     return completer.future;
   }
 
@@ -128,7 +150,7 @@ class WebRenderedSurfaceCapture extends RenderedSurfaceCapture {
     required int outputWidth,
     required int outputHeight,
   }) async {
-    if (!isAvailable) return null;
+    if (!isAvailable || web.document.hidden) return null;
 
     final captureWatch = Stopwatch()..start();
     final lookup = _SurfaceLookup.of(logicalSize);
@@ -154,7 +176,7 @@ class WebRenderedSurfaceCapture extends RenderedSurfaceCapture {
       final bitmapCreation = captureWatch.elapsed - surfaceLookup;
       // Preserve the existing post-snapshot presentation opportunity. The
       // immutable bitmap stays local until ScreenshotCapturer validates masks.
-      await _nextAnimationFrame();
+      if (!await _nextAnimationFrame()) return null;
       if (!isAvailable) return null;
       final snapshot = _WebCapturedSurface(
         imageBitmap,
@@ -186,8 +208,7 @@ class WebRenderedSurfaceCapture extends RenderedSurfaceCapture {
     }
   }
 
-  static web.ShadowRoot? _shadowRoot(web.Element? host) =>
-      host?.getProperty('shadowRoot'.toJS);
+  static web.ShadowRoot? _shadowRoot(web.Element? host) => host?.shadowRoot;
 
   @override
   Future<void> dispose() => _encoder.dispose();
