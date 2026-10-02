@@ -7,13 +7,28 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 
 import '../endpoints.dart';
 import '../storage/event_queue_interface.dart';
+import '../storage/upload_lease.dart';
 import 'payload_serializer.dart';
 import '../settings/settings_service.dart';
 import '../logger.dart';
 import '../../models/results.dart';
+import '../../models/session.dart';
 
 /// Result of an upload attempt
-enum UploadResult { success, networkError, serverError, quotaExceeded, backoff }
+enum UploadResult {
+  success,
+  networkError,
+  serverError,
+  quotaExceeded,
+  backoff,
+
+  /// Every session with queued events is being uploaded by another runtime.
+  busy,
+
+  /// Local storage could not be read, so no request was sent. Retried on the
+  /// next attempt without the network backoff.
+  storageError,
+}
 
 /// Service for uploading session replay events to Mixpanel
 ///
@@ -58,6 +73,9 @@ class UploadService {
   /// Mutex to ensure serial flush execution (prevents concurrent flushes)
   bool _isFlushing = false;
 
+  /// Completes when the periodic single-batch upload in progress ends.
+  Future<void>? _oneBatchInFlight;
+
   /// Completer for coordinating concurrent flush calls
   Completer<FlushResult>? _flushCompleter;
 
@@ -73,6 +91,8 @@ class UploadService {
 
   /// Full `/record` endpoint, derived from the configured base URL.
   final String _endpoint;
+
+  static const Duration _uploadLeaseTtl = Duration(minutes: 2);
 
   /// Minimum backoff delay (60 seconds)
   static const Duration _minBackoff = Duration(seconds: 60);
@@ -173,6 +193,8 @@ class UploadService {
     }
 
     _isFlushing = true;
+    final oneBatch = Completer<void>();
+    _oneBatchInFlight = oneBatch.future;
 
     try {
       // Check backoff
@@ -195,7 +217,7 @@ class UploadService {
         _requestAllowedAfterTime = null;
 
         // Check if we're falling behind - check oldest event across ALL sessions
-        final oldestEvent = await eventQueue.fetchOldest();
+        final oldestEvent = await eventQueue.fetchOldestHeader();
         if (oldestEvent != null) {
           final age = clock.now().difference(oldestEvent.timestamp);
           _logger.debug(
@@ -214,8 +236,15 @@ class UploadService {
           result == UploadResult.serverError) {
         _handleFailure();
       }
+    } catch (e) {
+      // The falling-behind check reads the queue outside _uploadBatch. A
+      // storage failure there must not escape into the periodic timer or the
+      // catch-up microtask as an unhandled error.
+      _logger.error('Periodic flush aborted by a storage error: $e');
     } finally {
       _isFlushing = false;
+      _oneBatchInFlight = null;
+      oneBatch.complete();
     }
   }
 
@@ -226,7 +255,11 @@ class UploadService {
   ///
   /// Returns a [FlushResult] indicating the operation completed. Note that flush
   /// is a best-effort operation that may partially succeed.
-  Future<FlushResult> flush() async {
+  Future<FlushResult> flush() => _flush();
+
+  /// [notAfter] caps the cutoff at the time a caller first asked to flush,
+  /// when that request had to wait for another upload first.
+  Future<FlushResult> _flush({DateTime? notAfter}) async {
     // Check remote settings state
     final remoteState = getRemoteEnablementState();
     if (remoteState != RemoteEnablementState.enabled) {
@@ -234,15 +267,44 @@ class UploadService {
       return FlushResult();
     }
 
-    // If already flushing, update cutoff to now and wait for completion
+    // Already flushing: this request still covers every event queued when
+    // it was made. That cutoff is the newest queued event's timestamp, not the
+    // wall clock: event timestamps are anchored to a monotonic clock, so after
+    // a clock rollback an already-queued event can be later than "now".
     if (_isFlushing) {
       _logger.debug('Already flushing, extending cutoff and waiting');
-      _flushCutoffTimestamp = clock.now();
-      if (_flushCompleter != null) {
-        return await _flushCompleter!.future;
+      final DateTime? requested;
+      try {
+        requested =
+            notAfter ?? (await eventQueue.fetchNewestHeader())?.timestamp;
+      } catch (e) {
+        _logger.error('Flush aborted by a storage error: $e');
+        return FlushResult();
       }
-      // This shouldn't happen but return success if completer is null for some reason
-      return FlushResult();
+      // Nothing was queued when this flush was requested.
+      if (requested == null) return FlushResult();
+      if (_flushCompleter case final running?) {
+        final cutoff = _flushCutoffTimestamp;
+        if (cutoff == null || requested.isAfter(cutoff)) {
+          _flushCutoffTimestamp = requested;
+        }
+        return await running.future;
+      }
+      // A periodic single-batch upload is running. Returning now would skip
+      // the full flush, for example on page hide; wait for it, then flush up
+      // to this request's cutoff, leaving events recorded meanwhile for the
+      // next flush, as for any flush.
+      // The header read above yields, so the upload may already be done;
+      // then the service is idle and this request simply flushes.
+      final inFlight = _oneBatchInFlight;
+      if (inFlight != null) {
+        await inFlight;
+      } else if (_isFlushing) {
+        // Busy with nothing to wait on: never expected, but recursing here
+        // could not make progress.
+        return FlushResult();
+      }
+      return _flush(notAfter: requested);
     }
 
     _isFlushing = true;
@@ -267,7 +329,7 @@ class UploadService {
 
       // Get the newest event timestamp when flush started - only upload events with timestamp <= this
       // This ensures we only upload events that existed when flush was called
-      final newestEvent = await eventQueue.fetchNewest();
+      final newestEvent = await eventQueue.fetchNewestHeader();
 
       if (newestEvent == null) {
         _logger.debug('No events to flush');
@@ -276,14 +338,17 @@ class UploadService {
         return result;
       }
 
-      _flushCutoffTimestamp = newestEvent.timestamp;
+      _flushCutoffTimestamp =
+          notAfter != null && newestEvent.timestamp.isAfter(notAfter)
+          ? notAfter
+          : newestEvent.timestamp;
       _logger.debug(
         'Flush starting - will upload events with timestamp <= $_flushCutoffTimestamp',
       );
 
       // Upload batches until queue is empty OR we hit events newer than cutoff
       // The cutoff can be dynamically extended by concurrent flush() calls
-      var oldestEvent = await eventQueue.fetchOldest();
+      var oldestEvent = await eventQueue.fetchOldestHeader();
       while (oldestEvent != null &&
           !oldestEvent.timestamp.isAfter(_flushCutoffTimestamp!)) {
         // Check if we entered backoff during multi-batch flush
@@ -292,7 +357,7 @@ class UploadService {
           break;
         }
 
-        final result = await _uploadBatch();
+        final result = await _uploadBatch(notAfter: _flushCutoffTimestamp);
 
         if (result == UploadResult.success) {
           _consecutiveFailures = 0;
@@ -300,13 +365,13 @@ class UploadService {
           // Yield to event loop to prevent UI blocking on web
           await Future.delayed(Duration.zero);
           // Fetch next oldest event for next iteration
-          oldestEvent = await eventQueue.fetchOldest();
+          oldestEvent = await eventQueue.fetchOldestHeader();
         } else if (result == UploadResult.networkError ||
             result == UploadResult.serverError) {
           _handleFailure();
           break; // Stop flushing on error
         } else {
-          break; // No more events or backoff
+          break; // Remaining sessions are leased elsewhere, or backoff
         }
       }
 
@@ -322,6 +387,12 @@ class UploadService {
       final result = FlushResult();
       _flushCompleter?.complete(result);
       return result;
+    } catch (e) {
+      // Queue reads outside _uploadBatch (cutoff and progress headers) can
+      // throw, for example while an IndexedDB connection is closed. Flush is
+      // best-effort and must never surface storage failures to the host app.
+      _logger.error('Flush aborted by a storage error: $e');
+      return FlushResult();
     } finally {
       // Complete the completer if it hasn't been completed yet (exception case)
       if (_flushCompleter != null && !_flushCompleter!.isCompleted) {
@@ -332,17 +403,84 @@ class UploadService {
     }
   }
 
-  /// Upload a single batch of events
-  Future<UploadResult> _uploadBatch() async {
-    try {
-      // Get the oldest event to determine which session/user to upload
-      // This ensures FIFO order and prevents abandoned events
-      final oldestEvent = await eventQueue.fetchOldest();
-
-      if (oldestEvent == null) {
-        return UploadResult.success; // No events to upload
+  /// Upload a single batch of events.
+  ///
+  /// A session another runtime holds the lease for is skipped in favor of
+  /// the next eligible one, so one contended expired session cannot hold
+  /// back this runtime's own replay. Returns [UploadResult.busy] only when
+  /// every session with queued events is leased elsewhere.
+  ///
+  /// With [notAfter], a session whose oldest event is newer is not uploaded
+  /// either. The caller checks its cutoff against the oldest event overall,
+  /// which may belong to a leased session, so a session reached by skipping
+  /// past a lease must be checked here or a flush could keep uploading
+  /// events recorded after it began.
+  Future<UploadResult> _uploadBatch({DateTime? notAfter}) async {
+    final busySessions = <String>{};
+    while (true) {
+      // The queue decides which events this runtime may upload: on web that
+      // is its own sessions plus expired ones, matching mixpanel-js. FIFO
+      // within that scope prevents abandoned events.
+      final QueuedEventHeader? oldestEvent;
+      try {
+        oldestEvent = await eventQueue.fetchOldestHeader(
+          excludeSessionIds: busySessions,
+        );
+      } catch (e) {
+        _logger.error('Failed to read the upload queue: $e');
+        return UploadResult.storageError;
+      }
+      if (oldestEvent == null ||
+          (notAfter != null && oldestEvent.timestamp.isAfter(notAfter))) {
+        return busySessions.isEmpty ? UploadResult.success : UploadResult.busy;
       }
 
+      final UploadLease uploadLease;
+      if (eventQueue case final UploadLease lease) {
+        uploadLease = lease;
+      } else {
+        return _uploadNextBatch(oldestEvent);
+      }
+      // Per-session lease, as mixpanel-js locks per replay. Contention only
+      // arises when several tabs drain the same expired session.
+
+      var acquired = false;
+      try {
+        acquired = await uploadLease.acquireUploadLease(
+          ownerId: uploadLease.uploadLeaseOwnerId,
+          sessionId: oldestEvent.sessionId,
+          ttl: _uploadLeaseTtl,
+        );
+        if (!acquired) {
+          _logger.debug(
+            'Another browser tab is uploading session '
+            '${oldestEvent.sessionId}; trying the next session',
+          );
+          busySessions.add(oldestEvent.sessionId);
+          continue;
+        }
+        return await _uploadNextBatch(oldestEvent);
+      } catch (e) {
+        _logger.error('Failed to coordinate replay upload: $e');
+        return UploadResult.storageError;
+      } finally {
+        if (acquired) {
+          try {
+            await uploadLease.releaseUploadLease(
+              ownerId: uploadLease.uploadLeaseOwnerId,
+              sessionId: oldestEvent.sessionId,
+            );
+          } catch (e) {
+            _logger.warning('Failed to release replay upload lease: $e');
+          }
+        }
+      }
+    }
+  }
+
+  /// Uploads the batch starting at [oldestEvent].
+  Future<UploadResult> _uploadNextBatch(QueuedEventHeader oldestEvent) async {
+    try {
       final sessionId = oldestEvent.sessionId;
       final distinctId = oldestEvent.distinctId;
 
@@ -368,14 +506,26 @@ class UploadService {
       );
 
       // Get Session object for this sessionId (may be old session!)
-      // Session metadata is created when startRecording() is called, so this should always exist
-      final session = await eventQueue.getSessionMetadata(sessionId);
-
+      // Session metadata is created when startRecording() is called, so this
+      // normally exists. It can be missing when that write failed while later
+      // event writes succeeded. Retrying cannot fix that, and on web the
+      // backlog persists across launches, so the oldest event would block the
+      // shared queue. Rebuild it instead: nothing can have been uploaded
+      // without metadata, so the replay starts at sequence 0 from its oldest
+      // queued event. Like mixpanel-js with orphaned batches, a rare duplicate
+      // send is preferred over data that can never upload.
+      var session = await eventQueue.getSessionMetadata(sessionId);
       if (session == null) {
-        _logger.error(
-          'No session metadata found for session $sessionId - this should not happen!',
+        _logger.warning(
+          'No session metadata found for session $sessionId; rebuilding it '
+          'from the oldest queued event',
         );
-        return UploadResult.networkError;
+        session = Session(
+          id: sessionId,
+          startTime: events.first.timestamp,
+          status: SessionStatus.ended,
+        );
+        await eventQueue.createSessionMetadata(session);
       }
 
       // Get sequence number for THIS session being uploaded (per-session, not global)
@@ -412,27 +562,34 @@ class UploadService {
 
       // Handle response
       if (response.statusCode == 200) {
-        // Success - remove uploaded events from queue
-        _logger.debug(
-          'Removing ${events.length} events from queue (IDs: ${events.map((e) => e.id).join(", ")})',
-        );
-        await eventQueue.remove(events);
-
-        // Verify events were removed
-        final remainingOldest = await eventQueue.fetchOldest();
-        _logger.debug(
-          'After removal, oldest event: ${remainingOldest?.id} (session: ${remainingOldest?.sessionId}, distinctId: ${remainingOldest?.distinctId})',
-        );
-
-        // Persist sequence number to storage for THIS session
-        try {
-          await eventQueue.updateSequenceNumber(session.id, sequenceNumber);
-          _logger.debug(
-            'Persisted sequence number: $sequenceNumber for session: ${session.id}',
+        final queue = eventQueue;
+        if (queue case final AtomicUploadCommit atomicQueue) {
+          await atomicQueue.commitUploadedBatch(
+            events: events,
+            sessionId: session.id,
+            sequenceNumber: sequenceNumber,
           );
-        } catch (e) {
-          _logger.error('Failed to persist sequence number: $e');
-          // Continue - this is not critical for functionality
+          _logger.debug(
+            'Atomically removed ${events.length} events and persisted '
+            'sequence $sequenceNumber',
+          );
+        } else {
+          // Native queues retain the existing two-step behavior. Shared web
+          // storage implements AtomicUploadCommit so a page close cannot land
+          // between deletion and sequence advancement.
+          _logger.debug(
+            'Removing ${events.length} events from queue '
+            '(IDs: ${events.map((e) => e.id).join(", ")})',
+          );
+          await queue.remove(events);
+          try {
+            await queue.updateSequenceNumber(session.id, sequenceNumber);
+            _logger.debug(
+              'Persisted sequence number: $sequenceNumber for session: ${session.id}',
+            );
+          } catch (e) {
+            _logger.error('Failed to persist sequence number: $e');
+          }
         }
 
         _logger.info('Successfully uploaded ${events.length} events');
@@ -509,5 +666,6 @@ class UploadService {
     _isDisposed = true;
 
     stopAutoFlush();
+    payloadSerializer.dispose();
   }
 }

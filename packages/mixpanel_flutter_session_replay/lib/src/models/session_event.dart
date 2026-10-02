@@ -31,10 +31,10 @@ sealed class EventPayload {
 
 /// Payload for metadata events (session dimensions, device info)
 class MetadataPayload extends EventPayload {
-  /// Screen width in logical pixels
+  /// Width of the screenshot image in pixels
   final int width;
 
-  /// Screen height in logical pixels
+  /// Height of the screenshot image in pixels
   final int height;
 
   MetadataPayload({required this.width, required this.height});
@@ -66,10 +66,10 @@ class WireframePayload extends EventPayload {
     required this.elements,
   });
 
-  /// Viewport width in logical pixels.
+  /// Viewport width, in the pixels of the screenshot this frame describes.
   final int viewportWidth;
 
-  /// Viewport height in logical pixels.
+  /// Viewport height, in the pixels of the screenshot this frame describes.
   final int viewportHeight;
 
   /// Elements in traversal order.
@@ -130,10 +130,10 @@ class InteractionPayload extends EventPayload {
   /// RRWeb interaction type (e.g., touchStart, touchEnd, click)
   final int interactionType;
 
-  /// Screen x coordinate
+  /// Screen x coordinate, in the pixels of the screenshot it lands on.
   final double x;
 
-  /// Screen y coordinate
+  /// Screen y coordinate, in the pixels of the screenshot it lands on.
   final double y;
 
   InteractionPayload({
@@ -154,10 +154,10 @@ class TouchPosition {
     required this.timeOffset,
   });
 
-  /// Screen x coordinate in logical pixels.
+  /// Screen x coordinate, in the pixels of the screenshot it lands on.
   final double x;
 
-  /// Screen y coordinate in logical pixels.
+  /// Screen y coordinate, in the pixels of the screenshot it lands on.
   final double y;
 
   /// Milliseconds relative to the batch's event timestamp. rrweb replays a

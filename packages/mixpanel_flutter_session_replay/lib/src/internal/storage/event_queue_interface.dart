@@ -1,6 +1,47 @@
 import '../../models/session_event.dart';
 import '../../models/session.dart';
 
+/// Payload-free event information used for queue ordering decisions.
+///
+/// Storage implementations should avoid reading or deserializing event payloads
+/// when returning this value.
+class QueuedEventHeader {
+  final int id;
+  final String sessionId;
+  final String distinctId;
+  final DateTime timestamp;
+
+  const QueuedEventHeader({
+    required this.id,
+    required this.sessionId,
+    required this.distinctId,
+    required this.timestamp,
+  });
+
+  factory QueuedEventHeader.fromDbRow(Map<String, dynamic> row) {
+    return QueuedEventHeader(
+      id: row['id'] as int,
+      sessionId: row['session_id'] as String,
+      distinctId: row['distinct_id'] as String,
+      timestamp: DateTime.fromMillisecondsSinceEpoch(
+        row['timestamp'] as int,
+        isUtc: true,
+      ),
+    );
+  }
+}
+
+/// Counts returned after pruning an expired persistent replay backlog.
+class RetentionCleanupResult {
+  final int removedEvents;
+  final int removedSessions;
+
+  const RetentionCleanupResult({
+    required this.removedEvents,
+    required this.removedSessions,
+  });
+}
+
 /// Abstract interface for event queue implementations
 ///
 /// Implementations can use different storage mechanisms (SQLite, in-memory, file-based, etc.)
@@ -9,8 +50,12 @@ abstract class EventQueue {
   /// Initialize the queue
   Future<void> initialize();
 
-  /// Add an event to the queue
-  Future<void> add(SessionReplayEvent event);
+  /// Add an event to the queue.
+  ///
+  /// Returns false when the event was dropped, for example because storing it
+  /// would exceed the quota. A dropped event must not be treated as stored:
+  /// the recorder relies on this to re-emit a session's viewport metadata.
+  Future<bool> add(SessionReplayEvent event);
 
   /// Create session metadata in upload_metadata table
   ///
@@ -19,13 +64,16 @@ abstract class EventQueue {
   /// If metadata already exists for this session, this is a no-op.
   Future<void> createSessionMetadata(Session session);
 
-  /// Get the oldest event across all sessions (for age checking)
-  /// Returns null if no events exist
-  Future<PersistedSessionReplayEvent?> fetchOldest();
+  /// Get payload-free metadata for the oldest event across all sessions.
+  ///
+  /// Events of sessions in [excludeSessionIds] are skipped, so an uploader can
+  /// move past a session that another runtime is draining at the moment.
+  Future<QueuedEventHeader?> fetchOldestHeader({
+    Set<String> excludeSessionIds = const {},
+  });
 
-  /// Get the newest event across all sessions (for flush cutoff)
-  /// Returns null if no events exist
-  Future<PersistedSessionReplayEvent?> fetchNewest();
+  /// Get payload-free metadata for the newest event across all sessions.
+  Future<QueuedEventHeader?> fetchNewestHeader();
 
   /// Fetch batch of consecutive events for a specific sessionId and distinctId
   ///

@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import 'dart:ui' show Offset;
 
 import 'masking_directive.dart';
 import 'session_event.dart' show WireframePayload;
@@ -11,8 +12,11 @@ import 'session_event.dart' show WireframePayload;
 /// State transitions:
 /// ```
 /// notRecording ──[sampling passes]──► initializing ──[DB done]──► recording
-///      ▲                                                              │
-///      └──────────────────[stopRecording/background]──────────────────┘
+///      ▲                                                              │  ▲
+///      │                                                              │  │
+///      │                                                              ▼  │
+///      │                                                            paused
+///      └──────────────────────────[stopRecording]─────────────────────┘
 ///
 /// notRecording ──[sampling fails]──► notRecording (allows re-roll)
 /// ```
@@ -33,6 +37,15 @@ enum RecordingState {
   ///
   /// Screenshots and interactions are being captured and queued for upload.
   recording,
+
+  /// Recording is temporarily paused
+  ///
+  /// The current replay is retained while a native app is backgrounded and
+  /// continues with the same replay ID on foreground. Screenshots and
+  /// interactions are not captured while paused. Only reached when
+  /// `MobileOptions.onBackground` is `ReplayBackgroundBehavior.pause`. Web
+  /// never pauses: a replay keeps recording while the page is hidden.
+  paused,
 }
 
 /// Initialization errors that can occur during SDK setup
@@ -43,7 +56,8 @@ enum InitializationError {
   /// Cannot initialize local storage
   storageFailure,
 
-  /// Platform security requirements not met (e.g., macOS App Sandbox not enabled)
+  /// Platform requirements not met (for example, macOS App Sandbox or the
+  /// browser capabilities required for non-blocking capture).
   platformSecurityNotMet,
 
   /// `serverUrl` was empty, not HTTPS, or otherwise malformed.
@@ -63,6 +77,9 @@ enum CaptureError {
 
   /// OOM during capture
   insufficientMemory,
+
+  /// Recording stopped or paused while the frame was still being acquired
+  cancelled,
 
   /// JPEG encoding error
   compressionFailed,
@@ -110,16 +127,30 @@ final class CaptureSuccess extends CaptureResult {
   /// Captured screenshot data (JPEG bytes)
   final Uint8List data;
 
-  /// Screenshot width in pixels
+  /// Width of the encoded image in pixels.
+  ///
+  /// Reported as replay metadata, so it must match [data]. It can differ from
+  /// the logical viewport when the raster is downscaled to bound capture work.
   final int width;
 
-  /// Screenshot height in pixels
+  /// Height of the encoded image in pixels.
+  ///
+  /// Reported as replay metadata, so it must match [data]. It can differ from
+  /// the logical viewport when the raster is downscaled to bound capture work.
   final int height;
+
+  /// Image pixels per logical pixel, as `Offset(x, y)`.
+  ///
+  /// Every coordinate uploaded for a frame — replay metadata, interactions,
+  /// and wireframes — is expressed in image pixels, so coordinates taken from
+  /// the render tree are scaled by this first. `Offset(1, 1)` for a 1:1
+  /// capture, below 1 when the raster was downscaled to bound capture work.
+  final Offset imageScale;
 
   /// Number of masked regions applied
   final int maskCount;
 
-  /// Timestamp when the screenshot was captured (when toImage() was called)
+  /// Timestamp when creation of the platform image snapshot began.
   final DateTime timestamp;
 
   /// Mask regions that were detected (for debug overlay)
@@ -143,6 +174,7 @@ final class CaptureSuccess extends CaptureResult {
     required this.timestamp,
     required this.sessionId,
     required this.distinctId,
+    this.imageScale = const Offset(1, 1),
     this.maskRegions = const [],
     this.wireframes,
   });

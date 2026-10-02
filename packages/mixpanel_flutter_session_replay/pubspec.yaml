@@ -18,6 +18,8 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_web_plugins:
+    sdk: flutter
   meta: ^1.12.0
   image: ^4.3.0
   connectivity_plus: ^7.0.0
@@ -29,6 +31,7 @@ dependencies:
   clock: ^1.1.1
   shared_preferences: ^2.3.0
   mixpanel_flutter_common: ^1.0.0
+  web: ^1.1.0
 
 dev_dependencies:
   flutter_test:
@@ -51,3 +54,6 @@ flutter:
         pluginClass: MixpanelSessionReplayPlugin
       macos:
         pluginClass: MixpanelSessionReplayPlugin
+      web:
+        pluginClass: MixpanelSessionReplayPluginWeb
+        fileName: src/web/mixpanel_session_replay_plugin_web.dart

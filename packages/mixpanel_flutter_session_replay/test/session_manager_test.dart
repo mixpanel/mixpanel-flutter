@@ -94,5 +94,60 @@ void main() {
         expect(identical(session1, session2), true);
       });
     });
+
+    group('resumeSession', () {
+      test('sets the provided session as current', () {
+        // GIVEN
+        final manager = SessionManager();
+        final session = Session(
+          id: 'resumed-session-id',
+          startTime: DateTime.utc(2025, 1, 1),
+          status: SessionStatus.active,
+        );
+
+        // WHEN
+        manager.resumeSession(session);
+
+        // THEN
+        final current = manager.getCurrentSession();
+        expect(current.id, 'resumed-session-id');
+        expect(identical(current, session), true);
+      });
+
+      test('replaces existing session', () {
+        // GIVEN
+        final manager = SessionManager();
+        final originalSession = manager.startNewSession();
+        final resumedSession = Session(
+          id: 'resumed-id',
+          startTime: DateTime.utc(2025, 6, 1),
+          status: SessionStatus.active,
+        );
+
+        // WHEN
+        manager.resumeSession(resumedSession);
+
+        // THEN
+        final current = manager.getCurrentSession();
+        expect(current.id, isNot(equals(originalSession.id)));
+        expect(current.id, 'resumed-id');
+      });
+
+      test('returns the resumed session', () {
+        // GIVEN
+        final manager = SessionManager();
+        final session = Session(
+          id: 'test-id',
+          startTime: DateTime.utc(2025, 1, 1),
+          status: SessionStatus.active,
+        );
+
+        // WHEN
+        final result = manager.resumeSession(session);
+
+        // THEN
+        expect(identical(result, session), true);
+      });
+    });
   });
 }

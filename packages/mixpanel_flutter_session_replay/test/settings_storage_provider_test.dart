@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
 import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/settings/settings_storage_provider.dart';
+import 'package:mixpanel_flutter_session_replay/src/internal/settings/sdk_config.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/logger.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/configuration.dart';
 
@@ -122,6 +123,21 @@ void main() {
         // THEN
         expect(result, isNotNull);
         expect(result!.recordSessionsPercent, 42.5);
+      });
+
+      test('retains remote web duration fields in the cache', () async {
+        // GIVEN a remote SDK config with web recording limits
+        final provider = createProvider();
+        provider.saveSdkConfig(
+          const SdkConfig(recordMaxMs: 60000, recordIdleTimeoutMs: 10000),
+        );
+
+        // WHEN
+        final cached = await provider.getSdkConfig();
+
+        // THEN
+        expect(cached?.recordMaxMs, 60000);
+        expect(cached?.recordIdleTimeoutMs, 10000);
       });
 
       test('returns null for invalid JSON in cache', () async {

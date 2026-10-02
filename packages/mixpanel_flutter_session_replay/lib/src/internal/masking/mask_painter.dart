@@ -47,12 +47,11 @@ class MaskPainter {
 
       // Convert to image
       final picture = recorder.endRecording();
-      final maskedImage = await picture.toImage(
-        originalImage.width,
-        originalImage.height,
-      );
-
-      return maskedImage;
+      try {
+        return await picture.toImage(originalImage.width, originalImage.height);
+      } finally {
+        picture.dispose();
+      }
     } catch (e) {
       // Mask application failed - fail safe
       throw MaskApplicationException('Failed to apply masks: $e');

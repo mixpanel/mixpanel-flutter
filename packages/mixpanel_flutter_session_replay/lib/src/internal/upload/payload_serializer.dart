@@ -1,7 +1,8 @@
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:clock/clock.dart';
+
+import '../platform/gzip_compressor.dart';
 
 import '../../models/session_event.dart';
 import '../../models/session.dart';
@@ -32,8 +33,12 @@ class SerializedPayload {
 /// Uses format=gzip query parameter to indicate compression.
 class PayloadSerializer {
   final String _token;
+  final GzipCompressor _gzip;
 
-  PayloadSerializer(this._token);
+  /// [gzip] defaults to the platform compressor. The serializer owns it and
+  /// releases it in [dispose].
+  PayloadSerializer(this._token, {GzipCompressor? gzip})
+    : _gzip = gzip ?? createGzipCompressor();
 
   Future<SerializedPayload> serialize(
     List<SessionReplayEvent> events,
@@ -103,14 +108,17 @@ class PayloadSerializer {
       'replay_length_ms': replayLength.toString(),
       'replay_start_time': replayStartTime.toString(),
       '\$lib_version': sdkVersion,
-      '\$os': operatingSystem,
-      'mp_lib': 'flutter-sr',
+      if (operatingSystem.isNotEmpty) '\$os': operatingSystem,
+      'mp_lib': sdkLibrary,
     };
   }
 
   /// GZIP compress a string
   Future<List<int>> _gzipCompress(String data) async {
     final bytes = utf8.encode(data);
-    return gzip.encode(bytes);
+    return _gzip.compress(bytes);
   }
+
+  /// Releases the compressor (a Web Worker on web; nothing elsewhere).
+  void dispose() => _gzip.dispose();
 }

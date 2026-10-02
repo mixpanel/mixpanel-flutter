@@ -1,18 +1,39 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:image/image.dart' as img;
 
-/// Compresses RGBA image data to JPEG using platform-native encoders.
+import 'capture/image_compressor.dart';
+
+/// Native image compressor using platform JPEG encoders.
 ///
 /// Uses MethodChannel to call Android's Bitmap.compress() (libjpeg-turbo)
-/// or iOS/macOS's UIImage.jpegData / CGImageDestination for hardware-optimized encoding.
+/// or iOS/macOS's UIImage.jpegData for hardware-optimized encoding.
 ///
-/// The MethodChannel call is async and non-blocking — native compression runs on
-/// platform background threads (Android: ExecutorService, iOS/macOS: DispatchQueue).
-class NativeImageCompressor {
+/// There is deliberately no pure-Dart fallback. Encoding a full-resolution
+/// frame in Dart takes far longer than the capture interval, so a persistently
+/// failing channel would turn every capture into a CPU-bound isolate job
+/// instead of a dropped frame. A failure returns null and the frame is
+/// skipped.
+class NativeImageCompressor extends ImageCompressor {
   static const _channel = MethodChannel('com.mixpanel.flutter_session_replay');
 
-  /// Compress RGBA bytes to JPEG using native platform encoder.
-  ///
-  /// Returns compressed JPEG bytes, or null if native compression fails.
+  /// JPEG quality (0-100).
+  /// iOS: 40 to match native SDK (ImageSettings.jpegCompressionRate = 0.4)
+  /// Android: 80 to match native SDK (Bitmap.compress quality = 80)
+  int get _jpegQuality => defaultTargetPlatform == TargetPlatform.iOS ? 40 : 80;
+
+  @override
+  Future<Uint8List?> compress(
+    Uint8List rgbaBytes, {
+    required int width,
+    required int height,
+  }) => compressToJpeg(
+    rgbaBytes,
+    width: width,
+    height: height,
+    quality: _jpegQuality,
+  );
+
   Future<Uint8List?> compressToJpeg(
     Uint8List rgbaBytes, {
     required int width,
@@ -31,15 +52,49 @@ class NativeImageCompressor {
     }
   }
 
-  /// Release native cached resources (bitmaps, buffers).
-  ///
-  /// Call this when session replay stops to free memory.
-  /// Resources are automatically recreated on the next compression call.
+  @override
   Future<void> dispose() async {
     try {
       await _channel.invokeMethod<void>('disposeCache');
     } catch (_) {
-      // Best-effort cleanup — ignore failures
+      // Best-effort cleanup.
     }
   }
+}
+
+/// Pure Dart PNG compressor for deterministic golden tests.
+///
+/// Uses a background isolate for encoding and produces byte-for-byte
+/// reproducible output across runs.
+class DartPngCompressor extends ImageCompressor {
+  @override
+  Future<Uint8List?> compress(
+    Uint8List rgbaBytes, {
+    required int width,
+    required int height,
+  }) async {
+    try {
+      return await compute(_compressInIsolate, (rgbaBytes, width, height));
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Uint8List? _compressInIsolate((Uint8List, int, int) args) {
+    final (rgbaBytes, width, height) = args;
+    try {
+      final image = img.Image.fromBytes(
+        width: width,
+        height: height,
+        bytes: rgbaBytes.buffer,
+        order: img.ChannelOrder.rgba,
+      );
+      return Uint8List.fromList(img.encodePng(image));
+    } catch (_) {
+      return null;
+    }
+  }
+
+  @override
+  Future<void> dispose() async {}
 }
