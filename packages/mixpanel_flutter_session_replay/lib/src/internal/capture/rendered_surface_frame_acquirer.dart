@@ -1,12 +1,13 @@
 import 'dart:math' as math;
 import 'dart:typed_data';
-import 'dart:ui' show Size;
+import 'dart:ui' show Offset, Size;
 
 import 'package:clock/clock.dart';
 
 import '../../models/masking_directive.dart';
 import '../../models/results.dart';
 import 'frame_acquirer.dart';
+import 'image_scale.dart';
 import 'raster_completion_barrier.dart';
 import 'rendered_surface_capture.dart';
 
@@ -57,6 +58,23 @@ class RenderedSurfaceFrameAcquirer extends FrameAcquirer {
     final longEdgeRatio = maxRasterLongEdge / math.max(width, height);
     return math.min(1.0, math.min(areaRatio, longEdgeRatio));
   }
+
+  /// Whole raster pixels this acquirer encodes a [logicalSize] frame into.
+  Size _rasterSizeFor(Size logicalSize) {
+    final ratio = capturePixelRatioFor(
+      logicalSize,
+    ).clamp(0, _surface.maximumCapturePixelRatio).toDouble();
+    return Size(
+      (logicalSize.width * ratio).ceilToDouble(),
+      (logicalSize.height * ratio).ceilToDouble(),
+    );
+  }
+
+  /// Derived from the same raster size [acquire] encodes into, so a touch is
+  /// scaled by exactly what the frame around it was.
+  @override
+  Offset imageScaleFor(Size viewport) =>
+      imageScaleBetween(viewport: viewport, image: _rasterSizeFor(viewport));
 
   @override
   bool get isAvailable => _surface.isAvailable;
@@ -123,11 +141,9 @@ class RenderedSurfaceFrameAcquirer extends FrameAcquirer {
 
     final capturedAt = clock.now();
     final logicalSize = request.logicalSize;
-    final ratio = capturePixelRatioFor(
-      logicalSize,
-    ).clamp(0, _surface.maximumCapturePixelRatio).toDouble();
-    final width = (logicalSize.width * ratio).ceil();
-    final height = (logicalSize.height * ratio).ceil();
+    final rasterSize = _rasterSizeFor(logicalSize);
+    final width = rasterSize.width.toInt();
+    final height = rasterSize.height.toInt();
     final maskRects =
         scaleMaskRegions(
               request.maskRegions,

@@ -535,13 +535,14 @@ void main() {
         final element = key.currentContext! as Element;
         final boundary = element.findRenderObject()! as RenderRepaintBoundary;
         final compressor = _DirectSurfaceCapture();
+        final acquirer = RenderedSurfaceFrameAcquirer(compressor);
         final capturer = ScreenshotCapturer(
           directive: MaskingDirective(
             autoMaskTypes: const {AutoMaskedView.text},
           ),
           logger: MixpanelLogger(LogLevel.none),
           debugOverlayEnabled: false,
-          frameAcquirer: RenderedSurfaceFrameAcquirer(compressor),
+          frameAcquirer: acquirer,
         );
 
         // When capture is requested through the platform surface path.
@@ -567,6 +568,12 @@ void main() {
         expect((success.width, success.height), (1280, 720));
         expect(success.imageScale.dx, closeTo(2 / 3, 0.0001));
         expect(success.imageScale.dy, closeTo(2 / 3, 0.0001));
+        // The scale a touch is recorded with before any frame has been
+        // encoded is the one this frame turned out to use.
+        expect(
+          capturer.imageScaleFor(const Size(1920, 1080)),
+          success.imageScale,
+        );
         expect(compressor.maskRects, hasLength(success.maskRegions.length));
         final logicalMask = success.maskRegions.first.bounds;
         final outputMask = compressor.maskRects!.first;

@@ -1702,6 +1702,43 @@ void main() {
       );
 
       test(
+        'should scale touches landing while the first frame is still encoding',
+        () async {
+          // GIVEN - a replay whose first capture is in flight over a viewport
+          // the capturer will downscale
+          final coordinator = await startRecordingWithPendingCapture();
+          final boundary = RenderRepaintBoundary();
+          boundary.attach(PipelineOwner());
+          boundary.layout(BoxConstraints.tight(const Size(1920, 1080)));
+          final capture = coordinator.captureSnapshot(
+            boundary,
+            boundaryElement: boundaryElement,
+          );
+          await pumpEventQueue();
+
+          // WHEN - a pointer lands before any frame has been encoded
+          coordinator.captureInteraction(
+            RRWebMouseInteraction.touchStart,
+            const Offset(300, 600),
+            DateTime.now(),
+          );
+          await pumpEventQueue();
+
+          // THEN - it is already in the space of the frame it will land on,
+          // rather than the 1:1 scale that frame's metadata would contradict
+          final interaction =
+              recordingQueue.addedEvents
+                      .firstWhere((e) => e.type == EventType.interaction)
+                      .payload
+                  as InteractionPayload;
+          expect((interaction.x, interaction.y), (200.0, 400.0));
+
+          pendingCapturer.completeWithPinnedIdentity();
+          await capture;
+        },
+      );
+
+      test(
         'should record touches in the image space of the frame in effect',
         () async {
           // GIVEN - a frame whose raster was downscaled to two thirds
@@ -2119,6 +2156,11 @@ class _PendingScreenshotCapturer extends ScreenshotCapturer {
       );
 
   final Completer<CaptureResult> pendingCapture = Completer<CaptureResult>();
+
+  /// Stands in for a web acquirer that downscales to its raster budget.
+  @override
+  Offset imageScaleFor(Size viewport) => const Offset(2 / 3, 2 / 3);
+
   late String pinnedSessionId;
   late String pinnedDistinctId;
 

@@ -9,7 +9,7 @@ import 'dart:ui' show Offset, Size;
 ///
 /// Returns `Offset(1, 1)` for a degenerate viewport, leaving coordinates
 /// untouched rather than collapsing them onto zero.
-Offset imageScaleFor({required Size viewport, required Size image}) {
+Offset imageScaleBetween({required Size viewport, required Size image}) {
   if (!viewport.isFinite ||
       !image.isFinite ||
       viewport.width <= 0 ||
