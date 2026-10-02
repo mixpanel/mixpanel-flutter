@@ -561,6 +561,8 @@ void main() {
         final success = result! as CaptureSuccess;
         expect(compressor.logicalSize, const Size(1920, 1080));
         expect((compressor.outputWidth, compressor.outputHeight), (1280, 720));
+        // Replay metadata must describe the encoded image, not the viewport.
+        expect((success.width, success.height), (1280, 720));
         expect(compressor.maskRects, hasLength(success.maskRegions.length));
         final logicalMask = success.maskRegions.first.bounds;
         final outputMask = compressor.maskRects!.first;

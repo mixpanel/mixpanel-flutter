@@ -254,8 +254,8 @@ class ScreenshotCapturer {
           );
           return CaptureSuccess(
             data: data,
-            width: logicalSize.width.round(),
-            height: logicalSize.height.round(),
+            width: width,
+            height: height,
             maskCount: maskRegions.length,
             timestamp: timestamp,
             maskRegions: maskRegions,

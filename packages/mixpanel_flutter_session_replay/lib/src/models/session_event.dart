@@ -31,10 +31,10 @@ sealed class EventPayload {
 
 /// Payload for metadata events (session dimensions, device info)
 class MetadataPayload extends EventPayload {
-  /// Screen width in logical pixels
+  /// Width of the screenshot image in pixels
   final int width;
 
-  /// Screen height in logical pixels
+  /// Height of the screenshot image in pixels
   final int height;
 
   MetadataPayload({required this.width, required this.height});

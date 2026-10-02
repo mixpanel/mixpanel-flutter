@@ -126,14 +126,16 @@ final class CaptureSuccess extends CaptureResult {
   /// Captured screenshot data (JPEG bytes)
   final Uint8List data;
 
-  /// Captured viewport width in logical pixels.
+  /// Width of the encoded image in pixels.
   ///
-  /// The encoded raster may be downscaled to bound capture work.
+  /// Reported as replay metadata, so it must match [data]. It can differ from
+  /// the logical viewport when the raster is downscaled to bound capture work.
   final int width;
 
-  /// Captured viewport height in logical pixels.
+  /// Height of the encoded image in pixels.
   ///
-  /// The encoded raster may be downscaled to bound capture work.
+  /// Reported as replay metadata, so it must match [data]. It can differ from
+  /// the logical viewport when the raster is downscaled to bound capture work.
   final int height;
 
   /// Number of masked regions applied
