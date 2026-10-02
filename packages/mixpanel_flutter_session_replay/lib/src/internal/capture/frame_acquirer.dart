@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:typed_data';
-import 'dart:ui' show Offset, Rect, Size;
+import 'dart:ui' show Rect, Size;
 
 import 'package:flutter/rendering.dart' show RenderRepaintBoundary;
 
@@ -39,15 +39,6 @@ abstract class FrameAcquirer {
   /// fence and the mask walk when there is nothing to wait for.
   FutureOr<FrameSourceStatus> prepare(Size logicalSize) =>
       FrameSourceStatus.ready;
-
-  /// Image pixels per logical pixel this acquirer would produce for a frame
-  /// of [viewport], as `Offset(x, y)`.
-  ///
-  /// Touches are scaled by this before they are recorded, so it has to answer
-  /// without taking a frame — a touch can land before the first frame of a
-  /// replay has finished encoding, and it still ships in that frame's space.
-  /// `Offset(1, 1)` for an acquirer that rasters at logical size.
-  Offset imageScaleFor(Size viewport) => const Offset(1, 1);
 
   /// Acquires the frame described by [request].
   ///

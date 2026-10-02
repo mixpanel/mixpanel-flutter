@@ -259,10 +259,7 @@ class ScreenshotCapturer {
             data: data,
             width: width,
             height: height,
-            imageScale: imageScaleBetween(
-              viewport: logicalSize,
-              image: imageSize,
-            ),
+            imageScale: imageScaleFor(viewport: logicalSize, image: imageSize),
             maskCount: maskRegions.length,
             timestamp: timestamp,
             maskRegions: maskRegions,
@@ -304,12 +301,6 @@ class ScreenshotCapturer {
     }
     return scheduler.endOfFrame;
   }
-
-  /// Image pixels per logical pixel a frame of [viewport] encodes into.
-  ///
-  /// Answers without taking a frame, so touches recorded before one has
-  /// finished are in the same space as the frame they land on.
-  Offset imageScaleFor(Size viewport) => _acquirer.imageScaleFor(viewport);
 
   Future<void> dispose() => _acquirer.dispose();
 

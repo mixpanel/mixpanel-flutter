@@ -58,15 +58,12 @@ class SessionReplayCoordinator implements WidgetCoordinator {
 
   RecordingState _recordingState = RecordingState.notRecording;
 
-  /// Image pixels per logical pixel for the frames being captured now.
+  /// Image pixels per logical pixel of the most recent accepted frame.
   ///
   /// Touches are recorded as they happen, between captures, so they ship in
   /// the space of the frame — and therefore the metadata event — that is in
-  /// effect for them. Predicted from the viewport when a capture starts, so a
-  /// touch landing while the replay's first frame is still encoding is not
-  /// recorded at a 1:1 scale the frame will contradict; the frame itself
-  /// corrects it on arrival. A touch before any capture has started precedes
-  /// every metadata event of the replay, and so has no frame to be placed on.
+  /// effect for them. Stays `Offset(1, 1)` until the first frame lands, which
+  /// is also the first metadata event any touch could be positioned against.
   Offset _imageScale = const Offset(1, 1);
 
   bool _isAppInForeground = false;
@@ -262,15 +259,6 @@ class SessionReplayCoordinator implements WidgetCoordinator {
     // idle timer is authoritative while the page is live.
     if (_endIfExpired(includeIdle: false)) return;
 
-    // Before the first await: touches taken from here on are in the space of
-    // the frame this capture is about to produce, including across a replay
-    // restart that changed viewport. A boundary still awaiting its first
-    // layout has no viewport to predict from, and no frame has shipped under
-    // it either, so the previous scale stands.
-    if (boundary.hasSize) {
-      _imageScale = _screenshotCapturer.imageScaleFor(boundary.size);
-    }
-
     final ticket = _captureInvalidation.begin();
     _logger.debug('Capturing snapshot', tag: 'coordinator');
 
@@ -311,7 +299,7 @@ class SessionReplayCoordinator implements WidgetCoordinator {
         :final distinctId,
         :final wireframes,
       ):
-        // Correct the prediction to what the frame actually encoded into.
+        // Touches recorded from here on belong to this frame's metadata.
         _imageScale = imageScale;
 
         // The frame is accepted: only now may its wireframe become the dedup

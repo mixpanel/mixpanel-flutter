@@ -119,7 +119,7 @@ class WireframeEmitter {
     // space the screenshot and its metadata are in, so a downscaled web
     // raster keeps elements aligned with the frame they describe.
     final image = imageSize ?? viewport;
-    final scale = imageScaleBetween(viewport: viewport, image: image);
+    final scale = imageScaleFor(viewport: viewport, image: image);
     final payload = WireframePayload(
       viewportWidth: image.width.round(),
       viewportHeight: image.height.round(),
