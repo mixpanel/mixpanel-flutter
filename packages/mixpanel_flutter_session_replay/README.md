@@ -90,10 +90,10 @@ On web, screenshot rasters are downscaled when the logical viewport exceeds
 the pixel area of 1280×720. Aspect ratio is preserved and the
 longest raster edge is additionally limited to 1920 pixels. The limiting ratio
 is calculated exactly so the raster retains as much detail as that budget
-allows. Replay metadata, interactions, and wireframes remain in the original
-logical coordinate space, so downscaling does not change replay layout or
-pointer alignment. Native platforms retain their existing 1:1 logical capture
-resolution.
+allows. Replay metadata reports the dimensions of the encoded image, and
+interactions and wireframes are scaled into those same pixels, so the player
+positions pointers and elements against the frame it renders. Native platforms
+retain their existing 1:1 logical capture resolution.
 
 ## Installation
 

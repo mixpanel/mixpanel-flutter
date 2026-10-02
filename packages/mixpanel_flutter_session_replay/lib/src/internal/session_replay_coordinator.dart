@@ -57,6 +57,15 @@ class SessionReplayCoordinator implements WidgetCoordinator {
   );
 
   RecordingState _recordingState = RecordingState.notRecording;
+
+  /// Image pixels per logical pixel of the most recent accepted frame.
+  ///
+  /// Touches are recorded as they happen, between captures, so they ship in
+  /// the space of the frame — and therefore the metadata event — that is in
+  /// effect for them. Stays `Offset(1, 1)` until the first frame lands, which
+  /// is also the first metadata event any touch could be positioned against.
+  Offset _imageScale = const Offset(1, 1);
+
   bool _isAppInForeground = false;
   bool _isDisposed = false;
 
@@ -283,12 +292,16 @@ class SessionReplayCoordinator implements WidgetCoordinator {
         :final data,
         :final width,
         :final height,
+        :final imageScale,
         :final timestamp,
         :final maskRegions,
         :final sessionId,
         :final distinctId,
         :final wireframes,
       ):
+        // Touches recorded from here on belong to this frame's metadata.
+        _imageScale = imageScale;
+
         // The frame is accepted: only now may its wireframe become the dedup
         // baseline, so a discarded frame cannot suppress the next one.
         _screenshotCapturer.commitWireframeDedup();
@@ -352,7 +365,11 @@ class SessionReplayCoordinator implements WidgetCoordinator {
       'recordInteraction called with type: $interactionType, position: $position',
       tag: 'coordinator',
     );
-    _eventRecorder.recordInteraction(interactionType, position, timestamp);
+    _eventRecorder.recordInteraction(
+      interactionType,
+      position.scale(_imageScale.dx, _imageScale.dy),
+      timestamp,
+    );
 
     // Reset idle timer and persist expiry (web only)
     _onActivity();
@@ -370,10 +387,27 @@ class SessionReplayCoordinator implements WidgetCoordinator {
       'recordTouchMove called with ${positions.length} positions',
       tag: 'coordinator',
     );
-    _eventRecorder.recordTouchMove(positions: positions, timestamp: timestamp);
+    _eventRecorder.recordTouchMove(
+      positions: _scaleToImageSpace(positions),
+      timestamp: timestamp,
+    );
 
     // A drag is user input and keeps the idle window open (web only).
     _onActivity();
+  }
+
+  /// Moves sampled drag positions into the current frame's image space.
+  List<TouchPosition> _scaleToImageSpace(List<TouchPosition> positions) {
+    if (_imageScale == const Offset(1, 1)) return positions;
+    return positions
+        .map(
+          (p) => TouchPosition(
+            x: p.x * _imageScale.dx,
+            y: p.y * _imageScale.dy,
+            timeOffset: p.timeOffset,
+          ),
+        )
+        .toList(growable: false);
   }
 
   /// Shared gate for the touch stream: never record while disposed or while

@@ -57,6 +57,62 @@ void main() {
     });
   });
 
+  group('WireframeEmitter — image space', () {
+    test('scales bounds and viewport into a downscaled frame', () {
+      // GIVEN a 400x800 viewport encoded as a 300x600 raster
+      final emitter = WireframeEmitter(
+        sensitiveRules: const [],
+        debugEmitter: null,
+        logger: logger,
+      );
+
+      // WHEN
+      final payload = emitter.emit(
+        rawElements: [
+          el(text: 'Hello world', bounds: const Rect.fromLTWH(40, 80, 200, 40)),
+        ],
+        maskRegions: const [],
+        viewport: defaultViewport,
+        imageSize: const Size(300, 600),
+        timestamp: defaultTimestamp,
+      );
+
+      // THEN the payload describes the image the player renders, so the
+      // element sits over the same pixels it covered on screen.
+      expect(payload, isNotNull);
+      expect((payload!.viewportWidth, payload.viewportHeight), (300, 600));
+      expect(
+        payload.elements.single.bounds,
+        const Rect.fromLTWH(30, 60, 150, 30),
+      );
+    });
+
+    test('leaves geometric masking in the logical space it measures', () {
+      // GIVEN a mask covering the element in logical coordinates
+      final emitter = WireframeEmitter(
+        sensitiveRules: const [],
+        debugEmitter: null,
+        logger: logger,
+      );
+
+      // WHEN the frame is downscaled
+      final payload = emitter.emit(
+        rawElements: [
+          el(text: 'Secret', bounds: const Rect.fromLTWH(40, 80, 200, 40)),
+        ],
+        maskRegions: [
+          MaskRegionInfo(const Rect.fromLTWH(40, 80, 200, 40), MaskSource.auto),
+        ],
+        viewport: defaultViewport,
+        imageSize: const Size(300, 600),
+        timestamp: defaultTimestamp,
+      );
+
+      // THEN the overlap is still detected and the text stripped
+      expect(payload!.elements.single.text, isNull);
+    });
+  });
+
   group('WireframeEmitter — empty screen', () {
     test('emits a payload with zero elements when nothing was collected', () {
       // GIVEN — a frame with no semantic content (splash, bare canvas, or a

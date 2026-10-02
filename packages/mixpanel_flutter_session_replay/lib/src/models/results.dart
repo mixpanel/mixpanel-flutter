@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import 'dart:ui' show Offset;
 
 import 'masking_directive.dart';
 import 'session_event.dart' show WireframePayload;
@@ -138,6 +139,14 @@ final class CaptureSuccess extends CaptureResult {
   /// the logical viewport when the raster is downscaled to bound capture work.
   final int height;
 
+  /// Image pixels per logical pixel, as `Offset(x, y)`.
+  ///
+  /// Every coordinate uploaded for a frame — replay metadata, interactions,
+  /// and wireframes — is expressed in image pixels, so coordinates taken from
+  /// the render tree are scaled by this first. `Offset(1, 1)` for a 1:1
+  /// capture, below 1 when the raster was downscaled to bound capture work.
+  final Offset imageScale;
+
   /// Number of masked regions applied
   final int maskCount;
 
@@ -165,6 +174,7 @@ final class CaptureSuccess extends CaptureResult {
     required this.timestamp,
     required this.sessionId,
     required this.distinctId,
+    this.imageScale = const Offset(1, 1),
     this.maskRegions = const [],
     this.wireframes,
   });

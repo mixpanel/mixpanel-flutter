@@ -27,6 +27,7 @@ import 'package:mixpanel_flutter_session_replay/src/models/configuration.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/debug_overlay_colors.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/masking_directive.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/results.dart';
+import 'package:mixpanel_flutter_session_replay/src/models/rrweb_types.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/session.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/session_event.dart';
 
@@ -1701,6 +1702,53 @@ void main() {
       );
 
       test(
+        'should record touches in the image space of the frame in effect',
+        () async {
+          // GIVEN - a frame whose raster was downscaled to two thirds
+          final coordinator = await startRecordingWithPendingCapture();
+          final capture = coordinator.captureSnapshot(
+            RenderRepaintBoundary(),
+            boundaryElement: boundaryElement,
+          );
+          await pumpEventQueue();
+          pendingCapturer.completeWithPinnedIdentity(
+            imageScale: const Offset(2 / 3, 2 / 3),
+          );
+          await capture;
+          await pumpEventQueue();
+
+          // WHEN - the user touches at logical coordinates
+          coordinator.captureInteraction(
+            RRWebMouseInteraction.touchStart,
+            const Offset(300, 600),
+            DateTime.now(),
+          );
+          coordinator.captureTouchMove(const [
+            TouchPosition(x: 30, y: 60, timeOffset: 0),
+          ], DateTime.now());
+          await pumpEventQueue();
+
+          // THEN - they are stored against the metadata the frame reported,
+          // not the larger logical viewport they were measured in.
+          final interaction =
+              recordingQueue.addedEvents
+                      .firstWhere((e) => e.type == EventType.interaction)
+                      .payload
+                  as InteractionPayload;
+          expect((interaction.x, interaction.y), (200.0, 400.0));
+          final touchMove =
+              recordingQueue.addedEvents
+                      .firstWhere((e) => e.type == EventType.touchMove)
+                      .payload
+                  as TouchMovePayload;
+          expect(
+            (touchMove.positions.single.x, touchMove.positions.single.y),
+            (20.0, 40.0),
+          );
+        },
+      );
+
+      test(
         'should record the frame when recording stops during capture',
         () async {
           // GIVEN - a capture is in flight
@@ -2106,11 +2154,13 @@ class _PendingScreenshotCapturer extends ScreenshotCapturer {
   void completeWithPinnedIdentity({
     List<MaskRegionInfo> maskRegions = const [],
     WireframePayload? wireframes,
+    Offset imageScale = const Offset(1, 1),
   }) => pendingCapture.complete(
     CaptureSuccess(
       data: Uint8List.fromList([1, 2, 3]),
       width: 100,
       height: 200,
+      imageScale: imageScale,
       maskCount: maskRegions.length,
       timestamp: DateTime.now(),
       sessionId: pinnedSessionId,

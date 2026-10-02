@@ -4,6 +4,7 @@ import '../../models/masking_directive.dart';
 import '../../models/session_event.dart';
 import '../../models/wireframe.dart';
 import '../../models/wireframes_options.dart';
+import '../capture/image_scale.dart';
 import '../logger.dart';
 
 /// Post-processes raw wireframe elements (from the [MaskDetector] walk)
@@ -88,10 +89,15 @@ class WireframeEmitter {
   /// Process raw elements through the pipeline. Returns null *only* when the
   /// frame deduped against the previous emit (an identical wire payload) — an
   /// empty [rawElements] list still yields a payload.
+  ///
+  /// [rawElements] and [maskRegions] are in logical pixels; the payload ships
+  /// in the pixels of the encoded frame, [imageSize], which defaults to
+  /// [viewport] for the 1:1 captures every native platform makes.
   WireframePayload? emit({
     required List<WireframeElement> rawElements,
     required List<MaskRegionInfo> maskRegions,
     required Size viewport,
+    Size? imageSize,
     required DateTime timestamp,
     String? sessionId,
   }) {
@@ -109,10 +115,19 @@ class WireframeEmitter {
         .map(_truncate)
         .toList(growable: false);
 
+    // Bounds are measured in logical pixels but ship in image pixels, the
+    // space the screenshot and its metadata are in, so a downscaled web
+    // raster keeps elements aligned with the frame they describe.
+    final image = imageSize ?? viewport;
+    final scale = imageScaleFor(viewport: viewport, image: image);
     final payload = WireframePayload(
-      viewportWidth: viewport.width.round(),
-      viewportHeight: viewport.height.round(),
-      elements: processed,
+      viewportWidth: image.width.round(),
+      viewportHeight: image.height.round(),
+      elements: scale == const Offset(1, 1)
+          ? processed
+          : processed
+                .map((el) => _scaleBounds(el, scale))
+                .toList(growable: false),
     );
 
     // Dedup against the previous emit on the wire content itself. Note this
@@ -133,6 +148,19 @@ class WireframeEmitter {
     _fireDebugCallback(payload, timestamp);
     return payload;
   }
+
+  /// Rescales an element's bounds from logical into image pixels. Runs last,
+  /// after geometric masking has compared bounds against mask regions in the
+  /// logical space both are measured in.
+  WireframeElement _scaleBounds(WireframeElement el, Offset scale) =>
+      el.copyWith(
+        bounds: Rect.fromLTWH(
+          el.bounds.left * scale.dx,
+          el.bounds.top * scale.dy,
+          el.bounds.width * scale.dx,
+          el.bounds.height * scale.dy,
+        ),
+      );
 
   /// Geometric leak prevention. Only runs on elements whose text survived
   /// the mask detector (i.e. [MaskDecision.none]). Reuses the same

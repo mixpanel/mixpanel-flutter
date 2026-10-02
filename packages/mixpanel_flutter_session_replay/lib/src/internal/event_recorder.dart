@@ -95,8 +95,8 @@ class EventRecorder {
     DateTime timestamp,
   ) async {
     try {
-      // Use logical pixel coordinates directly
-      // These will match the coordinate system of the screenshots
+      // Already scaled into the screenshot's pixels by the coordinator, so
+      // the player can position the touch against the frame it renders.
       final x = position.dx;
       final y = position.dy;
 
