@@ -4,7 +4,7 @@ import PackageDescription
 let package = Package(
     name: "mixpanel_flutter_session_replay",
     platforms: [
-        .iOS("13.0")
+        .iOS("15.0")
     ],
     products: [
         .library(
