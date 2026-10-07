@@ -3,7 +3,10 @@
 ## [v2.15.0](https://github.com/mixpanel/mixpanel-flutter/tree/v2.15.0) (2026-10-07)
 
 ### Features
-- autocapture (beta) — clicks, rage clicks and dead clicks ([#286](https://github.com/mixpanel/mixpanel-flutter/pull/286))
+- [autocapture (beta)](https://docs.mixpanel.com/docs/tracking-methods/sdks/flutter#click-events) — clicks, rage clicks and dead clicks ([#286](https://github.com/mixpanel/mixpanel-flutter/pull/286))
+
+### Fixes
+- Bumped iOS SDK version to 6.8.0 ([#290](https://github.com/mixpanel/mixpanel-flutter/pull/290))
 
 [Full Changelog](https://github.com/mixpanel/mixpanel-flutter/compare/v2.14.0...v2.15.0)
 
