@@ -4,7 +4,7 @@ import PackageDescription
 let package = Package(
     name: "mixpanel_flutter",
     platforms: [
-        .macOS("10.15")
+        .macOS("12.0")
     ],
     products: [
         .library(
@@ -15,7 +15,7 @@ let package = Package(
     dependencies: [
         .package(
             url: "https://github.com/mixpanel/mixpanel-swift.git",
-            exact: "6.8.0"
+            exact: "7.0.0"
         ),
         .package(name: "FlutterFramework", path: "../FlutterFramework")
     ],
