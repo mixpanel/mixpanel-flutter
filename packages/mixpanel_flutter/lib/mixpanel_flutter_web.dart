@@ -1,11 +1,14 @@
 import 'dart:async';
+import 'dart:developer' as developer;
 import 'dart:js_interop';
+import 'dart:js_interop_unsafe';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_web_plugins/flutter_web_plugins.dart';
 import 'package:mixpanel_flutter/src/version.dart';
 import 'package:mixpanel_flutter/web/mixpanel_js_bindings.dart';
+import 'package:mixpanel_flutter_common/mixpanel_flutter_common.dart';
 
 /// Safely converts Dart values to JavaScript-compatible types for web interop.
 ///
@@ -67,6 +70,34 @@ JSAny? safeJsify(dynamic value) {
 
 /// A web implementation of the MixpanelFlutter plugin.
 class MixpanelFlutterPlugin {
+  static bool _eventBridgeActive = false;
+
+  // Installed through init config because the web snippet queues init while
+  // the full JS library loads, but does not stub add_hook.
+  static final JSFunction _onTrackHook =
+      ((JSAny? eventName, JSAny? properties) {
+    if (_eventBridgeActive) {
+      // Typed loosely and converted inside the try: with dart2wasm a
+      // parameter typed JSString would fail its conversion before the try,
+      // and the error would reach mixpanel-js's track().
+      try {
+        final name = (eventName as JSString).toDart;
+        final decoded = properties?.dartify();
+        // ignore: invalid_use_of_internal_member
+        MixpanelEventBridge.notifyListeners(
+          eventName: name,
+          properties:
+              decoded is Map ? Map<String, Object?>.from(decoded) : null,
+        );
+      } catch (error) {
+        // An observer must never interrupt Mixpanel's track call.
+        developer.log('Event bridge failed: $error', name: 'Mixpanel');
+      }
+    }
+    // on_track is a transform hook: return the original event untouched.
+    return <JSAny?>[eventName, properties].toJS;
+  }).toJS;
+
   static final Map<String, String> _mixpanelProperties = {
     '\$lib_version': sdkVersion,
     'mp_lib': 'flutter',
@@ -91,6 +122,12 @@ class MixpanelFlutterPlugin {
     switch (call.method) {
       case 'initialize':
         initialize(call);
+        break;
+      case 'startEventBridge':
+        _eventBridgeActive = true;
+        break;
+      case 'stopEventBridge':
+        _eventBridgeActive = false;
         break;
       case 'setServerURL':
         handleSetServerURL(call);
@@ -251,7 +288,13 @@ class MixpanelFlutterPlugin {
       }
     }
 
-    init(token, safeJsify(initConfig));
+    final jsConfig = safeJsify(initConfig) as JSObject;
+    final hooks = jsConfig.getProperty<JSAny?>('hooks'.toJS);
+    final JSObject jsHooks =
+        hooks is JSObject ? hooks : <String, Object?>{}.jsify() as JSObject;
+    jsHooks.setProperty('on_track'.toJS, _onTrackHook);
+    jsConfig.setProperty('hooks'.toJS, jsHooks);
+    init(token, jsConfig);
   }
 
   void handleSetServerURL(MethodCall call) {
@@ -327,7 +370,11 @@ class MixpanelFlutterPlugin {
   void handleRegisterSuperProperties(MethodCall call) {
     Map<Object?, Object?> args = call.arguments as Map<Object?, Object?>;
     dynamic properties = args['properties'];
-    register(safeJsify(properties));
+    if (args['persistent'] == false) {
+      register(safeJsify(properties), safeJsify({'persistent': false}));
+    } else {
+      register(safeJsify(properties));
+    }
   }
 
   void handleRegisterSuperPropertiesOnce(MethodCall call) {
@@ -339,7 +386,11 @@ class MixpanelFlutterPlugin {
   void handleUnregisterSuperProperty(MethodCall call) {
     Map<Object?, Object?> args = call.arguments as Map<Object?, Object?>;
     String propertyName = args['propertyName'] as String;
-    unregister(propertyName);
+    if (args['persistent'] == false) {
+      unregister(propertyName, safeJsify({'persistent': false}));
+    } else {
+      unregister(propertyName);
+    }
   }
 
   void handleTimeEvent(MethodCall call) {
@@ -518,7 +569,8 @@ class MixpanelFlutterPlugin {
   Future<Map<String, dynamic>> handleGetVariant(MethodCall call) async {
     Map<Object?, Object?> args = call.arguments as Map<Object?, Object?>;
     String flagName = args['flagName'] as String;
-    Map<Object?, Object?> fallbackMap = args['fallback'] as Map<Object?, Object?>? ?? {};
+    Map<Object?, Object?> fallbackMap =
+        args['fallback'] as Map<Object?, Object?>? ?? {};
 
     JSAny? fallbackJs = safeJsify({
       'key': fallbackMap['key'],
@@ -530,7 +582,8 @@ class MixpanelFlutterPlugin {
       JSAny? jsResult = await promise.toDart;
       return _jsVariantToMap(jsResult, fallbackMap);
     } catch (e) {
-      debugPrint('[Mixpanel] getVariant failed with error: $e, returning fallback');
+      debugPrint(
+          '[Mixpanel] getVariant failed with error: $e, returning fallback');
       return _jsVariantToMap(null, fallbackMap);
     }
   }
@@ -548,10 +601,12 @@ class MixpanelFlutterPlugin {
     try {
       JSPromise promise = flags_get_variant(flagName, fallbackJs);
       JSAny? jsResult = await promise.toDart;
-      Map<String, dynamic> variant = _jsVariantToMap(jsResult, {'key': flagName, 'value': fallbackValue});
+      Map<String, dynamic> variant =
+          _jsVariantToMap(jsResult, {'key': flagName, 'value': fallbackValue});
       return variant['value'] ?? fallbackValue;
     } catch (e) {
-      debugPrint('[Mixpanel] getVariantValue failed with error: $e, returning fallback');
+      debugPrint(
+          '[Mixpanel] getVariantValue failed with error: $e, returning fallback');
       return fallbackValue;
     }
   }
@@ -569,17 +624,20 @@ class MixpanelFlutterPlugin {
     try {
       JSPromise promise = flags_get_variant(flagName, fallbackJs);
       JSAny? jsResult = await promise.toDart;
-      Map<String, dynamic> variant = _jsVariantToMap(jsResult, {'key': flagName, 'value': fallbackValue});
+      Map<String, dynamic> variant =
+          _jsVariantToMap(jsResult, {'key': flagName, 'value': fallbackValue});
       dynamic value = variant['value'];
       if (value is bool) {
         return value;
       }
       if (value != null) {
-        debugPrint('[Mixpanel] isEnabled flag \'$flagName\' has non-boolean value, returning fallback');
+        debugPrint(
+            '[Mixpanel] isEnabled flag \'$flagName\' has non-boolean value, returning fallback');
       }
       return fallbackValue;
     } catch (e) {
-      debugPrint('[Mixpanel] isEnabled failed with error: $e, returning fallback');
+      debugPrint(
+          '[Mixpanel] isEnabled failed with error: $e, returning fallback');
       return fallbackValue;
     }
   }
@@ -609,7 +667,8 @@ class MixpanelFlutterPlugin {
       final plain = raw == null ? null : object_from_entries(array_from(raw));
       return _convertJsFlagsMap(plain);
     } catch (e) {
-      debugPrint('[Mixpanel] getAllVariants failed with error: $e, returning empty map');
+      debugPrint(
+          '[Mixpanel] getAllVariants failed with error: $e, returning empty map');
       return <String, Map<String, dynamic>>{};
     }
   }
@@ -636,7 +695,8 @@ class MixpanelFlutterPlugin {
     return out;
   }
 
-  Map<String, dynamic> _jsVariantToMap(JSAny? jsResult, Map<Object?, Object?> fallbackMap) {
+  Map<String, dynamic> _jsVariantToMap(
+      JSAny? jsResult, Map<Object?, Object?> fallbackMap) {
     Map<String, dynamic> fallback() => {
           'key': fallbackMap['key'] as String? ?? '',
           'value': fallbackMap['value'],
@@ -647,15 +707,18 @@ class MixpanelFlutterPlugin {
         };
 
     if (jsResult == null) {
-      debugPrint('[Mixpanel] _jsVariantToMap received null result, returning fallback');
+      debugPrint(
+          '[Mixpanel] _jsVariantToMap received null result, returning fallback');
       return fallback();
     }
 
     // Convert JS object to Dart map
     try {
-      Map<Object?, Object?>? dartMap = (jsResult as JSObject).dartify() as Map<Object?, Object?>?;
+      Map<Object?, Object?>? dartMap =
+          (jsResult as JSObject).dartify() as Map<Object?, Object?>?;
       if (dartMap == null) {
-        debugPrint('[Mixpanel] _jsVariantToMap failed to convert JS object, returning fallback');
+        debugPrint(
+            '[Mixpanel] _jsVariantToMap failed to convert JS object, returning fallback');
         return fallback();
       }
 
@@ -668,7 +731,8 @@ class MixpanelFlutterPlugin {
         'source': _jsSourceToMap(dartMap),
       };
     } catch (e) {
-      debugPrint('[Mixpanel] _jsVariantToMap failed with error: $e, returning fallback');
+      debugPrint(
+          '[Mixpanel] _jsVariantToMap failed with error: $e, returning fallback');
       return fallback();
     }
   }
@@ -688,7 +752,8 @@ class MixpanelFlutterPlugin {
       final atRaw = variant['persisted_at_in_ms'];
       final atMs = atRaw is num ? atRaw.toInt() : null;
       if (atMs == null) {
-        debugPrint('[Mixpanel] persistence variant missing persisted_at_in_ms, defaulting to fallback');
+        debugPrint(
+            '[Mixpanel] persistence variant missing persisted_at_in_ms, defaulting to fallback');
         return {'kind': 'fallback'};
       }
       return {'kind': 'persistence', 'persistedAtMillis': atMs};
@@ -706,7 +771,8 @@ class MixpanelFlutterPlugin {
   Map<String, dynamic>? _flagsPersistenceFromPolicy(dynamic policyMap) {
     if (policyMap is! Map) return null;
     final policy = policyMap['policy'];
-    if (policy == 'persistenceUntilNetworkSuccess' || policy == 'networkFirst') {
+    if (policy == 'persistenceUntilNetworkSuccess' ||
+        policy == 'networkFirst') {
       return {
         'variantLookupPolicy': policy,
         if (policyMap['persistenceTtlMillis'] is num)

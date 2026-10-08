@@ -1,53 +1,41 @@
-import 'dart:async';
-import 'dart:ui' as ui;
-import 'dart:isolate';
-
 import 'package:clock/clock.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
-import 'package:image/image.dart' as img;
 
 import '../models/configuration.dart';
 import '../models/results.dart';
 import '../models/masking_directive.dart';
+import '../models/session_event.dart';
+import 'capture/image_scale.dart';
 import 'masking/mask_detector.dart';
-import 'masking/mask_painter.dart';
 import '../models/session.dart';
-import 'native_image_compressor.dart';
 import 'wireframe/wireframe_emitter.dart';
 import 'logger.dart';
+import 'capture/frame_acquirer.dart';
+import 'capture/mask_layout_fence.dart';
 
-/// Compression strategy for captured screenshots.
+/// Screenshot capturer with masking and platform-injected acquisition.
 ///
-/// Change [ScreenshotCapturer.compressionMode] to switch between strategies
-/// for performance comparison.
-enum CompressionMode {
-  /// Native platform JPEG encoder via MethodChannel (default).
-  /// Android: Bitmap.compress() (libjpeg-turbo), iOS: UIImage.jpegData()
-  nativeJpeg,
-
-  /// Pure Dart JPEG encoder via isolate (image package).
-  dartJpeg,
-
-  /// Pure Dart PNG encoder via isolate (lossless, deterministic for tests).
-  dartPng,
-}
-
-/// Screenshot capturer with three-layer fail-safe masking
+/// Owns the steps every platform shares: waiting out the frame in flight,
+/// pinning replay identity, mask detection, wireframes and the result.
+/// Reading, masking and encoding pixels is delegated to the injected
+/// [FrameAcquirer].
 class ScreenshotCapturer {
-  /// Masking directive for privacy rules (used as default)
+  /// Masking directive for privacy rules
   final MaskingDirective directive;
 
   /// Logger instance
-  final MixpanelLogger _logger;
+  final MixpanelLogger logger;
 
   /// Whether debug overlay is enabled (determines if we track unmask bounds)
-  final bool _debugOverlayEnabled;
+  final bool debugOverlayEnabled;
 
-  /// Native image compressor for platform-accelerated JPEG encoding
-  final NativeImageCompressor? _nativeCompressor;
+  final FrameAcquirer _acquirer;
+
+  /// See [FrameAcquirer.followsUpFramesDuringCapture].
+  bool get followsUpFramesDuringCapture =>
+      _acquirer.followsUpFramesDuringCapture;
 
   /// Optional wireframe emitter. When non-null, wireframes are collected on
   /// the same walk as mask detection and enqueued alongside each screenshot.
@@ -56,6 +44,14 @@ class ScreenshotCapturer {
   /// Mirrors `WireframesOptions.useAccessibilityLabelFallback`; only consulted
   /// when [_wireframeEmitter] is non-null.
   final bool _useAccessibilityLabelFallback;
+
+  /// Duration of the most recent mask traversal, exposed for integration
+  /// performance validation of the capture pipeline.
+  Duration? lastMaskDetectionTime;
+
+  /// Duration of the corresponding post-snapshot privacy validation, or null
+  /// when the acquirer did not need one.
+  Duration? lastPostSnapshotMaskValidationTime;
 
   /// The server's verdict on wireframe capture, or null until `/settings`
   /// answers.
@@ -74,16 +70,16 @@ class ScreenshotCapturer {
   bool get wireframesEnabled =>
       _wireframeEmitter != null && (_wireframesRemotelyEnabled ?? false);
 
-  /// Compression strategy to use for production captures.
-  /// Change this value to compare performance between strategies.
-  CompressionMode compressionMode;
-
   /// Clears wireframe dedup state at a recording-session boundary.
   ///
   /// Forwarded rather than exposing [_wireframeEmitter] itself: the capturer owns the
   /// emitter, and the coordinator — which knows when a session starts — already holds
   /// the capturer. No-op when wireframes are off. See [WireframeEmitter.resetDedup].
   void resetWireframeDedup() => _wireframeEmitter?.resetDedup();
+
+  /// Marks the wireframe of the most recent accepted frame as the dedup
+  /// baseline. See [WireframeEmitter.commitPending].
+  void commitWireframeDedup() => _wireframeEmitter?.commitPending();
 
   /// Records the server's verdict on wireframe capture.
   ///
@@ -95,34 +91,28 @@ class ScreenshotCapturer {
   void applyRemoteWireframeVerdict({required bool isEnabled}) =>
       _wireframesRemotelyEnabled = isEnabled;
 
-  /// Mask painter (reusable across captures)
-  late final MaskPainter _maskPainter;
-
   ScreenshotCapturer({
     required this.directive,
-    required MixpanelLogger logger,
-    required bool debugOverlayEnabled,
-    NativeImageCompressor? nativeCompressor,
+    required this.logger,
+    required this.debugOverlayEnabled,
+    required FrameAcquirer frameAcquirer,
     WireframeEmitter? wireframeEmitter,
     bool useAccessibilityLabelFallback = false,
-    this.compressionMode = CompressionMode.nativeJpeg,
-  }) : _logger = logger,
-       _debugOverlayEnabled = debugOverlayEnabled,
-       _nativeCompressor = nativeCompressor,
+  }) : _acquirer = frameAcquirer,
        _wireframeEmitter = wireframeEmitter,
-       _useAccessibilityLabelFallback = useAccessibilityLabelFallback {
-    _maskPainter = MaskPainter();
-  }
+       _useAccessibilityLabelFallback = useAccessibilityLabelFallback;
 
-  /// Capture screenshot with masking
-  ///
-  /// This method performs the core capture/mask/compress workflow.
+  /// Capture screenshot with masking.
   ///
   /// Parameters:
   /// - [boundary]: The render boundary to capture
   /// - [boundaryElement]: The root element used for wireframe traversal
   /// - [maskTypes]: Set of view types to auto-mask (overrides directive if provided)
   /// - [getCurrentSession], [getDistinctId]: read at the frame to pin its identity
+  /// - [isCancelled]: polled after every await before pixels are acquired and
+  ///   before they are encoded, so a frame whose recording stopped or paused
+  ///   while it waited is never captured
+  /// - [onRenderTreeRead]: runs right after the mask walk reads the render tree
   /// Returns CaptureResult with compressed image data or error
   Future<CaptureResult> capture(
     RenderRepaintBoundary boundary, {
@@ -130,21 +120,54 @@ class ScreenshotCapturer {
     required String Function() getDistinctId,
     required Element boundaryElement,
     Set<AutoMaskedView>? maskTypes,
+    bool Function()? isCancelled,
+    void Function()? onRenderTreeRead,
   }) async {
     final captureStart = clock.now();
+    bool cancelled() => isCancelled?.call() ?? false;
     try {
+      if (!_acquirer.isAvailable) {
+        return const CaptureFailure(
+          CaptureError.compressionFailed,
+          'Image compression is unavailable',
+        );
+      }
+
+      final captureDirective = maskTypes != null
+          ? MaskingDirective(autoMaskTypes: maskTypes)
+          : directive;
+
       // Create mask detector with specified mask types or use default directive
       final maskDetector = MaskDetector(
-        directive: maskTypes != null
-            ? MaskingDirective(autoMaskTypes: maskTypes)
-            : directive,
-        trackUnmaskBounds: _debugOverlayEnabled,
+        directive: captureDirective,
+        trackUnmaskBounds: debugOverlayEnabled,
         collectWireframes: wireframesEnabled,
         useAccessibilityLabelFallback: _useAccessibilityLabelFallback,
       );
 
-      // Using endOfFrame ensures both detectMaskRegions() and toImage() see the same painted state
-      await SchedulerBinding.instance.endOfFrame;
+      // Mask detection and snapshot initiation must observe the same
+      // completed Flutter paint, so wait out any frame still in flight.
+      if (_awaitPaintedFrame() case final painted?) await painted;
+      if (cancelled()) return cancelledCaptureFailure;
+      final preparing = _acquirer.prepare(boundary.size);
+      final sourceStatus = preparing is Future<FrameSourceStatus>
+          ? await preparing
+          : preparing;
+      if (cancelled()) return cancelledCaptureFailure;
+      switch (sourceStatus) {
+        case FrameSourceStatus.ready:
+          break;
+        case FrameSourceStatus.readyAfterPlatformFrame:
+          // Re-establish the same-painted-frame invariant before reading
+          // mask coordinates.
+          if (_awaitPaintedFrame() case final painted?) await painted;
+          if (cancelled()) return cancelledCaptureFailure;
+        case FrameSourceStatus.unavailable:
+          return const CaptureFailure(
+            CaptureError.renderBoundaryNotFound,
+            'Rendered surface is not available for capture',
+          );
+      }
 
       // Pinned here because every step below yields, letting identity move.
       final sessionId = getCurrentSession().id;
@@ -164,9 +187,11 @@ class ScreenshotCapturer {
           'Failed to detect mask regions: $e',
         );
       }
+      onRenderTreeRead?.call();
       final maskRegions = maskResult.maskRegions;
       final maskDetectionTime = clock.now().difference(maskDetectionStart);
-      _logger.debug(
+      lastMaskDetectionTime = maskDetectionTime;
+      logger.debug(
         'Mask detection: ${maskDetectionTime.inMilliseconds}ms (found ${maskRegions.length} masks)',
       );
 
@@ -174,7 +199,7 @@ class ScreenshotCapturer {
       // (route transitions show overlapping unmasked content, overscroll stretch
       // shifts content via paint-only transform not reflected in getTransformTo)
       if (maskResult.shouldSkipCapture) {
-        _logger.debug(
+        logger.debug(
           'Skipping capture: visual state would cause mask mismatch',
         );
         return CaptureFailure(
@@ -183,112 +208,69 @@ class ScreenshotCapturer {
         );
       }
 
-      // IMMEDIATELY capture image but don't await yet - this ensures both operations now see the same painted state
-      // Because Dart is single-threaded, no other code can execute between mask detection
-      // and toImage() call, ensuring they see identical frame state
-      final captureTimestamp = clock.now();
-      final imageFuture = boundary.toImage(pixelRatio: 1.0);
-
-      // Wait for image rendering to complete
-      ui.Image rawImage;
-      try {
-        rawImage = await imageFuture;
-      } catch (e) {
-        return CaptureFailure(
-          CaptureError.renderBoundaryNotFound,
-          'Failed to capture boundary: $e',
-        );
-      }
-      final renderTime = clock.now().difference(captureTimestamp);
-      _logger.debug(
-        'Image rendering: ${renderTime.inMilliseconds}ms (${rawImage.width}x${rawImage.height})',
+      final logicalSize = boundary.size;
+      final observedFrameTimeStamp =
+          SchedulerBinding.instance.currentSystemFrameTimeStamp;
+      MaskLayoutFence? fence;
+      MaskLayoutFence createFence() => fence ??= MaskLayoutFence(
+        directive: captureDirective,
+        trackUnmaskBounds: debugOverlayEnabled,
+        boundary: boundary,
+        boundaryElement: boundaryElement,
+        observed: maskResult,
+        observedViewport: logicalSize,
+        observedFrameTimeStamp: observedFrameTimeStamp,
       );
 
-      // Apply masks
-      final maskPaintStart = clock.now();
-      ui.Image maskedImage;
-      try {
-        maskedImage = await _maskPainter.applyMasks(rawImage, maskRegions);
-      } catch (e) {
-        rawImage.dispose();
-        return CaptureFailure(
-          CaptureError.maskApplicationFailed,
-          'Failed to apply mask overlays: $e',
-        );
-      }
-      final maskPaintTime = clock.now().difference(maskPaintStart);
-      _logger.debug('Mask painting: ${maskPaintTime.inMilliseconds}ms');
-
-      // Compress image
-      final compressionStart = clock.now();
-      Uint8List? compressedBytes;
-      try {
-        compressedBytes = await _compressImage(maskedImage);
-      } catch (e) {
-        rawImage.dispose();
-        maskedImage.dispose();
-        return CaptureFailure(
-          CaptureError.compressionFailed,
-          'Image compression failed: $e',
-        );
-      }
-      final compressionTime = clock.now().difference(compressionStart);
-      final formatName = compressionMode.name;
-      _logger.debug(
-        '$formatName compression: ${compressionTime.inMilliseconds}ms (${compressedBytes?.length ?? 0} bytes)',
+      // No await between the mask walk and this call: an acquirer that
+      // snapshots Flutter's layer tree does so before it first yields.
+      final acquisition = await _acquirer.acquire(
+        FrameRequest(
+          boundary: boundary,
+          logicalSize: logicalSize,
+          maskRegions: maskRegions,
+          createFence: createFence,
+          isCancelled: cancelled,
+        ),
       );
+      lastPostSnapshotMaskValidationTime = fence?.lastCheckTime;
 
-      // Store dimensions before cleanup
-      final imageWidth = maskedImage.width;
-      final imageHeight = maskedImage.height;
-      final imageMaskCount = maskRegions.length;
-
-      // Clean up
-      rawImage.dispose();
-      maskedImage.dispose();
-
-      if (compressedBytes == null) {
-        return CaptureFailure(
-          CaptureError.insufficientMemory,
-          'Failed to compress image (OOM)',
-        );
+      switch (acquisition) {
+        case FrameRejected(:final failure):
+          return failure;
+        case AcquiredFrame(:final data, :final width, :final height):
+          final timestamp = acquisition.capturedAt;
+          final imageSize = Size(width.toDouble(), height.toDouble());
+          final wireframePayload = _emitWireframes(
+            maskResult: maskResult,
+            maskRegions: maskRegions,
+            viewport: logicalSize,
+            imageSize: imageSize,
+            timestamp: timestamp,
+            sessionId: sessionId,
+          );
+          final totalTime = clock.now().difference(captureStart);
+          logger.debug(
+            'Total capture time: ${totalTime.inMilliseconds}ms '
+            '(${width}x$height raster, '
+            '${(data.length / 1024).toStringAsFixed(1)}KB)',
+          );
+          return CaptureSuccess(
+            data: data,
+            width: width,
+            height: height,
+            imageScale: imageScaleFor(viewport: logicalSize, image: imageSize),
+            maskCount: maskRegions.length,
+            timestamp: timestamp,
+            maskRegions: maskRegions,
+            wireframes: wireframePayload,
+            sessionId: sessionId,
+            distinctId: distinctId,
+          );
       }
-
-      final rawWireframes = maskResult.rawWireframes;
-      // Spelled out rather than via [wireframesEnabled] so Dart promotes
-      // [_wireframeEmitter] to non-null for the emit call below.
-      final wireframePayload =
-          (_wireframeEmitter != null &&
-              (_wireframesRemotelyEnabled ?? false) &&
-              rawWireframes != null)
-          ? _wireframeEmitter.emit(
-              rawElements: rawWireframes,
-              maskRegions: maskRegions,
-              viewport: boundary.size,
-              timestamp: captureTimestamp,
-              sessionId: sessionId,
-            )
-          : null;
-
-      final totalTime = clock.now().difference(captureStart);
-      _logger.debug(
-        'Total capture time: ${totalTime.inMilliseconds}ms (${imageWidth}x$imageHeight, ${(compressedBytes.length / 1024).toStringAsFixed(1)}KB)',
-      );
-
-      return CaptureSuccess(
-        data: compressedBytes,
-        width: imageWidth,
-        height: imageHeight,
-        maskCount: imageMaskCount,
-        timestamp: captureTimestamp,
-        maskRegions: maskRegions,
-        sessionId: sessionId,
-        distinctId: distinctId,
-        wireframes: wireframePayload,
-      );
     } catch (e) {
       final totalTime = clock.now().difference(captureStart);
-      _logger.error('Capture failed after ${totalTime.inMilliseconds}ms: $e');
+      logger.error('Capture failed after ${totalTime.inMilliseconds}ms: $e');
       return CaptureFailure(
         CaptureError.maskDetectionFailed,
         'Unexpected capture error: $e',
@@ -296,94 +278,54 @@ class ScreenshotCapturer {
     }
   }
 
-  /// Compress image using the specified [CompressionMode].
+  /// Returns the end of a painted frame, so the render tree read next matches
+  /// what is on screen. Null when there is nothing to wait for, so capture
+  /// does not yield at all.
   ///
-  /// - Native mode (nativeJpeg): platform JPEG encoder via MethodChannel.
-  ///   Compression runs on native background threads.
-  /// - Dart modes (dartJpeg/dartPng): pure Dart encoder via background isolate.
-  Future<Uint8List?> _compressImage(ui.Image image) async {
-    try {
-      // Get raw RGBA bytes
-      final byteData = await image.toByteData(
-        format: ui.ImageByteFormat.rawRgba,
-      );
-      if (byteData == null) return null;
-
-      final rgbaBytes = byteData.buffer.asUint8List();
-
-      // Platform-specific JPEG quality to match native SDKs:
-      // iOS: 40 (ImageSettings.jpegCompressionRate = 0.4)
-      // Android: 80 (Bitmap.compress quality = 80)
-      final jpegQuality = defaultTargetPlatform == TargetPlatform.iOS ? 40 : 80;
-
-      // Native compression (hardware-accelerated, runs on native background threads)
-      if (_nativeCompressor != null &&
-          compressionMode == CompressionMode.nativeJpeg) {
-        return await _nativeCompressor.compressToJpeg(
-          rgbaBytes,
-          width: image.width,
-          height: image.height,
-          quality: jpegQuality,
-        );
-      }
-
-      // Dart isolate compression (dartJpeg or png)
-      final params = _CompressionParams(
-        width: image.width,
-        height: image.height,
-        rgbaBytes: rgbaBytes,
-        mode: compressionMode,
-        jpegQuality: jpegQuality,
-      );
-      return await Isolate.run(() => _compressInBackground(params));
-    } catch (e) {
+  /// Without follow-ups, this is `endOfFrame`, which requests a frame when
+  /// the scheduler is idle.
+  ///
+  /// With follow-ups, an idle scheduler with no frame requested means the
+  /// last painted frame already is the settled screen. Requesting a frame
+  /// there would count as a frame rendered during this capture and owe a
+  /// follow-up that requests another: a static screen would be captured
+  /// indefinitely. (A web acquirer does request a fresh frame in `prepare`;
+  /// CaptureScheduler ignores frames that end before the render tree is read,
+  /// so that frame cannot re-arm the capture.)
+  Future<void>? _awaitPaintedFrame() {
+    final scheduler = SchedulerBinding.instance;
+    if (_acquirer.followsUpFramesDuringCapture &&
+        scheduler.schedulerPhase == SchedulerPhase.idle &&
+        !scheduler.hasScheduledFrame) {
       return null;
     }
+    return scheduler.endOfFrame;
   }
 
-  /// Background isolate function for image compression
-  static Uint8List? _compressInBackground(_CompressionParams params) {
-    try {
-      final imgImage = img.Image.fromBytes(
-        width: params.width,
-        height: params.height,
-        bytes: params.rgbaBytes.buffer,
-        order: img.ChannelOrder.rgba,
-      );
+  Future<void> dispose() => _acquirer.dispose();
 
-      switch (params.mode) {
-        case CompressionMode.dartJpeg:
-        case CompressionMode.nativeJpeg:
-          return Uint8List.fromList(
-            img.encodeJpg(imgImage, quality: params.jpegQuality),
-          );
-        case CompressionMode.dartPng:
-          return Uint8List.fromList(img.encodePng(imgImage));
-      }
-    } catch (e) {
-      return null;
-    }
+  WireframePayload? _emitWireframes({
+    required MaskDetectionResult maskResult,
+    required List<MaskRegionInfo> maskRegions,
+    required Size viewport,
+    required Size imageSize,
+    required DateTime timestamp,
+    required String? sessionId,
+  }) {
+    final rawWireframes = maskResult.rawWireframes;
+    // Spelled out rather than via [wireframesEnabled] so Dart promotes
+    // [_wireframeEmitter] to non-null for the emit call below.
+    return (_wireframeEmitter != null &&
+            (_wireframesRemotelyEnabled ?? false) &&
+            rawWireframes != null)
+        ? _wireframeEmitter.emit(
+            rawElements: rawWireframes,
+            maskRegions: maskRegions,
+            viewport: viewport,
+            imageSize: imageSize,
+            timestamp: timestamp,
+            sessionId: sessionId,
+          )
+        : null;
   }
-
-  /// Release native cached resources (bitmaps, buffers).
-  Future<void> dispose() async {
-    await _nativeCompressor?.dispose();
-  }
-}
-
-/// Parameters for image compression in isolate
-class _CompressionParams {
-  final int width;
-  final int height;
-  final Uint8List rgbaBytes;
-  final CompressionMode mode;
-  final int jpegQuality;
-
-  _CompressionParams({
-    required this.width,
-    required this.height,
-    required this.rgbaBytes,
-    required this.mode,
-    required this.jpegQuality,
-  });
 }

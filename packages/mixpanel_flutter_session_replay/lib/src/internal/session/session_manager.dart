@@ -19,6 +19,15 @@ class SessionManager {
     return _currentSession!;
   }
 
+  /// Resume a session from persisted data (web page reload).
+  ///
+  /// Sets the current session without generating a new ID.
+  /// Used when a valid non-expired session is found in IndexedDB on web init.
+  Session resumeSession(Session session) {
+    _currentSession = session;
+    return _currentSession!;
+  }
+
   /// Get current active session (creates one if none exists)
   Session getCurrentSession() {
     _currentSession ??= startNewSession();

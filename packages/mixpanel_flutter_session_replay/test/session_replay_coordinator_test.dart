@@ -1,3 +1,5 @@
+import 'package:clock/clock.dart';
+import 'package:mixpanel_flutter_session_replay/src/internal/capture/to_image_frame_acquirer.dart';
 import 'dart:async';
 import 'dart:convert';
 
@@ -10,10 +12,12 @@ import 'package:http/testing.dart' as http_testing;
 import 'package:mixpanel_flutter_session_replay/src/internal/session_replay_coordinator.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/event_recorder.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/screenshot_capturer.dart';
+import 'package:mixpanel_flutter_session_replay/src/internal/native_image_compressor.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/upload/upload_service.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/settings/settings_service.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/settings/settings_storage_provider.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/upload/payload_serializer.dart';
+import 'package:mixpanel_flutter_session_replay/src/internal/session/replay_lifecycle_policy.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/session/session_manager.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/logger.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/wireframe/wireframe_emitter.dart';
@@ -23,6 +27,7 @@ import 'package:mixpanel_flutter_session_replay/src/models/configuration.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/debug_overlay_colors.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/masking_directive.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/results.dart';
+import 'package:mixpanel_flutter_session_replay/src/models/rrweb_types.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/session.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/session_event.dart';
 
@@ -49,6 +54,8 @@ void main() {
       double autoRecordSessionsPercent = 0,
       RemoteSettingsMode remoteSettingsMode = RemoteSettingsMode.disabled,
       DebugOptions? debugOptions,
+      ReplayLifecyclePolicy lifecyclePolicy =
+          ReplayLifecyclePolicy.stopOnBackground,
     }) {
       return SessionReplayCoordinator(
         screenshotCapturer: screenshotCapturer,
@@ -60,6 +67,7 @@ void main() {
         autoRecordSessionsPercent: autoRecordSessionsPercent,
         remoteSettingsMode: remoteSettingsMode,
         debugOptions: debugOptions,
+        lifecyclePolicy: lifecyclePolicy,
       );
     }
 
@@ -112,6 +120,10 @@ void main() {
         directive: MaskingDirective(autoMaskTypes: {}),
         logger: logger,
         debugOverlayEnabled: false,
+        frameAcquirer: ToImageFrameAcquirer(
+          DartPngCompressor(),
+          logger: MixpanelLogger(LogLevel.none),
+        ),
       );
     });
 
@@ -198,6 +210,10 @@ void main() {
           directive: MaskingDirective(autoMaskTypes: {}),
           logger: logger,
           debugOverlayEnabled: false,
+          frameAcquirer: ToImageFrameAcquirer(
+            DartPngCompressor(),
+            logger: MixpanelLogger(LogLevel.none),
+          ),
           wireframeEmitter: emitter,
         );
 
@@ -221,6 +237,7 @@ void main() {
           isNotNull,
           reason: 'precondition: first emit ships',
         );
+        emitter.commitPending(); // the previous session accepted that frame
         expect(
           emitFrame(),
           isNull,
@@ -276,6 +293,7 @@ void main() {
           autoRecordSessionsPercent: 0,
           remoteSettingsMode: RemoteSettingsMode.disabled,
           debugOptions: null,
+          lifecyclePolicy: ReplayLifecyclePolicy.stopOnBackground,
         );
 
         // Trigger settings check via foreground
@@ -479,19 +497,55 @@ void main() {
         expect(coordinator.isAppInForeground, false);
       });
 
-      test('stops recording when app goes to background', () async {
+      test('pauses recording when app goes to background', () async {
         // GIVEN
-        final coordinator = createCoordinator();
+        final coordinator = createCoordinator(
+          lifecyclePolicy: const PauseOnBackground(
+            idleTimeout: Duration(minutes: 30),
+          ),
+        );
         coordinator.startRecording(sessionsPercent: 100.0);
         await pumpEventQueue();
         expect(coordinator.recordingState, RecordingState.recording);
+        coordinator.captureInteraction(2, const Offset(10, 20), DateTime.now());
+        await pumpEventQueue();
+        expect(await eventQueue.fetchOldest(), isNotNull);
 
         // WHEN
         coordinator.onAppBackgrounded();
+        await pumpEventQueue();
 
         // THEN
-        expect(coordinator.recordingState, RecordingState.notRecording);
+        expect(coordinator.recordingState, RecordingState.paused);
+        expect(await eventQueue.fetchOldest(), isNull);
       });
+
+      test(
+        'resumes the same session when metadata finishes while backgrounded',
+        () async {
+          // GIVEN a session whose metadata write has started but has not yet
+          // completed its asynchronous callback.
+          final coordinator = createCoordinator(
+            autoRecordSessionsPercent: 100,
+            lifecyclePolicy: const PauseOnBackground(
+              idleTimeout: Duration(minutes: 30),
+            ),
+          );
+          coordinator.startRecording(sessionsPercent: 100);
+          final sessionId = sessionManager.getCurrentSession().id;
+          expect(coordinator.recordingState, RecordingState.initializing);
+
+          // WHEN the app backgrounds before the callback, then returns.
+          coordinator.onAppBackgrounded();
+          expect(coordinator.recordingState, RecordingState.paused);
+          coordinator.onAppForegrounded();
+          await pumpEventQueue();
+
+          // THEN the existing session resumes; no metadata latch is required.
+          expect(coordinator.recordingState, RecordingState.recording);
+          expect(sessionManager.getCurrentSession().id, sessionId);
+        },
+      );
 
       test('is safe to call when disposed', () async {
         // GIVEN
@@ -536,6 +590,27 @@ void main() {
           expect(coordinator.recordingState, RecordingState.recording);
         },
       );
+
+      test('should resample auto-record when returning after a background '
+          'stop', () async {
+        // GIVEN a native replay started by auto-record, then ended by
+        // backgrounding under the default stop policy
+        final coordinator = createCoordinator(autoRecordSessionsPercent: 100.0);
+        coordinator.onAppForegrounded();
+        await pumpEventQueue();
+        final firstReplayId = coordinator.replayId;
+        coordinator.onAppBackgrounded();
+        expect(coordinator.recordingState, RecordingState.notRecording);
+
+        // WHEN the app returns to the foreground
+        coordinator.onAppForegrounded();
+        await pumpEventQueue();
+
+        // THEN auto-record applies again and starts a new replay, matching
+        // the iOS and Android SDKs
+        expect(coordinator.recordingState, RecordingState.recording);
+        expect(coordinator.replayId, isNot(firstReplayId));
+      });
 
       test('does not auto-start when autoRecordSessionsPercent is 0', () async {
         // GIVEN
@@ -591,6 +666,7 @@ void main() {
             autoRecordSessionsPercent: 100.0,
             remoteSettingsMode: RemoteSettingsMode.disabled,
             debugOptions: null,
+            lifecyclePolicy: ReplayLifecyclePolicy.stopOnBackground,
           );
 
           // WHEN
@@ -713,6 +789,7 @@ void main() {
           autoRecordSessionsPercent: 0,
           remoteSettingsMode: RemoteSettingsMode.disabled,
           debugOptions: null,
+          lifecyclePolicy: ReplayLifecyclePolicy.stopOnBackground,
         );
 
         // WHEN
@@ -747,6 +824,7 @@ void main() {
             autoRecordSessionsPercent: 100.0,
             remoteSettingsMode: RemoteSettingsMode.strict,
             debugOptions: null,
+            lifecyclePolicy: ReplayLifecyclePolicy.stopOnBackground,
           );
 
           // WHEN - foreground triggers settings check which falls back to cache
@@ -784,6 +862,7 @@ void main() {
             autoRecordSessionsPercent: 0,
             remoteSettingsMode: RemoteSettingsMode.disabled,
             debugOptions: null,
+            lifecyclePolicy: ReplayLifecyclePolicy.stopOnBackground,
           );
 
           // Trigger settings check (in-flight)
@@ -851,6 +930,10 @@ void main() {
         directive: MaskingDirective(autoMaskTypes: {}),
         logger: logger,
         debugOverlayEnabled: false,
+        frameAcquirer: ToImageFrameAcquirer(
+          DartPngCompressor(),
+          logger: MixpanelLogger(LogLevel.none),
+        ),
         wireframeEmitter: WireframeEmitter(
           sensitiveRules: const [],
           debugEmitter: null,
@@ -872,6 +955,7 @@ void main() {
         autoRecordSessionsPercent: 100.0,
         remoteSettingsMode: remoteSettingsMode,
         debugOptions: null,
+        lifecyclePolicy: ReplayLifecyclePolicy.stopOnBackground,
       );
 
       test('stops wireframe capture when the server disables it', () async {
@@ -1019,6 +1103,7 @@ void main() {
           autoRecordSessionsPercent: 100.0, // local config
           remoteSettingsMode: RemoteSettingsMode.disabled,
           debugOptions: null,
+          lifecyclePolicy: ReplayLifecyclePolicy.stopOnBackground,
         );
 
         // WHEN - foreground triggers settings check
@@ -1056,6 +1141,7 @@ void main() {
           autoRecordSessionsPercent: 100.0, // local config
           remoteSettingsMode: RemoteSettingsMode.fallback,
           debugOptions: null,
+          lifecyclePolicy: ReplayLifecyclePolicy.stopOnBackground,
         );
 
         // WHEN - foreground triggers settings check, then auto-start
@@ -1089,6 +1175,7 @@ void main() {
           autoRecordSessionsPercent: 100.0,
           remoteSettingsMode: RemoteSettingsMode.strict,
           debugOptions: null,
+          lifecyclePolicy: ReplayLifecyclePolicy.stopOnBackground,
         );
 
         // WHEN - foreground triggers settings check
@@ -1126,6 +1213,7 @@ void main() {
             autoRecordSessionsPercent: 0, // no auto-start
             remoteSettingsMode: RemoteSettingsMode.strict,
             debugOptions: null,
+            lifecyclePolicy: ReplayLifecyclePolicy.stopOnBackground,
           );
 
           // Trigger settings check (in-flight, not yet resolved)
@@ -1178,6 +1266,7 @@ void main() {
           autoRecordSessionsPercent: 100.0,
           remoteSettingsMode: RemoteSettingsMode.strict,
           debugOptions: null,
+          lifecyclePolicy: ReplayLifecyclePolicy.stopOnBackground,
         );
 
         // WHEN - foreground triggers settings check + auto-start
@@ -1211,6 +1300,7 @@ void main() {
           autoRecordSessionsPercent: 100.0,
           remoteSettingsMode: RemoteSettingsMode.fallback,
           debugOptions: null,
+          lifecyclePolicy: ReplayLifecyclePolicy.stopOnBackground,
         );
 
         // WHEN - foreground triggers settings check
@@ -1275,6 +1365,31 @@ void main() {
 
         // THEN
         expect(coordinator.replayId, isNull);
+      });
+
+      test('background pause hides and restores the same replay ID', () async {
+        // GIVEN
+        final coordinator = createCoordinator(
+          autoRecordSessionsPercent: 100,
+          lifecyclePolicy: const PauseOnBackground(
+            idleTimeout: Duration(minutes: 30),
+          ),
+        );
+        coordinator.onAppForegrounded();
+        await pumpEventQueue();
+        final replayId = coordinator.replayId;
+
+        // WHEN
+        coordinator.onAppBackgrounded();
+
+        // THEN
+        expect(coordinator.replayId, isNull);
+
+        // WHEN
+        coordinator.onAppForegrounded();
+
+        // THEN
+        expect(coordinator.replayId, replayId);
       });
 
       test('returns new ID after restart', () async {
@@ -1388,6 +1503,43 @@ void main() {
         expect(unregisterCalls, hasLength(1));
         expect(unregisterCalls[0].arguments, {'key': '\$mp_replay_id'});
       });
+
+      test(
+        'background pause unregisters and foreground re-registers the same replay ID',
+        () async {
+          // GIVEN
+          final coordinator = createCoordinator(
+            autoRecordSessionsPercent: 100,
+            lifecyclePolicy: const PauseOnBackground(
+              idleTimeout: Duration(minutes: 30),
+            ),
+          );
+          coordinator.onAppForegrounded();
+          await pumpEventQueue();
+          final replayId = sessionManager.getCurrentSession().id;
+          methodCalls.clear();
+
+          // WHEN
+          coordinator.onAppBackgrounded();
+          await pumpEventQueue();
+          coordinator.onAppForegrounded();
+          await pumpEventQueue();
+
+          // THEN
+          expect(
+            methodCalls.where((c) => c.method == 'unregisterSuperProperty'),
+            hasLength(1),
+          );
+          final registerCalls = methodCalls
+              .where((c) => c.method == 'registerSuperProperties')
+              .toList();
+          expect(registerCalls, hasLength(1));
+          expect(
+            (registerCalls.single.arguments as Map)['\$mp_replay_id'],
+            replayId,
+          );
+        },
+      );
     });
 
     group('stopRecording flush error', () {
@@ -1429,9 +1581,14 @@ void main() {
         },
       );
 
-      test('background/foreground cycle creates new session', () async {
+      test('background/foreground cycle resumes the same session', () async {
         // GIVEN - first foreground resolves settings and starts recording
-        final coordinator = createCoordinator(autoRecordSessionsPercent: 100.0);
+        final coordinator = createCoordinator(
+          autoRecordSessionsPercent: 100.0,
+          lifecyclePolicy: const PauseOnBackground(
+            idleTimeout: Duration(minutes: 30),
+          ),
+        );
         coordinator.onAppForegrounded();
         await pumpEventQueue();
         expect(coordinator.recordingState, RecordingState.recording);
@@ -1442,9 +1599,43 @@ void main() {
         coordinator.onAppForegrounded();
         await pumpEventQueue();
 
-        // THEN - new session created
+        // THEN - existing session resumed
         final secondSession = sessionManager.getCurrentSession();
-        expect(secondSession.id, isNot(equals(firstSession.id)));
+        expect(secondSession.id, firstSession.id);
+        expect(coordinator.recordingState, RecordingState.recording);
+      });
+
+      test('should start a new replay when returning after the pause '
+          'timeout', () async {
+        // GIVEN a replay paused in the background with a 5 minute timeout
+        final coordinator = createCoordinator(
+          autoRecordSessionsPercent: 100,
+          lifecyclePolicy: const PauseOnBackground(
+            idleTimeout: Duration(minutes: 5),
+          ),
+        );
+        final backgroundedAt = DateTime.utc(2026, 1, 1, 12);
+        String? replayId;
+        await withClock(Clock.fixed(backgroundedAt), () async {
+          coordinator.startRecording(sessionsPercent: 100);
+          await pumpEventQueue();
+          replayId = coordinator.replayId;
+          coordinator.onAppBackgrounded();
+          await pumpEventQueue();
+        });
+
+        // WHEN the app returns after 6 minutes
+        await withClock(
+          Clock.fixed(backgroundedAt.add(const Duration(minutes: 6))),
+          () async {
+            coordinator.onAppForegrounded();
+            await pumpEventQueue();
+          },
+        );
+
+        // THEN the expired replay is replaced by a newly sampled one
+        expect(coordinator.recordingState, RecordingState.recording);
+        expect(coordinator.replayId, isNot(replayId));
       });
     });
 
@@ -1511,6 +1702,53 @@ void main() {
       );
 
       test(
+        'should record touches in the image space of the frame in effect',
+        () async {
+          // GIVEN - a frame whose raster was downscaled to two thirds
+          final coordinator = await startRecordingWithPendingCapture();
+          final capture = coordinator.captureSnapshot(
+            RenderRepaintBoundary(),
+            boundaryElement: boundaryElement,
+          );
+          await pumpEventQueue();
+          pendingCapturer.completeWithPinnedIdentity(
+            imageScale: const Offset(2 / 3, 2 / 3),
+          );
+          await capture;
+          await pumpEventQueue();
+
+          // WHEN - the user touches at logical coordinates
+          coordinator.captureInteraction(
+            RRWebMouseInteraction.touchStart,
+            const Offset(300, 600),
+            DateTime.now(),
+          );
+          coordinator.captureTouchMove(const [
+            TouchPosition(x: 30, y: 60, timeOffset: 0),
+          ], DateTime.now());
+          await pumpEventQueue();
+
+          // THEN - they are stored against the metadata the frame reported,
+          // not the larger logical viewport they were measured in.
+          final interaction =
+              recordingQueue.addedEvents
+                      .firstWhere((e) => e.type == EventType.interaction)
+                      .payload
+                  as InteractionPayload;
+          expect((interaction.x, interaction.y), (200.0, 400.0));
+          final touchMove =
+              recordingQueue.addedEvents
+                      .firstWhere((e) => e.type == EventType.touchMove)
+                      .payload
+                  as TouchMovePayload;
+          expect(
+            (touchMove.positions.single.x, touchMove.positions.single.y),
+            (20.0, 40.0),
+          );
+        },
+      );
+
+      test(
         'should record the frame when recording stops during capture',
         () async {
           // GIVEN - a capture is in flight
@@ -1538,6 +1776,85 @@ void main() {
           expect(events.where((e) => e.type == EventType.screenshot).length, 1);
         },
       );
+
+      test(
+        'should cancel acquisition of a frame that crosses a stop',
+        () async {
+          // GIVEN - a capture is still waiting for the browser to present when
+          // the app stops the replay, for example before a sensitive screen
+          final coordinator = createCoordinator();
+          coordinator.startRecording(sessionsPercent: 100.0);
+          await pumpEventQueue();
+          final capture = coordinator.captureSnapshot(
+            RenderRepaintBoundary(),
+            boundaryElement: boundaryElement,
+          );
+          await pumpEventQueue();
+          expect(pendingCapturer.isCancelledProbe!(), isFalse);
+
+          // WHEN - recording stops before any pixels were acquired
+          coordinator.stopRecording();
+          expect(
+            pendingCapturer.isCancelledProbe!(),
+            isTrue,
+            reason: 'the capturer must not acquire pixels after the stop',
+          );
+          coordinator.startRecording(sessionsPercent: 100.0);
+          await pumpEventQueue();
+          pendingCapturer.completeCancelled();
+          await capture;
+          await pumpEventQueue();
+
+          // THEN - nothing from the aborted frame reaches either replay
+          expect(coordinator.recordingState, RecordingState.recording);
+          expect(
+            recordingQueue.addedEvents.where(
+              (event) =>
+                  event.type == EventType.screenshot ||
+                  event.type == EventType.wireframe,
+            ),
+            isEmpty,
+          );
+        },
+      );
+
+      test('should discard a frame that crosses a background pause', () async {
+        // GIVEN - a capture is in flight for a replay that pauses in the
+        // background instead of ending.
+        final coordinator = createCoordinator(
+          lifecyclePolicy: const PauseOnBackground(
+            idleTimeout: Duration(minutes: 30),
+          ),
+        );
+        coordinator.startRecording(sessionsPercent: 100.0);
+        await pumpEventQueue();
+        final sessionId = sessionManager.getCurrentSession().id;
+        final capture = coordinator.captureSnapshot(
+          RenderRepaintBoundary(),
+          boundaryElement: boundaryElement,
+        );
+        await pumpEventQueue();
+
+        // WHEN - the replay pauses and resumes before capture completes.
+        coordinator.onAppBackgrounded();
+        coordinator.onAppForegrounded();
+        pendingCapturer.completeWithPinnedIdentity();
+        await capture;
+        await pumpEventQueue();
+
+        // THEN - recording continues with the same replay, but the frame
+        // that crossed the pause boundary is not queued.
+        expect(coordinator.recordingState, RecordingState.recording);
+        expect(sessionManager.getCurrentSession().id, sessionId);
+        expect(
+          recordingQueue.addedEvents.where(
+            (event) =>
+                event.type == EventType.screenshot ||
+                event.type == EventType.wireframe,
+          ),
+          isEmpty,
+        );
+      });
 
       test(
         'should pin metadata to the captured session when a cross-session frame lands after rotation',
@@ -1795,11 +2112,18 @@ class _PendingScreenshotCapturer extends ScreenshotCapturer {
     : super(
         directive: MaskingDirective(autoMaskTypes: {}),
         debugOverlayEnabled: false,
+        frameAcquirer: ToImageFrameAcquirer(
+          DartPngCompressor(),
+          logger: MixpanelLogger(LogLevel.none),
+        ),
       );
 
   final Completer<CaptureResult> pendingCapture = Completer<CaptureResult>();
   late String pinnedSessionId;
   late String pinnedDistinctId;
+
+  /// The cancellation probe the coordinator handed to the in-flight capture.
+  bool Function()? isCancelledProbe;
 
   @override
   Future<CaptureResult> capture(
@@ -1808,21 +2132,35 @@ class _PendingScreenshotCapturer extends ScreenshotCapturer {
     required String Function() getDistinctId,
     required Element boundaryElement,
     Set<AutoMaskedView>? maskTypes,
+    bool Function()? isCancelled,
+    void Function()? onRenderTreeRead,
   }) {
     pinnedSessionId = getCurrentSession().id;
     pinnedDistinctId = getDistinctId();
+    isCancelledProbe = isCancelled;
     return pendingCapture.future;
   }
+
+  /// Resolve the in-flight capture the way the real capturer does when its
+  /// cancellation probe fires before pixels are acquired.
+  void completeCancelled() => pendingCapture.complete(
+    const CaptureFailure(
+      CaptureError.cancelled,
+      'Recording stopped or paused while the frame was in flight',
+    ),
+  );
 
   /// Resolve the in-flight capture with the identity pinned when it started.
   void completeWithPinnedIdentity({
     List<MaskRegionInfo> maskRegions = const [],
     WireframePayload? wireframes,
+    Offset imageScale = const Offset(1, 1),
   }) => pendingCapture.complete(
     CaptureSuccess(
       data: Uint8List.fromList([1, 2, 3]),
       width: 100,
       height: 200,
+      imageScale: imageScale,
       maskCount: maskRegions.length,
       timestamp: DateTime.now(),
       sessionId: pinnedSessionId,
@@ -1839,9 +2177,9 @@ class _RecordingEventQueue extends InMemoryEventQueue {
   final List<SessionReplayEvent> addedEvents = [];
 
   @override
-  Future<void> add(SessionReplayEvent event) async {
+  Future<bool> add(SessionReplayEvent event) async {
     addedEvents.add(event);
-    await super.add(event);
+    return super.add(event);
   }
 }
 
@@ -1852,12 +2190,12 @@ class _PausingMetadataEventQueue extends InMemoryEventQueue {
   bool metadataAddStarted = false;
 
   @override
-  Future<void> add(SessionReplayEvent event) async {
+  Future<bool> add(SessionReplayEvent event) async {
     if (event.type == EventType.metadata) {
       metadataAddStarted = true;
       await _metadataGate.future;
     }
-    await super.add(event);
+    return super.add(event);
   }
 
   void releaseMetadata() {

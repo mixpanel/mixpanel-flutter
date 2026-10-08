@@ -64,13 +64,13 @@ external void remove_group(String group_key, JSAny? group_id);
 external MixpanelGroup get_group(String group_key, JSAny? group_id);
 
 @JS('mixpanel.register')
-external void register(JSAny? properties);
+external void register(JSAny? properties, [JSAny? options]);
 
 @JS('mixpanel.register_once')
 external void register_once(JSAny? properties);
 
 @JS('mixpanel.unregister')
-external void unregister(String property);
+external void unregister(String property, [JSAny? options]);
 
 @JS('mixpanel.time_event')
 external void time_event(String event_name);

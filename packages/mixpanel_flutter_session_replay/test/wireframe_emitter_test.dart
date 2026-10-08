@@ -5,6 +5,8 @@ import 'package:mixpanel_flutter_session_replay/src/internal/logger.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/wireframe/wireframe_emitter.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/configuration.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/masking_directive.dart';
+import 'package:mixpanel_flutter_session_replay/src/models/session_event.dart'
+    show WireframePayload;
 import 'package:mixpanel_flutter_session_replay/src/models/wireframe.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/wireframes_options.dart';
 
@@ -52,6 +54,62 @@ void main() {
       expect(payload.viewportHeight, 800);
       expect(payload.elements.single.text, 'Hello world');
       expect(payload.elements.single.maskDecision, MaskDecision.none);
+    });
+  });
+
+  group('WireframeEmitter — image space', () {
+    test('scales bounds and viewport into a downscaled frame', () {
+      // GIVEN a 400x800 viewport encoded as a 300x600 raster
+      final emitter = WireframeEmitter(
+        sensitiveRules: const [],
+        debugEmitter: null,
+        logger: logger,
+      );
+
+      // WHEN
+      final payload = emitter.emit(
+        rawElements: [
+          el(text: 'Hello world', bounds: const Rect.fromLTWH(40, 80, 200, 40)),
+        ],
+        maskRegions: const [],
+        viewport: defaultViewport,
+        imageSize: const Size(300, 600),
+        timestamp: defaultTimestamp,
+      );
+
+      // THEN the payload describes the image the player renders, so the
+      // element sits over the same pixels it covered on screen.
+      expect(payload, isNotNull);
+      expect((payload!.viewportWidth, payload.viewportHeight), (300, 600));
+      expect(
+        payload.elements.single.bounds,
+        const Rect.fromLTWH(30, 60, 150, 30),
+      );
+    });
+
+    test('leaves geometric masking in the logical space it measures', () {
+      // GIVEN a mask covering the element in logical coordinates
+      final emitter = WireframeEmitter(
+        sensitiveRules: const [],
+        debugEmitter: null,
+        logger: logger,
+      );
+
+      // WHEN the frame is downscaled
+      final payload = emitter.emit(
+        rawElements: [
+          el(text: 'Secret', bounds: const Rect.fromLTWH(40, 80, 200, 40)),
+        ],
+        maskRegions: [
+          MaskRegionInfo(const Rect.fromLTWH(40, 80, 200, 40), MaskSource.auto),
+        ],
+        viewport: defaultViewport,
+        imageSize: const Size(300, 600),
+        timestamp: defaultTimestamp,
+      );
+
+      // THEN the overlap is still detected and the text stripped
+      expect(payload!.elements.single.text, isNull);
     });
   });
 
@@ -117,6 +175,7 @@ void main() {
         viewport: defaultViewport,
         timestamp: defaultTimestamp,
       );
+      emitter.commitPending(); // the frame was accepted
       final second = emitter.emit(
         rawElements: const [],
         maskRegions: const [],
@@ -732,6 +791,7 @@ void main() {
         viewport: defaultViewport,
         timestamp: defaultTimestamp,
       );
+      emitter.commitPending(); // the frame was accepted
       final second = emitter.emit(
         rawElements: input,
         maskRegions: const [],
@@ -741,6 +801,88 @@ void main() {
 
       // THEN
       expect(first, isNotNull);
+      expect(second, isNull);
+    });
+
+    test('an uncommitted emit does not suppress the next identical frame', () {
+      // GIVEN a frame whose wireframe was built but which the coordinator then
+      // discarded, for example because it crossed a pause while in flight
+      final emitter = WireframeEmitter(
+        sensitiveRules: const [],
+        debugEmitter: null,
+        logger: logger,
+      );
+      final discarded = emitter.emit(
+        rawElements: [el(text: 'Hello')],
+        maskRegions: const [],
+        viewport: defaultViewport,
+        timestamp: defaultTimestamp,
+      );
+
+      // WHEN the next accepted frame shows the same screen
+      final accepted = emitter.emit(
+        rawElements: [el(text: 'Hello')],
+        maskRegions: const [],
+        viewport: defaultViewport,
+        timestamp: defaultTimestamp,
+      );
+
+      // THEN it still ships a wireframe; only committed frames dedup
+      expect(discarded, isNotNull);
+      expect(accepted, isNotNull);
+    });
+
+    test(
+      'should not adopt a discarded frame as the baseline when a later frame '
+      'is deduped',
+      () {
+        // GIVEN an accepted "A" frame, then a "B" frame whose capture was
+        // discarded (for example across a pause), so B was never uploaded
+        final emitter = WireframeEmitter(
+          sensitiveRules: const [],
+          debugEmitter: null,
+          logger: logger,
+        );
+        WireframePayload? emitText(String text) => emitter.emit(
+          rawElements: [el(text: text)],
+          maskRegions: const [],
+          viewport: defaultViewport,
+          timestamp: defaultTimestamp,
+        );
+        emitText('A');
+        emitter.commitPending();
+        expect(emitText('B'), isNotNull);
+
+        // WHEN the next frame repeats A (deduped) and is accepted
+        expect(emitText('A'), isNull);
+        emitter.commitPending();
+
+        // THEN B is still published when it appears, since it never shipped
+        expect(emitText('B'), isNotNull);
+      },
+    );
+
+    test('commitPending makes the accepted frame the dedup baseline', () {
+      final emitter = WireframeEmitter(
+        sensitiveRules: const [],
+        debugEmitter: null,
+        logger: logger,
+      );
+      emitter.emit(
+        rawElements: [el(text: 'Hello')],
+        maskRegions: const [],
+        viewport: defaultViewport,
+        timestamp: defaultTimestamp,
+      );
+      emitter.commitPending();
+
+      final second = emitter.emit(
+        rawElements: [el(text: 'Hello')],
+        maskRegions: const [],
+        viewport: defaultViewport,
+        timestamp: defaultTimestamp,
+      );
+
       expect(second, isNull);
     });
 
@@ -895,6 +1037,7 @@ void main() {
         viewport: defaultViewport,
         timestamp: defaultTimestamp,
       );
+      emitter.commitPending(); // the frame was accepted
       final second = emitter.emit(
         rawElements: input,
         maskRegions: [
@@ -957,6 +1100,7 @@ void main() {
         viewport: defaultViewport,
         timestamp: defaultTimestamp,
       );
+      emitter.commitPending(); // the frame was accepted
       final second = emitter.emit(
         rawElements: [el(text: null, maskDecision: MaskDecision.auto)],
         maskRegions: const [],
@@ -1004,13 +1148,14 @@ void main() {
         logger: logger,
       );
 
-      // WHEN — same input twice
+      // WHEN — same input twice, the first accepted
       emitter.emit(
         rawElements: [el()],
         maskRegions: const [],
         viewport: defaultViewport,
         timestamp: defaultTimestamp,
       );
+      emitter.commitPending();
       emitter.emit(
         rawElements: [el()],
         maskRegions: const [],

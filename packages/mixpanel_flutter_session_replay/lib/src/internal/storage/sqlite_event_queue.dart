@@ -93,7 +93,7 @@ class SqliteEventQueue implements EventQueue {
   }
 
   @override
-  Future<void> add(SessionReplayEvent event) async {
+  Future<bool> add(SessionReplayEvent event) async {
     if (_db == null) {
       throw StateError('Queue not initialized');
     }
@@ -113,11 +113,12 @@ class SqliteEventQueue implements EventQueue {
       _logger.warning(
         'Queue quota exceeded ($currentSize + $eventSize > $quotaBytes), dropping event',
       );
-      return; // Drop the event instead of inserting
+      return false; // Drop the event instead of inserting
     }
 
     // Insert into database
     await _db!.insert('events', eventRow);
+    return true;
   }
 
   @override
@@ -147,31 +148,33 @@ class SqliteEventQueue implements EventQueue {
   }
 
   @override
-  Future<PersistedSessionReplayEvent?> fetchOldest() async {
-    if (_db == null) {
-      throw StateError('Storage not initialized');
-    }
-
-    // Get the oldest event across all sessions (for age checking)
-    final rows = await _db!.query('events', orderBy: 'id ASC', limit: 1);
-
-    if (rows.isEmpty) return null;
-
-    return PersistedSessionReplayEvent.fromDbRow(rows.first);
-  }
+  Future<QueuedEventHeader?> fetchOldestHeader({
+    Set<String> excludeSessionIds = const {},
+  }) => _fetchHeader('ASC', excludeSessionIds: excludeSessionIds);
 
   @override
-  Future<PersistedSessionReplayEvent?> fetchNewest() async {
+  Future<QueuedEventHeader?> fetchNewestHeader() => _fetchHeader('DESC');
+
+  Future<QueuedEventHeader?> _fetchHeader(
+    String direction, {
+    Set<String> excludeSessionIds = const {},
+  }) async {
     if (_db == null) {
       throw StateError('Storage not initialized');
     }
 
-    // Get the newest event across all sessions (for flush cutoff)
-    final rows = await _db!.query('events', orderBy: 'id DESC', limit: 1);
-
+    final excluded = excludeSessionIds.toList(growable: false);
+    final placeholders = List.filled(excluded.length, '?').join(', ');
+    final rows = await _db!.query(
+      'events',
+      columns: ['id', 'session_id', 'distinct_id', 'timestamp'],
+      where: excluded.isEmpty ? null : 'session_id NOT IN ($placeholders)',
+      whereArgs: excluded.isEmpty ? null : excluded,
+      orderBy: 'id $direction',
+      limit: 1,
+    );
     if (rows.isEmpty) return null;
-
-    return PersistedSessionReplayEvent.fromDbRow(rows.first);
+    return QueuedEventHeader.fromDbRow(rows.first);
   }
 
   @override
@@ -186,17 +189,11 @@ class SqliteEventQueue implements EventQueue {
     }
 
     // Get CONSECUTIVE events for the given sessionId and distinctId,
-    // stopping at the first event where distinctId changes.
-    //
-    // This ensures we don't mix different users in the same upload batch.
-
-    // Step 1: Find the boundary - first event where distinctId changes
-    final boundaryId = await _findDistinctIdBoundary(sessionId, distinctId);
-
-    // Step 2: Fetch events with size filtering
+    // stopping at the first event where distinctId changes, so a batch never
+    // mixes users or skips another user's earlier event.
     final rows = await _fetchEventsWithSizeLimit(
       sessionId: sessionId,
-      boundaryId: boundaryId,
+      distinctId: distinctId,
       maxBytes: maxBytes,
       maxCount: maxCount,
     );
@@ -206,60 +203,58 @@ class SqliteEventQueue implements EventQueue {
         .toList();
   }
 
-  /// Find the first event ID where distinctId changes (boundary detection)
-  Future<int?> _findDistinctIdBoundary(
-    String sessionId,
-    String distinctId,
-  ) async {
-    final rows = await _db!.rawQuery(
-      '''
-      SELECT MIN(id) as boundary_id
-      FROM events
-      WHERE session_id = ?
-        AND distinct_id != ?
-      ''',
-      [sessionId, distinctId],
-    );
-
-    if (rows.isEmpty || rows.first['boundary_id'] == null) {
-      return null;
-    }
-
-    return rows.first['boundary_id'] as int;
-  }
-
-  /// Fetch events with cumulative size limit (uses correlated subquery for running totals)
+  /// Fetch events with cumulative size and count limits.
+  ///
+  /// The distinctId boundary is computed inside the same statement that
+  /// selects the batch. As separate queries, the recorder could insert
+  /// between them (after `identify`), and the batch would either take
+  /// another user's event or skip it and upload a later event first.
   Future<List<Map<String, Object?>>> _fetchEventsWithSizeLimit({
     required String sessionId,
-    required int? boundaryId,
+    required String distinctId,
     required int maxBytes,
     required int maxCount,
   }) async {
-    // Use a very large number as the boundary if none exists
-    // This allows us to use a single query for both cases
-    final effectiveBoundary =
-        boundaryId ?? 9223372036854775807; // Max 64-bit int
+    // Choose the batch from sizes alone so payloads beyond the byte budget
+    // never cross the platform channel. The first event is always included,
+    // so a single oversized event cannot block the queue.
+    final sizes = await _db!.rawQuery(
+      '''
+      SELECT id, data_size
+      FROM events
+      WHERE session_id = ?
+        AND id < COALESCE(
+          (SELECT MIN(id) FROM events WHERE session_id = ? AND distinct_id != ?),
+          ?
+        )
+      ORDER BY id ASC
+      LIMIT ?
+      ''',
+      [sessionId, sessionId, distinctId, 1 << 62, maxCount],
+    );
 
+    var lastId = -1;
+    var totalBytes = 0;
+    for (final row in sizes) {
+      final dataSize = row['data_size'] as int;
+      if (lastId != -1 && totalBytes + dataSize > maxBytes) break;
+      lastId = row['id'] as int;
+      totalBytes += dataSize;
+    }
+    if (lastId == -1) return const [];
+
+    // Ids are AUTOINCREMENT, so every row inserted after the batch was chosen
+    // has an id above lastId: this reads exactly the chosen rows.
     return await _db!.rawQuery(
       '''
-      SELECT id, session_id, distinct_id, timestamp, type, payload_metadata, payload_binary, data_size
-      FROM (
-        SELECT
-          id, session_id, distinct_id, timestamp, type, payload_metadata, payload_binary, data_size,
-          (SELECT SUM(e2.data_size)
-           FROM events e2
-           WHERE e2.session_id = events.session_id
-             AND e2.id < ?
-             AND e2.id <= events.id) as running_total
-        FROM events
-        WHERE session_id = ?
-          AND id < ?
-        ORDER BY id ASC
-        LIMIT ?
-      )
-      WHERE running_total <= ?
+      SELECT id, session_id, distinct_id, timestamp, type,
+             payload_metadata, payload_binary, data_size
+      FROM events
+      WHERE session_id = ?
+        AND id <= ?
+      ORDER BY id ASC
       ''',
-      [effectiveBoundary, sessionId, effectiveBoundary, maxCount, maxBytes],
+      [sessionId, lastId],
     );
   }
 

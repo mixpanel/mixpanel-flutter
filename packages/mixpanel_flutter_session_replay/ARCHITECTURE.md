@@ -143,3 +143,42 @@ The SDK implements intelligent rate limiting to minimize performance impact:
 
 **Interaction Recording:**
 - No rate limiting (all touches/clicks are recorded)
+
+
+## Capture and session lifetime boundaries
+
+`ScreenshotCapturer` owns the steps every platform shares: waiting out the
+frame in flight, pinning replay identity, mask detection, wireframes, and the
+capture result. It delegates pixels to a `FrameAcquirer`:
+
+- `ToImageFrameAcquirer` (native) snapshots the layer tree with
+  `RepaintBoundary.toImage()`, paints masks with `MaskPainter`, and hands RGBA
+  bytes to an `ImageCompressor`. The snapshot is synchronous with the mask
+  walk, so no re-validation is needed.
+- `RenderedSurfaceFrameAcquirer` (web) owns the raster budget, waits one
+  browser presentation, acquires an immutable `CapturedSurface` through
+  `RenderedSurfaceCapture`, and encodes it only after the `MaskLayoutFence`
+  confirms the masks still hold. It always disposes the snapshot.
+  `WebRenderedSurfaceCapture` owns DOM discovery and presentation waits, while
+  `WebJpegEncoder` owns the JPEG worker. Encoding consumes a bitmap once;
+  rejected snapshots are closed without encoding.
+
+The existing web presentation barriers and endpoint mask comparison remain in
+place. This split does not change their treatment of transient layouts that
+return to their original geometry between validation points.
+
+`SessionLifetime` owns activity, maximum-duration, and background-retention
+deadlines and timers. `SessionPersistence` carries a replay across page loads:
+it stores those deadlines (debouncing activity writes) and offers the replay a
+previous page load left recording. Native uses `SessionPersistence.none()`;
+web uses `StoredSessionPersistence` over IndexedDB. The coordinator owns
+recording state, sampling, uploads, and analytics registration. It consults wall-clock deadlines at
+transitions as well as reacting to timers, since browser suspension can delay
+callbacks. Maximum expiry remains active during metadata initialization.
+`ResumableSession` keeps a staged session and its persisted deadlines together
+while `SessionPersistence` holds it waiting for remote settings.
+
+Web capture requires one matching canvas in one Flutter view. A platform view
+may split rendering across multiple canvases; those frames are skipped rather
+than selecting an arbitrary surface. Browser tests cover rejection and recovery
+when the composition returns to one canvas.

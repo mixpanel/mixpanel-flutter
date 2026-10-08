@@ -1,19 +1,17 @@
-import 'dart:io' show Platform;
-
 import 'package:flutter/foundation.dart' show debugPrint, kDebugMode;
 import 'package:http/http.dart' as http;
 import 'package:meta/meta.dart';
 
+import 'internal/platform/platform_info.dart';
+import 'internal/platform/platform_init.dart';
 import 'models/debug_overlay_colors.dart';
-import 'models/results.dart';
 import 'models/masking_directive.dart';
+import 'models/results.dart';
 import 'session_replay_options.dart';
 import 'internal/endpoints.dart';
-import 'internal/native_image_compressor.dart';
-import 'internal/screenshot_capturer.dart';
 import 'internal/event_recorder.dart';
 import 'internal/storage/event_queue_interface.dart';
-import 'internal/storage/sqlite_event_queue.dart';
+import 'internal/options_validation.dart';
 import 'internal/session/session_manager.dart';
 import 'internal/upload/upload_service.dart';
 import 'internal/upload/payload_serializer.dart';
@@ -131,23 +129,8 @@ class MixpanelSessionReplay {
 
     try {
       logger.debug('Validating configuration...');
-      // Validate configuration parameters
       try {
-        if (token.isEmpty) {
-          throw ArgumentError('token cannot be empty');
-        }
-
-        if (options.autoRecordSessionsPercent < 0 ||
-            options.autoRecordSessionsPercent > 100) {
-          throw ArgumentError(
-            'autoRecordSessionsPercent must be between 0 and 100',
-          );
-        }
-
-        if (options.storageQuotaMB <= 0) {
-          throw ArgumentError('storageQuotaMB must be positive');
-        }
-
+        validateOptions(token, options);
         logger.debug('Configuration valid');
       } catch (e) {
         logger.error('Configuration invalid: $e');
@@ -179,9 +162,7 @@ class MixpanelSessionReplay {
       // Enforce App Sandbox on macOS — screenshots are stored locally and must
       // be protected from other processes reading them.
       // Skip when eventQueue is injected (unit tests don't store real screenshots).
-      if (eventQueue == null &&
-          Platform.isMacOS &&
-          !Platform.environment.containsKey('APP_SANDBOX_CONTAINER_ID')) {
+      if (eventQueue == null && isMacOsWithoutSandbox) {
         const message =
             'macOS App Sandbox is required for Session Replay. '
             'Enable com.apple.security.app-sandbox in your entitlements file.';
@@ -205,34 +186,9 @@ class MixpanelSessionReplay {
         logger.debug('Old instance cleaned up');
       }
 
-      // Initialize event queue (use injected or create SqliteEventQueue)
-      logger.debug('Creating event queue...');
-      final EventQueue queue =
-          eventQueue ??
-          SqliteEventQueue(
-            token: token,
-            quotaMB: options.storageQuotaMB,
-            logger: logger,
-          );
-      await queue.initialize();
-      logger.debug('Event queue initialized');
-
-      // Clear all data on app launch
-      await queue.removeAll();
-      logger.debug('Cleared all existing data');
-
-      // Create internal components
-      logger.debug('Creating internal components...');
-
-      // Create session manager
-      final sessionManager = SessionManager();
-
-      // Create masking directive from options
-      final directive = MaskingDirective(
-        autoMaskTypes: options.autoMaskedViews,
-      );
-
-      // Build wireframe emitter if opted in. One instance per SDK lifetime.
+      // Platform-specific initialization (queue, screenshot capturer,
+      // session resume, idle timeout, expiry persistence)
+      logger.debug('Running platform init...');
       final wireframesOptions = options.wireframesOptions;
       final wireframeEmitter = wireframesOptions != null
           ? WireframeEmitter(
@@ -241,90 +197,123 @@ class MixpanelSessionReplay {
               logger: logger,
             )
           : null;
-
-      // Create screenshot capturer with native JPEG compression
-      final screenshotCapturer = ScreenshotCapturer(
-        directive: directive,
-        logger: logger,
+      final platformResult = await platformInit(
+        token: token,
+        storageQuotaMB: options.storageQuotaMB,
+        directive: MaskingDirective(autoMaskTypes: options.autoMaskedViews),
         debugOverlayEnabled: options.debugOptions?.overlayColors != null,
-        nativeCompressor: NativeImageCompressor(),
+        platformOptions: capPlatformOptions(options.platformOptions, logger),
         wireframeEmitter: wireframeEmitter,
         useAccessibilityLabelFallback:
             wireframesOptions?.useAccessibilityLabelFallback ?? false,
-      );
-
-      // Create instance first (before components) so we can reference it in closures
-      final instance = MixpanelSessionReplay._internal(
         logger: logger,
-        token: token,
-        distinctId: distinctId,
+        eventQueue: eventQueue,
       );
+      // From here until the coordinator owns them, the platform components
+      // have no owner. Release them if any later step fails so a failed
+      // initialization cannot leak a worker or a database connection.
+      try {
+        final queue = platformResult.queue;
+        logger.debug('Platform init complete');
 
-      // Create event recorder (handles both screenshots and interactions)
-      final eventRecorder = EventRecorder(
-        eventQueue: queue,
-        sessionManager: sessionManager,
-        getDistinctId: () => instance.distinctId,
-        logger: logger,
+        // Create internal components
+        logger.debug('Creating internal components...');
+
+        // Create session manager
+        final sessionManager = SessionManager();
+
+        // Create instance first (before components) so we can reference it in closures
+        final instance = MixpanelSessionReplay._internal(
+          logger: logger,
+          token: token,
+          distinctId: distinctId,
+        );
+
+        // Create event recorder (handles both screenshots and interactions)
+        final eventRecorder = EventRecorder(
+          eventQueue: queue,
+          sessionManager: sessionManager,
+          getDistinctId: () => instance.distinctId,
+          logger: logger,
+        );
+
+        // Create settings service (check will happen on first foreground)
+        final storageProvider = SettingsStorageProvider(
+          token: token,
+          logger: logger,
+        );
+        // Create shared HTTP client (each service borrows it; SDK owns the lifecycle)
+        final sharedHttpClient = httpClient ?? http.Client();
+
+        final settingsService = SettingsService(
+          token: token,
+          logger: logger,
+          httpClient: sharedHttpClient,
+          storageProvider: storageProvider,
+          serverUrl: resolvedServerUrl,
+          // Only ask for the wireframe kill switch when this app opted in.
+          wireframesRequested: options.wireframesOptions != null,
+        );
+
+        // Create upload service with payload serializer
+        final payloadSerializer = PayloadSerializer(
+          token,
+          gzip: platformResult.gzipCompressor,
+        );
+        final uploadService = UploadService(
+          eventQueue: queue,
+          payloadSerializer: payloadSerializer,
+          wifiOnly: platformResult.wifiOnly,
+          // The coordinator's verdict, not the raw server flag: strict mode can
+          // disable recording even when the server reports is_enabled, and
+          // uploads must follow the same decision as capture.
+          getRemoteEnablementState: () =>
+              instance._coordinator.remoteEnablementState,
+          flushInterval: options.flushInterval,
+          logger: logger,
+          httpClient: sharedHttpClient,
+          serverUrl: resolvedServerUrl,
+        );
+
+        logger.debug('Internal components created');
+
+        // Create coordinator with all internal components
+        logger.debug('Creating coordinator...');
+        final coordinator = SessionReplayCoordinator(
+          screenshotCapturer: platformResult.screenshotCapturer,
+          eventRecorder: eventRecorder,
+          uploadService: uploadService,
+          settingsService: settingsService,
+          sessionManager: sessionManager,
+          logger: logger,
+          autoRecordSessionsPercent: options.autoRecordSessionsPercent,
+          remoteSettingsMode: options.remoteSettingsMode,
+          debugOptions: options.debugOptions,
+          durationLimits: platformResult.durationLimits,
+          lifecyclePolicy: platformResult.lifecyclePolicy,
+          sessionPersistence: platformResult.sessionPersistence,
+          debugMaskOverlayFactory: platformResult.debugMaskOverlayFactory,
+        );
+
+        // Wire up the coordinator and shared HTTP client to the instance
+        instance._coordinator = coordinator;
+        instance._httpClient = sharedHttpClient;
+
+        // Register instance in registry
+        _instances[token] = instance;
+
+        logger.info('Initialization successful!');
+        return InitializationResult.success(instance);
+      } catch (_) {
+        await platformResult.dispose();
+        rethrow;
+      }
+    } on PlatformCapabilityException catch (e) {
+      logger.error('Initialization failed: $e');
+      return InitializationResult.failure(
+        InitializationError.platformSecurityNotMet,
+        'Initialization failed: $e',
       );
-
-      // Create settings service (check will happen on first foreground)
-      final storageProvider = SettingsStorageProvider(
-        token: token,
-        logger: logger,
-      );
-      // Create shared HTTP client (each service borrows it; SDK owns the lifecycle)
-      final sharedHttpClient = httpClient ?? http.Client();
-
-      final settingsService = SettingsService(
-        token: token,
-        logger: logger,
-        httpClient: sharedHttpClient,
-        storageProvider: storageProvider,
-        serverUrl: resolvedServerUrl,
-        // Only ask for the wireframe kill switch when this app opted in.
-        wireframesRequested: options.wireframesOptions != null,
-      );
-
-      // Create upload service with payload serializer
-      final payloadSerializer = PayloadSerializer(token);
-      final uploadService = UploadService(
-        eventQueue: queue,
-        payloadSerializer: payloadSerializer,
-        wifiOnly: options.platformOptions.mobile.wifiOnly,
-        getRemoteEnablementState: () => settingsService.remoteState,
-        flushInterval: options.flushInterval,
-        logger: logger,
-        httpClient: sharedHttpClient,
-        serverUrl: resolvedServerUrl,
-      );
-
-      logger.debug('Internal components created');
-
-      // Create coordinator with all internal components
-      // Note: CaptureScheduler is now owned by FrameMonitor widget
-      logger.debug('Creating coordinator...');
-      final coordinator = SessionReplayCoordinator(
-        screenshotCapturer: screenshotCapturer,
-        eventRecorder: eventRecorder,
-        uploadService: uploadService,
-        settingsService: settingsService,
-        sessionManager: sessionManager,
-        logger: logger,
-        autoRecordSessionsPercent: options.autoRecordSessionsPercent,
-        remoteSettingsMode: options.remoteSettingsMode,
-        debugOptions: options.debugOptions,
-      );
-
-      // Wire up the coordinator and shared HTTP client to the instance
-      instance._coordinator = coordinator;
-      instance._httpClient = sharedHttpClient;
-
-      // Register instance in registry
-      _instances[token] = instance;
-
-      logger.info('Initialization successful!');
-      return InitializationResult.success(instance);
     } catch (e) {
       logger.error('Initialization failed: $e');
       return InitializationResult.failure(
@@ -375,6 +364,7 @@ class MixpanelSessionReplay {
   /// - [RecordingState.notRecording]: Not recording (initial state or after stop)
   /// - [RecordingState.initializing]: Sampling passed, setting up session
   /// - [RecordingState.recording]: Actively capturing screenshots and interactions
+  /// - [RecordingState.paused]: Replay retained, but capture temporarily stopped
   ///
   /// Example:
   /// ```dart
