@@ -185,6 +185,9 @@ jobs:
       - uses: ./.github/actions/setup-flutter
         with:
           flutter-version: ${{ matrix.flutter }}
+      # The SR example is SPM-only (no Podfile); build it the way it's designed.
+      - name: Enable Swift Package Manager
+        run: flutter config --enable-swift-package-manager
       - name: Install dependencies
         run: flutter pub get
         working-directory: packages/mixpanel_flutter_session_replay/example
@@ -349,6 +352,9 @@ jobs:
       - uses: ./.github/actions/setup-flutter
         with:
           flutter-version: ${{ matrix.flutter }}
+      # The SR example is SPM-only (no Podfile); build it the way it's designed.
+      - name: Enable Swift Package Manager
+        run: flutter config --enable-swift-package-manager
       - name: Install dependencies
         run: flutter pub get
         working-directory: packages/mixpanel_flutter_session_replay/example
