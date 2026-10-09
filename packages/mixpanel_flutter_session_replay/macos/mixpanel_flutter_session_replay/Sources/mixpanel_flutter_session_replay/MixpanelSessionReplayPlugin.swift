@@ -1,6 +1,7 @@
 import Cocoa
 import FlutterMacOS
 import ImageIO
+import UniformTypeIdentifiers
 
 public class MixpanelSessionReplayPlugin: NSObject, FlutterPlugin {
     private static let backgroundQueue = DispatchQueue(
@@ -98,7 +99,7 @@ public class MixpanelSessionReplayPlugin: NSObject, FlutterPlugin {
             ]
 
             let data = NSMutableData()
-            guard let destination = CGImageDestinationCreateWithData(data, kUTTypeJPEG, 1, nil) else {
+            guard let destination = CGImageDestinationCreateWithData(data, UTType.jpeg.identifier as CFString, 1, nil) else {
                 DispatchQueue.main.async {
                     result(FlutterError(code: "COMPRESSION_ERROR", message: "JPEG compression failed", details: nil))
                 }
