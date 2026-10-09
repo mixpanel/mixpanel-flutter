@@ -33,8 +33,7 @@ Check out our **[official documentation](https://developer.mixpanel.com/docs/flu
 ### Prerequisites
 
 - [Setup development environment for Flutter](https://flutter.dev/docs/get-started/install)
--  iOS 15.0+ and macOS 12.0+ (the minimums required by Xcode 27). Apps that need to support older iOS or macOS versions should stay on `mixpanel_flutter` 2.x and b
-uild with Xcode 26.
+-  iOS 15.0+ and macOS 12.0+ (the minimums required by Xcode 27). Apps that need to support older iOS or macOS versions should stay on `mixpanel_flutter` 2.x and build with Xcode 26.
 
 ### Steps
 
