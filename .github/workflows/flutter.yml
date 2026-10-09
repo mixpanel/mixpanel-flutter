@@ -174,7 +174,13 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
       - name: Select Xcode ${{ matrix.xcode }}
         run: |
-          sudo xcode-select -s "/Applications/Xcode_${{ matrix.xcode }}.app"
+          XCODE="/Applications/Xcode_${{ matrix.xcode }}.app"
+          if [ ! -d "$XCODE" ]; then
+            echo "::error::$XCODE not found on ${{ matrix.runner }}. Installed Xcode versions:"
+            ls /Applications | grep Xcode
+            exit 1
+          fi
+          sudo xcode-select -s "$XCODE"
           xcodebuild -version
       - uses: ./.github/actions/setup-flutter
         with:
@@ -332,7 +338,13 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
       - name: Select Xcode ${{ matrix.xcode }}
         run: |
-          sudo xcode-select -s "/Applications/Xcode_${{ matrix.xcode }}.app"
+          XCODE="/Applications/Xcode_${{ matrix.xcode }}.app"
+          if [ ! -d "$XCODE" ]; then
+            echo "::error::$XCODE not found on ${{ matrix.runner }}. Installed Xcode versions:"
+            ls /Applications | grep Xcode
+            exit 1
+          fi
+          sudo xcode-select -s "$XCODE"
           xcodebuild -version
       - uses: ./.github/actions/setup-flutter
         with:
