@@ -1,5 +1,12 @@
 # Changelog
 
+## [session-replay-v2.0.0](https://github.com/mixpanel/mixpanel-flutter/tree/session-replay-v2.0.0) (2026-10-13)
+
+### Features
+- support Xcode 27 by raising minimum to iOS 15 / macOS 12 ([#293](https://github.com/mixpanel/mixpanel-flutter/pull/293))
+
+[Full Changelog](https://github.com/mixpanel/mixpanel-flutter/compare/session-replay-v1.2.0...session-replay-v2.0.0)
+
 ## [session-replay-v1.2.0](https://github.com/mixpanel/mixpanel-flutter/tree/session-replay-v1.2.0) (2026-09-17)
 
 ### Features
