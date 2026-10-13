@@ -1,6 +1,6 @@
 # Mixpanel Flutter Session Replay
 
-##### _September 17, 2026_ - [session-replay-v1.2.0](https://github.com/mixpanel/mixpanel-flutter/releases/tag/session-replay-v1.2.0)
+##### _October 13, 2026_ - [session-replay-v2.0.0](https://github.com/mixpanel/mixpanel-flutter/releases/tag/session-replay-v2.0.0)
 
 ## Overview
 
@@ -95,13 +95,21 @@ interactions and wireframes are scaled into those same pixels, so the player
 positions pointers and elements against the frame it renders. Native platforms
 retain their existing 1:1 logical capture resolution.
 
+If your app uses CocoaPods, set `platform :ios, '15.0'` in `ios/Podfile` and `platform :osx, '12.0'` in `macos/Podfile`, or `pod install` will fail.
+
+### iOS and macOS support policy
+
+We add support for each new Xcode's minimum deployment target promptly after its release, and drop the previous minimum only when Apple's App Store SDK requirement forces it.
+
+Version 2.x requires iOS 15.0+ and macOS 12.0+, and builds with Xcode 26 or Xcode 27 (Xcode 27 requires Flutter 3.47+). If you need to support older iOS or macOS versions, stay on 1.x and build with Xcode 26. 1.x receives security and critical fixes until Apple requires the iOS 27 SDK for App Store submissions (April 2027).
+
 ## Installation
 
 Add to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  mixpanel_flutter_session_replay: 1.2.0
+  mixpanel_flutter_session_replay: 2.0.0
 ```
 
 ## Initialize
