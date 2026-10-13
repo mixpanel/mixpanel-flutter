@@ -1,5 +1,12 @@
 # Changelog
 
+## [v3.0.0](https://github.com/mixpanel/mixpanel-flutter/tree/v3.0.0) (2026-10-13)
+
+### Features
+- support Xcode 27 by raising minimum to iOS 15 / macOS 12 ([#292](https://github.com/mixpanel/mixpanel-flutter/pull/292))
+
+[Full Changelog](https://github.com/mixpanel/mixpanel-flutter/compare/v2.15.0...v3.0.0)
+
 ## [v2.15.0](https://github.com/mixpanel/mixpanel-flutter/tree/v2.15.0) (2026-10-07)
 
 ### Features
