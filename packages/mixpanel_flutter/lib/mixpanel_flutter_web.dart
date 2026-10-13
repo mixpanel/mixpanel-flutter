@@ -1,11 +1,14 @@
 import 'dart:async';
+import 'dart:developer' as developer;
 import 'dart:js_interop';
+import 'dart:js_interop_unsafe';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_web_plugins/flutter_web_plugins.dart';
 import 'package:mixpanel_flutter/src/version.dart';
 import 'package:mixpanel_flutter/web/mixpanel_js_bindings.dart';
+import 'package:mixpanel_flutter_common/mixpanel_flutter_common.dart';
 
 /// Safely converts Dart values to JavaScript-compatible types for web interop.
 ///
@@ -67,6 +70,34 @@ JSAny? safeJsify(dynamic value) {
 
 /// A web implementation of the MixpanelFlutter plugin.
 class MixpanelFlutterPlugin {
+  static bool _eventBridgeActive = false;
+
+  // Installed through init config because the web snippet queues init while
+  // the full JS library loads, but does not stub add_hook.
+  static final JSFunction _onTrackHook =
+      ((JSAny? eventName, JSAny? properties) {
+    if (_eventBridgeActive) {
+      // Typed loosely and converted inside the try: with dart2wasm a
+      // parameter typed JSString would fail its conversion before the try,
+      // and the error would reach mixpanel-js's track().
+      try {
+        final name = (eventName as JSString).toDart;
+        final decoded = properties?.dartify();
+        // ignore: invalid_use_of_internal_member
+        MixpanelEventBridge.notifyListeners(
+          eventName: name,
+          properties:
+              decoded is Map ? Map<String, Object?>.from(decoded) : null,
+        );
+      } catch (error) {
+        // An observer must never interrupt Mixpanel's track call.
+        developer.log('Event bridge failed: $error', name: 'Mixpanel');
+      }
+    }
+    // on_track is a transform hook: return the original event untouched.
+    return <JSAny?>[eventName, properties].toJS;
+  }).toJS;
+
   static final Map<String, String> _mixpanelProperties = {
     '\$lib_version': sdkVersion,
     'mp_lib': 'flutter',
@@ -91,6 +122,12 @@ class MixpanelFlutterPlugin {
     switch (call.method) {
       case 'initialize':
         initialize(call);
+        break;
+      case 'startEventBridge':
+        _eventBridgeActive = true;
+        break;
+      case 'stopEventBridge':
+        _eventBridgeActive = false;
         break;
       case 'setServerURL':
         handleSetServerURL(call);
@@ -251,7 +288,25 @@ class MixpanelFlutterPlugin {
       }
     }
 
-    init(token, safeJsify(initConfig));
+    final jsConfig = safeJsify(initConfig) as JSObject;
+    // Under dart2wasm `is JSObject` is true for any non-null JS value, so a
+    // string or number in `hooks` would reach setProperty and throw out of
+    // init() to the caller. Check the JS type instead, and never let hook
+    // installation take down initialization.
+    final hooks = jsConfig.getProperty<JSAny?>('hooks'.toJS);
+    final JSObject jsHooks = (hooks != null && hooks.typeofEquals('object'))
+        ? hooks as JSObject
+        : <String, Object?>{}.jsify() as JSObject;
+    try {
+      jsHooks.setProperty('on_track'.toJS, _onTrackHook);
+      jsConfig.setProperty('hooks'.toJS, jsHooks);
+    } catch (e) {
+      developer.log(
+        '`init` could not install the on_track hook: $e',
+        name: 'Mixpanel',
+      );
+    }
+    init(token, jsConfig);
   }
 
   void handleSetServerURL(MethodCall call) {
@@ -327,7 +382,11 @@ class MixpanelFlutterPlugin {
   void handleRegisterSuperProperties(MethodCall call) {
     Map<Object?, Object?> args = call.arguments as Map<Object?, Object?>;
     dynamic properties = args['properties'];
-    register(safeJsify(properties));
+    if (args['persistent'] == false) {
+      register(safeJsify(properties), safeJsify({'persistent': false}));
+    } else {
+      register(safeJsify(properties));
+    }
   }
 
   void handleRegisterSuperPropertiesOnce(MethodCall call) {
@@ -339,7 +398,11 @@ class MixpanelFlutterPlugin {
   void handleUnregisterSuperProperty(MethodCall call) {
     Map<Object?, Object?> args = call.arguments as Map<Object?, Object?>;
     String propertyName = args['propertyName'] as String;
-    unregister(propertyName);
+    if (args['persistent'] == false) {
+      unregister(propertyName, safeJsify({'persistent': false}));
+    } else {
+      unregister(propertyName);
+    }
   }
 
   void handleTimeEvent(MethodCall call) {
