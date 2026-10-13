@@ -555,6 +555,60 @@ void main() {
         // WHEN / THEN - should not throw
         coordinator.onAppBackgrounded();
       });
+
+      test('ends a paused replay when the settings check fails', () async {
+        // GIVEN a settings check that fails outright. A network failure is
+        // not enough: fetchRemoteSettings() falls back to cached values, so
+        // only the cache read failing reaches the coordinator's catchError.
+        settingsService = _ThrowingSettingsService(
+          storageProvider: storageProvider,
+          logger: logger,
+        );
+        final coordinator = createCoordinator(
+          remoteSettingsMode: RemoteSettingsMode.strict,
+          lifecyclePolicy: const PauseOnBackground(
+            idleTimeout: Duration(minutes: 30),
+          ),
+        );
+
+        // WHEN a replay starts and pauses while that check is in flight
+        coordinator.onAppForegrounded();
+        coordinator.startRecording(sessionsPercent: 100);
+        coordinator.onAppBackgrounded();
+        expect(coordinator.recordingState, RecordingState.paused);
+        await pumpEventQueue();
+
+        // THEN the replay ends rather than staying paused. startRecording
+        // only runs from notRecording, so a pause nothing can resume would
+        // silence the SDK for the life of the app.
+        expect(coordinator.recordingState, RecordingState.notRecording);
+      });
+
+      test('ends a paused replay on a later foreground', () async {
+        // GIVEN the same failure, but the app returns to the foreground
+        // before anything else ends the replay
+        settingsService = _ThrowingSettingsService(
+          storageProvider: storageProvider,
+          logger: logger,
+        );
+        final coordinator = createCoordinator(
+          remoteSettingsMode: RemoteSettingsMode.strict,
+          lifecyclePolicy: const PauseOnBackground(
+            idleTimeout: Duration(minutes: 30),
+          ),
+        );
+        coordinator.onAppForegrounded();
+        coordinator.startRecording(sessionsPercent: 100);
+        coordinator.onAppBackgrounded();
+        await pumpEventQueue();
+        coordinator.onAppForegrounded();
+        await pumpEventQueue();
+
+        // THEN the replay is not left paused. It stays stopped while the
+        // remote verdict says disabled, but in a state startRecording can
+        // act on once that verdict changes, rather than a dead pause.
+        expect(coordinator.recordingState, RecordingState.notRecording);
+      });
     });
 
     group('onAppForegrounded', () {
@@ -2201,4 +2255,24 @@ class _PausingMetadataEventQueue extends InMemoryEventQueue {
   void releaseMetadata() {
     if (!_metadataGate.isCompleted) _metadataGate.complete();
   }
+}
+
+/// A settings service whose check fails outright, which is the only way the
+/// coordinator's catchError is reached: a network failure alone is absorbed
+/// by the cached-value fallback inside [SettingsService].
+class _ThrowingSettingsService extends SettingsService {
+  _ThrowingSettingsService({
+    required super.storageProvider,
+    required super.logger,
+  }) : super(token: 'test-token', httpClient: _NeverCalledClient());
+
+  @override
+  Future<RemoteSettingsResult> fetchRemoteSettings() async =>
+      throw StateError('settings unavailable');
+}
+
+class _NeverCalledClient extends http.BaseClient {
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) =>
+      throw UnsupportedError('no request should be made');
 }

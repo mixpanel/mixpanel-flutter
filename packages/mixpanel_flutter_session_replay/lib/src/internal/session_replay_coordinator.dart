@@ -610,6 +610,7 @@ class SessionReplayCoordinator implements WidgetCoordinator {
                 'coordinator',
               );
               _remoteEnablementState = RemoteEnablementState.disabled;
+              _stopIfPaused('settings check failed');
             });
 
       case RemoteEnablementState.enabled:
@@ -620,6 +621,7 @@ class SessionReplayCoordinator implements WidgetCoordinator {
           'Recording remotely disabled, not starting recording',
           tag: 'coordinator',
         );
+        _stopIfPaused('recording remotely disabled');
     }
   }
 
@@ -994,6 +996,7 @@ class SessionReplayCoordinator implements WidgetCoordinator {
         'Cannot resume recording - recording remotely disabled',
         tag: 'coordinator',
       );
+      _stopIfPaused('recording remotely disabled');
       return;
     }
 
@@ -1037,6 +1040,19 @@ class SessionReplayCoordinator implements WidgetCoordinator {
   /// Also flushes pending events to ensure data is uploaded (matches iOS behavior).
   void stopRecording({bool cancelPendingResume = true}) =>
       _stop(_StopReason.requested, cancelPendingResume: cancelPendingResume);
+
+  /// Ends a paused replay that can no longer be resumed.
+  ///
+  /// [startRecording] only runs from [RecordingState.notRecording], so a
+  /// replay left paused is not merely idle: nothing can restart recording for
+  /// the life of the app. Every path that decides a paused replay will not
+  /// resume routes through here rather than returning and leaving the state
+  /// behind.
+  void _stopIfPaused(String reason) {
+    if (_recordingState != RecordingState.paused) return;
+    _logger.info('Ending paused replay: $reason', tag: 'coordinator');
+    stopRecording();
+  }
 
   void _stop(_StopReason reason, {bool cancelPendingResume = true}) {
     // Check if disposed first
