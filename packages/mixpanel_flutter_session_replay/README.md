@@ -23,6 +23,14 @@ Session Replay provides powerful insights into user behavior, but it also introd
 | Android  | API 24 (7.0+)  |
 | macOS    | 12.0+          |
 
+If your app uses CocoaPods, set `platform :ios, '15.0'` in `ios/Podfile` and `platform :osx, '12.0'` in `macos/Podfile`, or `pod install` will fail.
+
+### iOS and macOS support policy
+
+We add support for each new Xcode's minimum deployment target promptly after its release, and drop the previous minimum only when Apple's App Store SDK requirement forces it.
+
+Version 2.x requires iOS 15.0+ and macOS 12.0+, and builds with Xcode 26 or Xcode 27 (Xcode 27 requires Flutter 3.47+). If you need to support older iOS or macOS versions, stay on 1.x and build with Xcode 26. 1.x receives security and critical fixes until Apple requires the iOS 27 SDK for App Store submissions (April 2027).
+
 ## Installation
 
 Add to your `pubspec.yaml`:
