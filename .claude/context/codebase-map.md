@@ -71,11 +71,11 @@ mixpanel-flutter/
 - **android/build.gradle**: Android build configuration
   - compileSdk: 34
   - minSdk: 21
-  - Mixpanel Android SDK: v8.2.0
+  - Mixpanel Android SDK: v8.11.1
 
 - **ios/mixpanel_flutter.podspec**: iOS pod configuration
-  - iOS deployment target: 12.0
-  - Mixpanel-swift dependency: 6.4.0
+  - iOS deployment target: 15.0
+  - Mixpanel-swift dependency: 7.0.0
   - Swift version: 5.0
 
 - **analysis_options.yaml**: Dart static analysis rules
@@ -109,7 +109,7 @@ mixpanel-flutter/
 - Uses Swift for platform channel implementation
 - Custom `MixpanelTypeHandler` for type conversion
 - Direct integration with Mixpanel-swift pod
-- Requires iOS 12.0+
+- Requires iOS 15.0+
 
 ### Web
 - Pure Dart implementation using JS interop

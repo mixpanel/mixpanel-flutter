@@ -22,6 +22,8 @@ jobs:
           flutter-version: "3.41.0"
       - run: flutter pub get
       - run: flutter test
+      # Autocapture runs in Dart on web too; exercise that path in Chrome.
+      - run: flutter test --platform chrome test/autocapture
       - run: flutter analyze --no-pub --no-current-package --no-fatal-infos lib
 
   test-common:
@@ -51,17 +53,40 @@ jobs:
         working-directory: packages/mixpanel_flutter/example
         run: flutter build apk
 
+  # iOS/macOS jobs run once per supported Xcode. Xcode 27 legs need Flutter
+  # 3.47+ (Xcode 27 `lipo -verify_arch` fix, flutter/flutter#188461).
   test-ios-integration:
-    runs-on: macos-latest
+    name: iOS Integration (Xcode ${{ matrix.xcode }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - xcode: "26.6"
+            runner: macos-26
+            flutter: "3.41.0"
+          - xcode: "27.0"
+            runner: xcode-27
+            flutter: "3.47.7"
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+      - name: Select Xcode ${{ matrix.xcode }}
+        run: |
+          XCODE="/Applications/Xcode_${{ matrix.xcode }}.app"
+          if [ ! -d "$XCODE" ]; then
+            echo "::error::$XCODE not found on ${{ matrix.runner }}. Installed Xcode versions:"
+            ls /Applications | grep Xcode
+            exit 1
+          fi
+          sudo xcode-select -s "$XCODE"
+          xcodebuild -version
       - uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9  # v4
         with:
           java-version: "17"
           distribution: 'temurin'
       - uses: ./.github/actions/setup-flutter
         with:
-          flutter-version: "3.41.0"
+          flutter-version: ${{ matrix.flutter }}
       - name: Clean
         working-directory: packages/mixpanel_flutter/example
         run: flutter clean
@@ -76,12 +101,33 @@ jobs:
         run: flutter build ios --debug --simulator --no-codesign
 
   test-macos-integration:
-    runs-on: macos-26
+    name: macOS Integration (Xcode ${{ matrix.xcode }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - xcode: "26.6"
+            runner: macos-26
+            flutter: "3.41.0"
+          - xcode: "27.0"
+            runner: xcode-27
+            flutter: "3.47.7"
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+      - name: Select Xcode ${{ matrix.xcode }}
+        run: |
+          XCODE="/Applications/Xcode_${{ matrix.xcode }}.app"
+          if [ ! -d "$XCODE" ]; then
+            echo "::error::$XCODE not found on ${{ matrix.runner }}. Installed Xcode versions:"
+            ls /Applications | grep Xcode
+            exit 1
+          fi
+          sudo xcode-select -s "$XCODE"
+          xcodebuild -version
       - uses: ./.github/actions/setup-flutter
         with:
-          flutter-version: "3.41.0"
+          flutter-version: ${{ matrix.flutter }}
       - name: Clean
         working-directory: packages/mixpanel_flutter/example
         run: flutter clean
@@ -297,16 +343,41 @@ jobs:
             ${{ runner.temp }}/webdriver.log
           if-no-files-found: warn
 
+  # SR iOS/macOS integration runs once per supported Xcode. Xcode 27 legs need
+  # Flutter 3.47+ (Xcode 27 `lipo -verify_arch` fix, flutter/flutter#188461).
   test-session-replay-ios-integration:
-    name: SR Integration Tests (iOS Simulator)
+    name: SR Integration Tests (iOS Simulator, Xcode ${{ matrix.xcode }})
     needs: [compat-check-session-replay, test-session-replay]
-    runs-on: macos-26
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - xcode: "26.6"
+            runner: macos-26
+            flutter: "3.41.2"
+          - xcode: "27.0"
+            runner: xcode-27
+            flutter: "3.47.7"
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+      - name: Select Xcode ${{ matrix.xcode }}
+        run: |
+          XCODE="/Applications/Xcode_${{ matrix.xcode }}.app"
+          if [ ! -d "$XCODE" ]; then
+            echo "::error::$XCODE not found on ${{ matrix.runner }}. Installed Xcode versions:"
+            ls /Applications | grep Xcode
+            exit 1
+          fi
+          sudo xcode-select -s "$XCODE"
+          xcodebuild -version
       - uses: ./.github/actions/setup-flutter
         with:
-          flutter-version: '3.41.2'
+          flutter-version: ${{ matrix.flutter }}
+      # The SR example is SPM-only (no Podfile); build it the way it's designed.
+      - name: Enable Swift Package Manager
+        run: flutter config --enable-swift-package-manager
       - name: Install dependencies
         run: flutter pub get
         working-directory: packages/mixpanel_flutter_session_replay/example
@@ -442,15 +513,38 @@ jobs:
             flutter test integration_test/run_all_test.dart --timeout 20m --ignore-timeouts --dart-define=MIXPANEL_TOKEN="${{ secrets.MIXPANEL_TOKEN }}"
 
   test-session-replay-macos-integration:
-    name: SR Integration Tests (macOS Desktop)
+    name: SR Integration Tests (macOS Desktop, Xcode ${{ matrix.xcode }})
     needs: [compat-check-session-replay, test-session-replay]
-    runs-on: macos-26
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - xcode: "26.6"
+            runner: macos-26
+            flutter: "3.41.2"
+          - xcode: "27.0"
+            runner: xcode-27
+            flutter: "3.47.7"
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+      - name: Select Xcode ${{ matrix.xcode }}
+        run: |
+          XCODE="/Applications/Xcode_${{ matrix.xcode }}.app"
+          if [ ! -d "$XCODE" ]; then
+            echo "::error::$XCODE not found on ${{ matrix.runner }}. Installed Xcode versions:"
+            ls /Applications | grep Xcode
+            exit 1
+          fi
+          sudo xcode-select -s "$XCODE"
+          xcodebuild -version
       - uses: ./.github/actions/setup-flutter
         with:
-          flutter-version: '3.41.2'
+          flutter-version: ${{ matrix.flutter }}
+      # The SR example is SPM-only (no Podfile); build it the way it's designed.
+      - name: Enable Swift Package Manager
+        run: flutter config --enable-swift-package-manager
       - name: Install dependencies
         run: flutter pub get
         working-directory: packages/mixpanel_flutter_session_replay/example
