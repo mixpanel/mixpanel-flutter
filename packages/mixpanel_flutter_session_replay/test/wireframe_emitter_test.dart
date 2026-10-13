@@ -59,7 +59,7 @@ void main() {
 
   group('WireframeEmitter — image space', () {
     test('scales bounds and viewport into a downscaled frame', () {
-      // GIVEN a 400x800 viewport encoded as a 300x600 raster
+      // GIVEN a 400x800 viewport the acquirer encoded at 0.75x (300x600)
       final emitter = WireframeEmitter(
         sensitiveRules: const [],
         debugEmitter: null,
@@ -73,7 +73,7 @@ void main() {
         ],
         maskRegions: const [],
         viewport: defaultViewport,
-        imageSize: const Size(300, 600),
+        imageScale: const Offset(0.75, 0.75),
         timestamp: defaultTimestamp,
       );
 
@@ -104,7 +104,7 @@ void main() {
           MaskRegionInfo(const Rect.fromLTWH(40, 80, 200, 40), MaskSource.auto),
         ],
         viewport: defaultViewport,
-        imageSize: const Size(300, 600),
+        imageScale: const Offset(0.75, 0.75),
         timestamp: defaultTimestamp,
       );
 

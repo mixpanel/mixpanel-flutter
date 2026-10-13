@@ -4,7 +4,6 @@ import '../../models/masking_directive.dart';
 import '../../models/session_event.dart';
 import '../../models/wireframe.dart';
 import '../../models/wireframes_options.dart';
-import '../capture/image_scale.dart';
 import '../logger.dart';
 
 /// Post-processes raw wireframe elements (from the [MaskDetector] walk)
@@ -91,13 +90,14 @@ class WireframeEmitter {
   /// empty [rawElements] list still yields a payload.
   ///
   /// [rawElements] and [maskRegions] are in logical pixels; the payload ships
-  /// in the pixels of the encoded frame, [imageSize], which defaults to
-  /// [viewport] for the 1:1 captures every native platform makes.
+  /// in the pixels of the encoded frame. [imageScale] is how many of those
+  /// pixels there are per logical pixel, as reported by the acquirer that
+  /// produced the frame, and defaults to the 1:1 captures native makes.
   WireframePayload? emit({
     required List<WireframeElement> rawElements,
     required List<MaskRegionInfo> maskRegions,
     required Size viewport,
-    Size? imageSize,
+    Offset imageScale = const Offset(1, 1),
     required DateTime timestamp,
     String? sessionId,
   }) {
@@ -118,15 +118,13 @@ class WireframeEmitter {
     // Bounds are measured in logical pixels but ship in image pixels, the
     // space the screenshot and its metadata are in, so a downscaled web
     // raster keeps elements aligned with the frame they describe.
-    final image = imageSize ?? viewport;
-    final scale = imageScaleFor(viewport: viewport, image: image);
     final payload = WireframePayload(
-      viewportWidth: image.width.round(),
-      viewportHeight: image.height.round(),
-      elements: scale == const Offset(1, 1)
+      viewportWidth: (viewport.width * imageScale.dx).round(),
+      viewportHeight: (viewport.height * imageScale.dy).round(),
+      elements: imageScale == const Offset(1, 1)
           ? processed
           : processed
-                .map((el) => _scaleBounds(el, scale))
+                .map((el) => _scaleBounds(el, imageScale))
                 .toList(growable: false),
     );
 

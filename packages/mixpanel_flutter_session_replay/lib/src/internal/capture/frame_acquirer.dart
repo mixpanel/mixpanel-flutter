@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:typed_data';
-import 'dart:ui' show Rect, Size;
+import 'dart:ui' show Offset, Rect, Size;
 
 import 'package:flutter/rendering.dart' show RenderRepaintBoundary;
 
@@ -101,11 +101,23 @@ final class AcquiredFrame extends FrameAcquisition {
   /// When the pixels were taken.
   final DateTime capturedAt;
 
+  /// Image pixels per logical pixel for [data], as `Offset(x, y)`.
+  ///
+  /// Replay coordinates — metadata, interactions and wireframes — ship in
+  /// image pixels, so each acquirer reports how its own pixels relate to the
+  /// render tree instead of letting callers infer it from [width] and
+  /// [height]. A raster rounded up to whole pixels is not a scaled one:
+  /// `toImage(pixelRatio: 1)` leaves content at logical coordinates and only
+  /// pads the canvas, so it reports exactly `Offset(1, 1)` even when its
+  /// raster is a fraction of a pixel larger than the viewport.
+  final Offset imageScale;
+
   const AcquiredFrame({
     required this.data,
     required this.width,
     required this.height,
     required this.capturedAt,
+    required this.imageScale,
   });
 }
 

@@ -1,6 +1,6 @@
 import 'dart:math' as math;
 import 'dart:typed_data';
-import 'dart:ui' show Size;
+import 'dart:ui' show Offset, Size;
 
 import 'package:clock/clock.dart';
 
@@ -128,11 +128,17 @@ class RenderedSurfaceFrameAcquirer extends FrameAcquirer {
     ).clamp(0, _surface.maximumCapturePixelRatio).toDouble();
     final width = (logicalSize.width * ratio).ceil();
     final height = (logicalSize.height * ratio).ceil();
+    // The surface is drawn into exactly width x height, so its content is
+    // genuinely stretched by this ratio — the ceil above included.
+    final imageScale = Offset(
+      width / logicalSize.width,
+      height / logicalSize.height,
+    );
     final maskRects =
         scaleMaskRegions(
               request.maskRegions,
-              scaleX: width / logicalSize.width,
-              scaleY: height / logicalSize.height,
+              scaleX: imageScale.dx,
+              scaleY: imageScale.dy,
             )
             .where((region) => region.source != MaskSource.unmask)
             .map((region) => region.bounds)
@@ -176,6 +182,7 @@ class RenderedSurfaceFrameAcquirer extends FrameAcquirer {
       width: width,
       height: height,
       capturedAt: capturedAt,
+      imageScale: imageScale,
     );
   }
 

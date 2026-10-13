@@ -231,6 +231,74 @@ void main() {
       expect(compressor.pixelAt(159, 20), [0xcc, 0xcc, 0xcc, 0xff]);
     });
 
+    testWidgets('keeps native coordinates unscaled when toImage rounds the '
+        'raster up', (tester) async {
+      // GIVEN a boundary 411.43 logical pixels wide, as on a device with a
+      // fractional device pixel ratio. toImage(pixelRatio: 1) rounds its
+      // raster up to 412 without stretching the content inside it.
+      await loadTestFont();
+      final key = GlobalKey();
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ThemeData(fontFamily: 'Roboto'),
+          home: Align(
+            alignment: Alignment.topLeft,
+            child: RepaintBoundary(
+              key: key,
+              child: const SizedBox(
+                width: 411.43,
+                height: 100,
+                child: ColoredBox(color: Colors.white, child: Text('Sign in')),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      final element = key.currentContext! as Element;
+      final boundary = element.findRenderObject()! as RenderRepaintBoundary;
+      final logger = MixpanelLogger(LogLevel.none);
+      final capturer = ScreenshotCapturer(
+        directive: MaskingDirective(autoMaskTypes: const {}),
+        logger: logger,
+        debugOverlayEnabled: false,
+        frameAcquirer: ToImageFrameAcquirer(
+          DartPngCompressor(),
+          logger: logger,
+        ),
+        wireframeEmitter: WireframeEmitter(
+          sensitiveRules: const [],
+          debugEmitter: null,
+          logger: logger,
+        ),
+      );
+      capturer.applyRemoteWireframeVerdict(isEnabled: true);
+
+      // WHEN the frame is captured
+      final pending = tester.runAsync(
+        () => capturer.capture(
+          boundary,
+          boundaryElement: element,
+          getCurrentSession: SessionManager().getCurrentSession,
+          getDistinctId: () => 'screenshot-capturer-test-distinct-id',
+        ),
+      );
+      await tester.pump();
+      final result = await pending;
+
+      // THEN the padded raster is reported as-is, but the frame carries a
+      // 1:1 scale, so touches, drags and wireframes are not stretched by the
+      // 412/411.43 rounding the way deriving the scale from sizes would.
+      expect(result, isA<CaptureSuccess>());
+      final success = result! as CaptureSuccess;
+      expect(success.width, 412);
+      // Asserted per axis: Offset.toString() rounds to one decimal, so a
+      // derived 412/411.43 scale also prints as Offset(1.0, 1.0).
+      expect(success.imageScale.dx, 1.0);
+      expect(success.imageScale.dy, 1.0);
+      expect(success.wireframes!.viewportWidth, 411);
+    });
+
     testWidgets('native capture does not re-walk masks after toImage', (
       tester,
     ) async {

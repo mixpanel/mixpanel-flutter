@@ -134,6 +134,9 @@ class ToImageFrameAcquirer extends FrameAcquirer {
       width: width,
       height: height,
       capturedAt: capturedAt,
+      // toImage(pixelRatio: 1) rounds the raster up without stretching what
+      // it holds, so replay coordinates stay in logical pixels.
+      imageScale: const ui.Offset(1, 1),
     );
   }
 

@@ -7,7 +7,6 @@ import '../models/configuration.dart';
 import '../models/results.dart';
 import '../models/masking_directive.dart';
 import '../models/session_event.dart';
-import 'capture/image_scale.dart';
 import 'masking/mask_detector.dart';
 import '../models/session.dart';
 import 'wireframe/wireframe_emitter.dart';
@@ -238,14 +237,18 @@ class ScreenshotCapturer {
       switch (acquisition) {
         case FrameRejected(:final failure):
           return failure;
-        case AcquiredFrame(:final data, :final width, :final height):
+        case AcquiredFrame(
+          :final data,
+          :final width,
+          :final height,
+          :final imageScale,
+        ):
           final timestamp = acquisition.capturedAt;
-          final imageSize = Size(width.toDouble(), height.toDouble());
           final wireframePayload = _emitWireframes(
             maskResult: maskResult,
             maskRegions: maskRegions,
             viewport: logicalSize,
-            imageSize: imageSize,
+            imageScale: imageScale,
             timestamp: timestamp,
             sessionId: sessionId,
           );
@@ -259,7 +262,7 @@ class ScreenshotCapturer {
             data: data,
             width: width,
             height: height,
-            imageScale: imageScaleFor(viewport: logicalSize, image: imageSize),
+            imageScale: imageScale,
             maskCount: maskRegions.length,
             timestamp: timestamp,
             maskRegions: maskRegions,
@@ -308,7 +311,7 @@ class ScreenshotCapturer {
     required MaskDetectionResult maskResult,
     required List<MaskRegionInfo> maskRegions,
     required Size viewport,
-    required Size imageSize,
+    required Offset imageScale,
     required DateTime timestamp,
     required String? sessionId,
   }) {
@@ -322,7 +325,7 @@ class ScreenshotCapturer {
             rawElements: rawWireframes,
             maskRegions: maskRegions,
             viewport: viewport,
-            imageSize: imageSize,
+            imageScale: imageScale,
             timestamp: timestamp,
             sessionId: sessionId,
           )
