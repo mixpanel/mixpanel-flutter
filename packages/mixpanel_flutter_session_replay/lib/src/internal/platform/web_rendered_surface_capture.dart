@@ -301,7 +301,14 @@ class _SurfaceLookup {
     void addCanvases(web.NodeList matches) {
       for (var index = 0; index < matches.length; index++) {
         final canvas = matches.item(index) as web.HTMLCanvasElement?;
-        if (canvas != null && !canvases.contains(canvas)) {
+        // The engine appends every flt-platform-view to the glass pane's
+        // light DOM, so an HtmlElementView holding a viewport-sized canvas
+        // (a map, a game, a document viewer) would otherwise be mistaken for
+        // Flutter's own surface. closest() stops at the shadow boundary, so
+        // a canvas the engine owns is never rejected here.
+        if (canvas != null &&
+            canvas.closest('flt-platform-view') == null &&
+            !canvases.contains(canvas)) {
           canvases.add(canvas);
         }
       }

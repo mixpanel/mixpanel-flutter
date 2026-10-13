@@ -625,6 +625,60 @@ void main() {
     },
   );
 
+  test('ignores a viewport-sized canvas inside a platform view', () async {
+    // GIVEN Flutter's own surface (red) and, beside it in the engine host's
+    // light DOM, a platform view holding a canvas of the same size (blue) —
+    // the shape an HtmlElementView map or document viewer takes.
+    final canvas = _appendCanvas(
+      logicalWidth: 63,
+      logicalHeight: 45,
+      backingWidth: 63,
+      backingHeight: 45,
+    );
+    addTearDown(() => _removeCanvasHost(canvas));
+    final context = canvas.getContext('2d')! as web.CanvasRenderingContext2D;
+    context.fillStyle = '#ff0000'.toJS;
+    context.fillRect(0, 0, canvas.width, canvas.height);
+
+    final platformView = web.document.createElement('flt-platform-view');
+    final embedded = _createCanvas(
+      logicalWidth: 63,
+      logicalHeight: 45,
+      backingWidth: 63,
+      backingHeight: 45,
+    );
+    platformView.appendChild(embedded);
+    canvas.parentNode!.appendChild(platformView);
+    addTearDown(() => platformView.remove());
+    final embeddedContext =
+        embedded.getContext('2d')! as web.CanvasRenderingContext2D;
+    embeddedContext.fillStyle = '#0000ff'.toJS;
+    embeddedContext.fillRect(0, 0, embedded.width, embedded.height);
+
+    final capture = WebRenderedSurfaceCapture(
+      logger: MixpanelLogger(LogLevel.none),
+      jpegQuality: 1,
+    );
+    addTearDown(capture.dispose);
+    await capture.initialize();
+
+    // WHEN the frame is captured
+    final result = await _captureAndEncode(
+      capture,
+      logicalSize: const Size(63, 45),
+      outputWidth: 63,
+      outputHeight: 45,
+    );
+
+    // THEN the embedded canvas is not a capture candidate: the composition
+    // stays unambiguous and Flutter's surface is what lands in the replay,
+    // so platform-view pixels are never uploaded.
+    expect(result, isNotNull);
+    final pixel = img.decodeJpg(result!)!.getPixel(31, 22);
+    expect(pixel.r, greaterThan(240));
+    expect(pixel.b, lessThan(15));
+  });
+
   test(
     'skips a platform-view composition split across canvases and recovers',
     () async {
