@@ -664,8 +664,17 @@ class SessionReplayCoordinator implements WidgetCoordinator {
   void _startOrResumeRecording() {
     final pending = _persistence.takeResumable();
     if (pending != null) {
-      if (!pending.isExpired(_lifetime.maximumDuration)) {
-        restorePersistedReplay(pending.session, idleExpiry: pending.idleExpiry);
+      // Checked here, not at page load: remote settings have been applied
+      // by now, so a shortened remote idle timeout is in force.
+      if (!pending.isExpired(
+        _lifetime.maximumDuration,
+        idleTimeout: _lifetime.idleTimeout,
+      )) {
+        restorePersistedReplay(
+          pending.session,
+          idleExpiry: pending.idleExpiry,
+          lastActivity: pending.lastActivity,
+        );
         return;
       }
       _persistence.expire(pending.session.id);
@@ -1159,7 +1168,11 @@ class SessionReplayCoordinator implements WidgetCoordinator {
   /// in IndexedDB. Restores the session without creating a new one or
   /// re-rolling sampling.
   @visibleForTesting
-  void restorePersistedReplay(Session session, {DateTime? idleExpiry}) {
+  void restorePersistedReplay(
+    Session session, {
+    DateTime? idleExpiry,
+    DateTime? lastActivity,
+  }) {
     if (_isDisposed) return;
 
     _logger.info('Resuming session: ${session.id}', tag: 'coordinator');
@@ -1175,7 +1188,7 @@ class SessionReplayCoordinator implements WidgetCoordinator {
 
     _recordingState = RecordingState.recording;
     _uploadService.startAutoFlush();
-    _lifetime.restoreIdleWindow(idleExpiry);
+    _lifetime.restoreIdleWindow(idleExpiry, lastActivity: lastActivity);
     _writeDeadlinesNow();
   }
 

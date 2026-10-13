@@ -38,6 +38,10 @@ class SessionLifetime {
   bool get hasLimits => _maximumDuration != null;
 
   Duration? get maximumDuration => _maximumDuration;
+
+  /// The idle timeout in force now, which is the remote value once
+  /// settings have been applied. Null when idle expiry is disabled.
+  Duration? get idleTimeout => _idleTimer?.timeout;
   DateTime? get maximumExpiry => _maximumExpiry;
   bool get hasMaximumTimer => _maximumTimer?.isActive ?? false;
   bool get needsIdleWindow => _idleTimer != null && _idleExpiry == null;
@@ -90,16 +94,26 @@ class SessionLifetime {
     timer.resetWith(remaining.isNegative ? Duration.zero : remaining);
   }
 
-  void restoreIdleWindow(DateTime? storedDeadline) {
+  void restoreIdleWindow(DateTime? storedDeadline, {DateTime? lastActivity}) {
     final timeout = _idleTimer?.timeout;
-    final localDeadline = timeout == null ? null : clock.now().add(timeout);
+    // The earliest of: the deadline stored at page load, the window the
+    // current timeout allows from the last input, and a full window from
+    // now. The middle term is what honors a timeout that shrank after the
+    // stored deadline was written; the last bounds a record with no
+    // activity time.
+    final candidates = <DateTime>[
+      ?storedDeadline,
+      if (timeout != null) ...[
+        clock.now().add(timeout),
+        ?lastActivity?.add(timeout),
+      ],
+    ];
+    if (candidates.isEmpty) {
+      recordActivity();
+      return;
+    }
     recordActivity(
-      deadline:
-          storedDeadline != null &&
-              localDeadline != null &&
-              storedDeadline.isBefore(localDeadline)
-          ? storedDeadline
-          : localDeadline,
+      deadline: candidates.reduce((a, b) => a.isBefore(b) ? a : b),
     );
   }
 

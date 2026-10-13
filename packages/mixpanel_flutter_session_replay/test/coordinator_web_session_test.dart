@@ -287,6 +287,55 @@ void main() {
         },
       );
 
+      test('does not resume a replay a shortened remote timeout already '
+          'ended', () async {
+        // GIVEN a staged replay last active 20 minutes ago. Its stored
+        // deadline was computed at page load from the local 30 minute
+        // timeout, so it still looks 10 minutes from expiring.
+        final now = DateTime.now().toUtc();
+        final lastActivity = now.subtract(const Duration(minutes: 20));
+        final session = Session(
+          id: 'stale-session',
+          startTime: lastActivity,
+          status: SessionStatus.active,
+        );
+        settingsService = SettingsService(
+          storageProvider: SettingsStorageProvider(
+            token: 'test-token',
+            logger: logger,
+          ),
+          token: 'test-token',
+          logger: logger,
+          // AND remote settings that shorten the idle timeout to 5 minutes
+          httpClient: createFakeSettingsClient(
+            isEnabled: true,
+            sdkConfig: const {'record_idle_timeout_ms': 300000},
+          ),
+        );
+        final coordinator = createCoordinator(
+          autoRecordSessionsPercent: 100,
+          remoteSettingsMode: RemoteSettingsMode.fallback,
+          idleTimeout: const Duration(minutes: 30),
+          maxSessionDuration: const Duration(hours: 24),
+          resumable: ResumableSession(
+            session,
+            idleExpiry: lastActivity.add(const Duration(minutes: 30)),
+            lastActivity: lastActivity,
+          ),
+        );
+
+        // WHEN the page loads and remote settings arrive
+        coordinator.onAppForegrounded();
+        await pumpEventQueue();
+
+        // THEN the stale replay is not resumed. Under the timeout now in
+        // force it ended 15 minutes ago, even though the deadline stored
+        // before settings arrived says otherwise.
+        expect(coordinator.replayId, isNot('stale-session'));
+        // AND a fresh replay takes its place, rather than nothing recording
+        expect(coordinator.recordingState, isNot(RecordingState.notRecording));
+      });
+
       test('a manual start before settings arrive supersedes a staged '
           'session', () async {
         // GIVEN a staged session waiting on the first settings fetch

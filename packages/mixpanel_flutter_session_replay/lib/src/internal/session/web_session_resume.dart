@@ -77,6 +77,12 @@ Future<ResumableSession?> checkWebSessionResume({
     idleExpiry: idleExpiresMs == null
         ? null
         : DateTime.fromMillisecondsSinceEpoch(idleExpiresMs),
+    // Raw, so the resume decision can re-apply whatever timeout is in force
+    // once remote settings have landed. The expiry above was computed with
+    // the locally configured one, which is all that exists at page load.
+    lastActivity: lastActivityMs == null
+        ? null
+        : DateTime.fromMillisecondsSinceEpoch(lastActivityMs),
   );
 }
 
