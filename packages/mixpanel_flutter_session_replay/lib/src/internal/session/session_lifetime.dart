@@ -131,8 +131,22 @@ class SessionLifetime {
     // This remains armed while metadata is being persisted or replay is paused.
     _maximumTimer = Timer(
       remaining.isNegative ? Duration.zero : remaining,
-      _onMaximumExpired,
+      _onMaximumTimerFired,
     );
+  }
+
+  /// A Timer counts elapsed real time, but the deadline is wall clock. If the
+  /// clock moves backward after arming, the callback finds the deadline still
+  /// ahead and declines to end the replay. The one-shot timer has already
+  /// fired by then, so without rearming nothing would enforce the maximum
+  /// again and a replay with no idle timeout would run indefinitely.
+  ///
+  /// Rearmed only while the deadline is genuinely in the future: an expired
+  /// deadline that did not end the replay would otherwise rearm at
+  /// Duration.zero and spin.
+  void _onMaximumTimerFired() {
+    _onMaximumExpired();
+    if (_maximumExpiry != null && !expired(_maximumExpiry)) _armMaximumTimer();
   }
 
   void stop() {
