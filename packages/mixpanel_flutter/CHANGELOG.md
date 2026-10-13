@@ -1,5 +1,15 @@
 # Changelog
 
+## [v3.0.0](https://github.com/mixpanel/mixpanel-flutter/tree/v3.0.0) (2026-10-13)
+
+### Breaking Changes ([#292](https://github.com/mixpanel/mixpanel-flutter/pull/292))
+- **iOS 15.0 minimum.** The plugin now depends on Mixpanel-swift 7.0.0, which requires iOS 15.0 to meet Xcode 27's minimum deployment target. CocoaPods apps must set `platform :ios, '15.0'` in `ios/Podfile`. Need iOS 13–14? Stay on 2.x and build with Xcode 26.
+- **macOS 12.0 minimum.** CocoaPods apps must set `platform :osx, '12.0'` in `macos/Podfile`. Need macOS 10.15–11? Stay on 2.x and build with Xcode 26.
+- **`MixpanelSwiftCommon` 2.0.** Mixpanel-swift 7.0.0 depends on `MixpanelSwiftCommon ~> 2.0`. If your iOS or macOS app also pulls in a native Mixpanel pod that pins `MixpanelSwiftCommon` 1.x (such as Mixpanel-swift 6.x or the native MixpanelSessionReplay 1.x), upgrade it too or `pod install` will fail to resolve.
+- **Building with Xcode 27 requires Flutter 3.47+.** Earlier Flutter versions fail Xcode 27's architecture verification ([flutter/flutter#188461](https://github.com/flutter/flutter/issues/188461)). The package's own Flutter floor is unchanged at 3.19.
+
+[Full Changelog](https://github.com/mixpanel/mixpanel-flutter/compare/v2.15.0...v3.0.0)
+
 ## [v2.15.0](https://github.com/mixpanel/mixpanel-flutter/tree/v2.15.0) (2026-10-07)
 
 ### Features
