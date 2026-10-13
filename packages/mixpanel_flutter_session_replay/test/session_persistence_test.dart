@@ -17,7 +17,7 @@ void main() {
     setUp(() {
       writes = [];
       persistence = StoredSessionPersistence(
-        write: (id, idle, max) async {
+        write: (id, idle, max, lastActivity) async {
           writes.add((id, idle, max));
         },
         logger: MixpanelLogger(LogLevel.none),
@@ -120,7 +120,8 @@ void main() {
         ),
       );
       persistence = StoredSessionPersistence(
-        write: (id, idle, max) async => writes.add((id, idle, max)),
+        write: (id, idle, max, lastActivity) async =>
+            writes.add((id, idle, max)),
         logger: MixpanelLogger(LogLevel.none),
         resumable: staged,
       );
@@ -134,7 +135,8 @@ void main() {
     test('discarding a staged replay expires its record', () {
       // GIVEN
       persistence = StoredSessionPersistence(
-        write: (id, idle, max) async => writes.add((id, idle, max)),
+        write: (id, idle, max, lastActivity) async =>
+            writes.add((id, idle, max)),
         logger: MixpanelLogger(LogLevel.none),
         resumable: ResumableSession(
           Session(

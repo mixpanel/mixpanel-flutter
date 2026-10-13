@@ -69,6 +69,9 @@ Future<PlatformInitResult> platformInit({
         resumable: await _checkSessionResume(
           persistent,
           maxSessionDuration: web.maxSessionDuration,
+          // Duration.zero disables the idle timeout, in which case the
+          // stored deadline is all there is to go on.
+          idleTimeout: web.idleTimeout > Duration.zero ? web.idleTimeout : null,
           logger: logger,
         ),
         logger: logger,
@@ -148,13 +151,14 @@ Future<EventQueue> _openQueue({
 SessionDeadlineWriter _deadlineWriter(
   IndexedDbEventQueue queue,
   MixpanelLogger logger,
-) => (sessionId, idleExpiresMs, maxExpiresMs) async {
+) => (sessionId, idleExpiresMs, maxExpiresMs, lastActivityMs) async {
   try {
     await updateWebSessionExpiry(
       queue: queue,
       sessionId: sessionId,
       idleExpiresMs: idleExpiresMs,
       maxExpiresMs: maxExpiresMs,
+      lastActivityMs: lastActivityMs,
     );
   } catch (e) {
     logger.error('Failed to persist session expiry: $e');
@@ -189,12 +193,14 @@ Future<ResumableSession?> _checkSessionResume(
   IndexedDbEventQueue queue, {
   required Duration maxSessionDuration,
   required MixpanelLogger logger,
+  Duration? idleTimeout,
 }) async {
   try {
     final resumeInfo = await checkWebSessionResume(
       queue: queue,
       maxSessionDuration: maxSessionDuration,
       logger: logger,
+      idleTimeout: idleTimeout,
     );
     if (resumeInfo != null) {
       logger.info('Found resumable session: ${resumeInfo.session.id}');

@@ -11,6 +11,7 @@ Future<ResumableSession?> checkWebSessionResume({
   required IndexedDbEventQueue queue,
   required Duration maxSessionDuration,
   required MixpanelLogger logger,
+  Duration? idleTimeout,
 }) async {
   // Only a session this tab recorded is a candidate, as in mixpanel-js where
   // the registry is keyed by tab id. Metadata rebuilt by the uploader is
@@ -31,7 +32,14 @@ Future<ResumableSession?> checkWebSessionResume({
     return null;
   }
 
-  final idleExpiresMs = metadata['idle_expires'] as int?;
+  // A stored deadline bakes in the timeout that was in effect when it was
+  // written. Recompute from the last activity so a timeout that shrank since
+  // then is honored: otherwise a reload grants a fresh window to a replay
+  // that the new timeout says is already over.
+  final lastActivityMs = metadata['last_activity'] as int?;
+  final idleExpiresMs = (lastActivityMs != null && idleTimeout != null)
+      ? lastActivityMs + idleTimeout.inMilliseconds
+      : metadata['idle_expires'] as int?;
   if (idleExpiresMs != null && now >= idleExpiresMs) {
     logger.info('Previous session $sessionId expired (idle timeout exceeded)');
     return null;
@@ -68,10 +76,12 @@ Future<void> updateWebSessionExpiry({
   required String sessionId,
   required int idleExpiresMs,
   required int maxExpiresMs,
+  int? lastActivityMs,
 }) async {
   await queue.updateSessionExpiry(
     sessionId: sessionId,
     idleExpiresMs: idleExpiresMs,
     maxExpiresMs: maxExpiresMs,
+    lastActivityMs: lastActivityMs,
   );
 }

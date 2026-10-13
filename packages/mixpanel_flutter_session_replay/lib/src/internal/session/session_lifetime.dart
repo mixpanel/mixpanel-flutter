@@ -56,6 +56,17 @@ class SessionLifetime {
   static bool expired(DateTime? deadline) =>
       deadline != null && !clock.now().isBefore(deadline);
 
+  /// When the user was last active, recovered from the idle deadline.
+  ///
+  /// Persisted so a page load can apply the *current* idle timeout to it. The
+  /// stored deadline alone bakes in whichever timeout was in effect when it
+  /// was written, so a timeout that shrank in between cannot be honored.
+  DateTime? get lastActivity {
+    final timeout = _idleTimer?.timeout;
+    if (timeout == null) return null;
+    return _idleExpiry?.subtract(timeout);
+  }
+
   /// Storage requires an idle deadline even when activity idle is disabled.
   DateTime? get persistedIdleExpiry =>
       _idleExpiry ??

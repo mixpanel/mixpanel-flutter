@@ -83,6 +83,78 @@ void main() {
       },
     );
 
+    test('refuses to resume when the idle timeout shrank', () async {
+      // GIVEN a replay last active 20 minutes ago under a 30 minute timeout,
+      // so its stored deadline is still 10 minutes away
+      final now = DateTime.now();
+      final lastActivity = now.subtract(const Duration(minutes: 20));
+      await queue.createSessionMetadata(
+        Session(
+          id: 'shrunk',
+          startTime: lastActivity,
+          status: SessionStatus.active,
+        ),
+      );
+      await updateWebSessionExpiry(
+        queue: queue,
+        sessionId: 'shrunk',
+        idleExpiresMs: lastActivity
+            .add(const Duration(minutes: 30))
+            .millisecondsSinceEpoch,
+        maxExpiresMs: now.add(const Duration(hours: 24)).millisecondsSinceEpoch,
+        lastActivityMs: lastActivity.millisecondsSinceEpoch,
+      );
+
+      // WHEN this load runs with a 5 minute timeout
+      final result = await checkWebSessionResume(
+        queue: queue,
+        maxSessionDuration: const Duration(hours: 24),
+        logger: logger,
+        idleTimeout: const Duration(minutes: 5),
+      );
+
+      // THEN the replay is over by the current timeout and is not resumed,
+      // rather than being granted a fresh window from this page load
+      expect(result, isNull);
+    });
+
+    test('still resumes when the shorter timeout has not elapsed', () async {
+      // GIVEN the same shrunk timeout, but only 2 minutes since activity
+      final now = DateTime.now();
+      final lastActivity = now.subtract(const Duration(minutes: 2));
+      await queue.createSessionMetadata(
+        Session(
+          id: 'fresh',
+          startTime: lastActivity,
+          status: SessionStatus.active,
+        ),
+      );
+      await updateWebSessionExpiry(
+        queue: queue,
+        sessionId: 'fresh',
+        idleExpiresMs: lastActivity
+            .add(const Duration(minutes: 30))
+            .millisecondsSinceEpoch,
+        maxExpiresMs: now.add(const Duration(hours: 24)).millisecondsSinceEpoch,
+        lastActivityMs: lastActivity.millisecondsSinceEpoch,
+      );
+
+      // WHEN
+      final result = await checkWebSessionResume(
+        queue: queue,
+        maxSessionDuration: const Duration(hours: 24),
+        logger: logger,
+        idleTimeout: const Duration(minutes: 5),
+      );
+
+      // THEN it resumes, with the deadline the current timeout implies
+      expect(result, isNotNull);
+      expect(
+        result!.idleExpiry!.millisecondsSinceEpoch,
+        lastActivity.add(const Duration(minutes: 5)).millisecondsSinceEpoch,
+      );
+    });
+
     test('returns null when no sessions exist', () async {
       final result = await checkWebSessionResume(
         queue: queue,

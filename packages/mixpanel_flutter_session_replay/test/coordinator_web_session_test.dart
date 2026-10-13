@@ -52,14 +52,14 @@ void main() {
       Duration? maxSessionDuration,
       ReplayLifecyclePolicy lifecyclePolicy =
           ReplayLifecyclePolicy.recordThroughBackground,
-      Future<void> Function(String, int, int)? persistIdleExpiry,
+      Future<void> Function(String, int, int, int?)? persistIdleExpiry,
       EventRecorder? recorder,
       ScreenshotCapturer? capturer,
       ResumableSession? resumable,
     }) {
       final persistence = StoredSessionPersistence(
         resumable: resumable,
-        write: persistIdleExpiry ?? (_, _, _) async {},
+        write: persistIdleExpiry ?? (_, _, _, _) async {},
         logger: logger,
       );
       return SessionReplayCoordinator(
@@ -193,7 +193,7 @@ void main() {
           final coordinator = createCoordinator(
             idleTimeout: const Duration(minutes: 30),
             maxSessionDuration: const Duration(hours: 24),
-            persistIdleExpiry: (id, idle, max) async {
+            persistIdleExpiry: (id, idle, max, lastActivity) async {
               writes.add((id, idle, max));
             },
             resumable: ResumableSession(
@@ -304,7 +304,7 @@ void main() {
         final coordinator = createCoordinator(
           autoRecordSessionsPercent: 100,
           maxSessionDuration: const Duration(hours: 24),
-          persistIdleExpiry: (id, idle, max) async {
+          persistIdleExpiry: (id, idle, max, lastActivity) async {
             persisted.add((id, idle, max));
           },
           resumable: ResumableSession(
@@ -742,7 +742,7 @@ void main() {
           remoteSettingsMode: RemoteSettingsMode.fallback,
           idleTimeout: const Duration(minutes: 30),
           maxSessionDuration: const Duration(hours: 24),
-          persistIdleExpiry: (_, idle, max) async {
+          persistIdleExpiry: (_, idle, max, lastActivity) async {
             deadlines.add((idle, max));
           },
         );
@@ -792,7 +792,7 @@ void main() {
             autoRecordSessionsPercent: 100,
             remoteSettingsMode: RemoteSettingsMode.fallback,
             maxSessionDuration: const Duration(hours: 24),
-            persistIdleExpiry: (_, idle, max) async {
+            persistIdleExpiry: (_, idle, max, lastActivity) async {
               deadlines.add((idle, max));
             },
           );
@@ -831,7 +831,7 @@ void main() {
           autoRecordSessionsPercent: 100,
           idleTimeout: const Duration(minutes: 30),
           maxSessionDuration: const Duration(hours: 24),
-          persistIdleExpiry: (_, idle, max) async {
+          persistIdleExpiry: (_, idle, max, lastActivity) async {
             deadlines.add((idle, max));
           },
         );
@@ -965,9 +965,10 @@ void main() {
         final coordinator = createCoordinator(
           idleTimeout: const Duration(minutes: 30),
           maxSessionDuration: const Duration(hours: 24),
-          persistIdleExpiry: (sessionId, idleExpiresMs, maxExpiresMs) async {
-            persistedCalls.add((sessionId, idleExpiresMs, maxExpiresMs));
-          },
+          persistIdleExpiry:
+              (sessionId, idleExpiresMs, maxExpiresMs, lastActivityMs) async {
+                persistedCalls.add((sessionId, idleExpiresMs, maxExpiresMs));
+              },
         );
         coordinator.startRecording(sessionsPercent: 100.0);
         await pumpEventQueue();
@@ -1200,7 +1201,7 @@ void main() {
           autoRecordSessionsPercent: 100,
           idleTimeout: const Duration(minutes: 30),
           maxSessionDuration: const Duration(hours: 24),
-          persistIdleExpiry: (id, idle, max) async {
+          persistIdleExpiry: (id, idle, max, lastActivity) async {
             writes.add(id);
           },
         );
@@ -1500,7 +1501,7 @@ void main() {
           recorder: recorder,
           idleTimeout: const Duration(minutes: 30),
           maxSessionDuration: const Duration(hours: 24),
-          persistIdleExpiry: (sessionId, idle, max) async {
+          persistIdleExpiry: (sessionId, idle, max, lastActivity) async {
             // Mirrors IndexedDB, where a deadline write for a session with no
             // metadata record is a silent no-op.
             if (await gated.getSessionMetadata(sessionId) != null) {
@@ -1533,7 +1534,7 @@ void main() {
         final coordinator = createCoordinator(
           idleTimeout: const Duration(minutes: 30),
           maxSessionDuration: const Duration(hours: 24),
-          persistIdleExpiry: (id, idle, max) async {
+          persistIdleExpiry: (id, idle, max, lastActivity) async {
             persisted.add((id, idle, max));
           },
         );
@@ -1559,7 +1560,7 @@ void main() {
 
         final coordinator = createCoordinator(
           maxSessionDuration: const Duration(hours: 24),
-          persistIdleExpiry: (id, idle, max) async {
+          persistIdleExpiry: (id, idle, max, lastActivity) async {
             persisted.add((id, idle, max));
           },
           resumable: ResumableSession(
@@ -1586,7 +1587,7 @@ void main() {
         final persisted = <(String, int, int)>[];
         final coordinator = createCoordinator(
           maxSessionDuration: const Duration(hours: 24),
-          persistIdleExpiry: (id, idle, max) async {
+          persistIdleExpiry: (id, idle, max, lastActivity) async {
             persisted.add((id, idle, max));
           },
         );
@@ -1632,7 +1633,7 @@ void main() {
           autoRecordSessionsPercent: 100,
           remoteSettingsMode: RemoteSettingsMode.fallback,
           maxSessionDuration: const Duration(hours: 24),
-          persistIdleExpiry: (_, idle, max) async {
+          persistIdleExpiry: (_, idle, max, lastActivity) async {
             deadlines.add((idle, max));
           },
         );

@@ -871,6 +871,7 @@ class IndexedDbEventQueue
     required String sessionId,
     required int idleExpiresMs,
     required int maxExpiresMs,
+    int? lastActivityMs,
   }) async {
     await _ensureOpen();
 
@@ -886,6 +887,7 @@ class IndexedDbEventQueue
       final map = (result.dartify()! as Map).cast<String, dynamic>();
       map['idle_expires'] = idleExpiresMs;
       map['max_expires'] = maxExpiresMs;
+      if (lastActivityMs != null) map['last_activity'] = lastActivityMs;
       // Adopt a legacy unowned record; never take one from another tab.
       map['owner_id'] ??= ownerId;
       store.put(map.jsify()!);
