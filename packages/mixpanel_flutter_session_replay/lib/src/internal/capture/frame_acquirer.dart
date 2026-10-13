@@ -73,8 +73,13 @@ class FrameRequest {
   late final MaskLayoutFence fence = _createFence();
   final MaskLayoutFence Function() _createFence;
 
-  /// True once recording stopped or paused. Polled after every await before
-  /// pixels are acquired and before they are encoded.
+  /// True once recording stopped or paused.
+  ///
+  /// Polled after every await before pixels are acquired. Whether it is also
+  /// honored after that is the acquirer's choice:
+  /// `RenderedSurfaceFrameAcquirer` re-checks before encoding, while
+  /// `ToImageFrameAcquirer` deliberately does not check after `toImage`,
+  /// whose pixels were already fixed when it was called.
   final bool Function() isCancelled;
 
   FrameRequest({

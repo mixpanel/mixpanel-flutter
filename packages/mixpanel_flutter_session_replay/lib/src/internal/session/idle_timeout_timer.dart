@@ -2,7 +2,8 @@ import 'dart:async';
 
 /// Simple timer wrapper for session idle timeout.
 ///
-/// Resets on every user activity (captures, interactions).
+/// Resets on every user interaction. Captures deliberately do not count, so
+/// an unattended screen still idles out.
 /// When the timeout fires, the provided [onTimeout] callback is invoked
 /// to end the current recording session.
 ///

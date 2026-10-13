@@ -108,9 +108,10 @@ class ScreenshotCapturer {
   /// - [boundaryElement]: The root element used for wireframe traversal
   /// - [maskTypes]: Set of view types to auto-mask (overrides directive if provided)
   /// - [getCurrentSession], [getDistinctId]: read at the frame to pin its identity
-  /// - [isCancelled]: polled after every await before pixels are acquired and
-  ///   before they are encoded, so a frame whose recording stopped or paused
-  ///   while it waited is never captured
+  /// - [isCancelled]: polled after every await before pixels are acquired, so
+  ///   a frame whose recording stopped or paused while it waited is never
+  ///   captured. How far it is honored past that point is the acquirer's
+  ///   choice; see [FrameRequest.isCancelled]
   /// - [onRenderTreeRead]: runs right after the mask walk reads the render tree
   /// Returns CaptureResult with compressed image data or error
   Future<CaptureResult> capture(

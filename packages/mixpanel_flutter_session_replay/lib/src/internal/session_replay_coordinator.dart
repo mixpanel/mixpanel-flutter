@@ -1036,7 +1036,9 @@ class SessionReplayCoordinator implements WidgetCoordinator {
   /// Stops recording and resets the sampling state. After calling this,
   /// you can call startRecording() again with a new sampling percentage.
   ///
-  /// Called automatically on app backgrounding to end the current replay session.
+  /// Called automatically when a native app is backgrounded under
+  /// [ReplayBackgroundBehavior.stop]. Under `pause` the replay is retained
+  /// instead, and web keeps recording while the page is hidden.
   /// Also flushes pending events to ensure data is uploaded (matches iOS behavior).
   void stopRecording({bool cancelPendingResume = true}) =>
       _stop(_StopReason.requested, cancelPendingResume: cancelPendingResume);
@@ -1172,8 +1174,10 @@ class SessionReplayCoordinator implements WidgetCoordinator {
     _writeDeadlinesNow();
   }
 
-  /// Reset idle timer and persist expiry (debounced). Called on every
-  /// successful capture or interaction.
+  /// Reset idle timer and persist expiry (debounced).
+  ///
+  /// Called on user input only. Captures deliberately do not count as
+  /// activity, so a screen left open in front of the SDK still idles out.
   void _onActivity() {
     _lifetime.recordActivity();
     _persistence.recordActivity(

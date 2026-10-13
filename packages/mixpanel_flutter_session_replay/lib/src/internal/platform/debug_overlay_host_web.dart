@@ -17,8 +17,6 @@ DebugOverlayHost? createDebugOverlayHost() => _DomDebugOverlayHost();
 /// Deliberately built from `<div>` elements: `WebRenderedSurfaceCapture` collects
 /// every `<canvas>` under a Flutter engine host and skips the frame when more
 /// than one matches the viewport, so a debug canvas there would stop capture.
-/// `<flt-platform-view>` is likewise avoided — it would trip the
-/// platform-view policy and mask the entire frame.
 class _DomDebugOverlayHost implements DebugOverlayHost {
   /// Same engine hosts `WebRenderedSurfaceCapture` searches for the capture surface.
   static const _viewHostSelector =
