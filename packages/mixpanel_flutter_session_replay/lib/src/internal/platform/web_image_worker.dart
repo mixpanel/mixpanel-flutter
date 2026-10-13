@@ -21,9 +21,13 @@ self.onmessage = async function(e) {
 
     ctx.fillStyle = '#cccccc';
     for (let i = 0; i < maskRects.length; i += 4) {
-      ctx.fillRect(
-        maskRects[i], maskRects[i + 1], maskRects[i + 2], maskRects[i + 3]
-      );
+      // Snapped outward to whole pixels: a fractional rect anti-aliases its
+      // edge, leaving the boundary pixels a blend of mask and content.
+      const left = Math.floor(maskRects[i]);
+      const top = Math.floor(maskRects[i + 1]);
+      const right = Math.ceil(maskRects[i] + maskRects[i + 2]);
+      const bottom = Math.ceil(maskRects[i + 1] + maskRects[i + 3]);
+      ctx.fillRect(left, top, right - left, bottom - top);
     }
 
     const blob = await canvas.convertToBlob({

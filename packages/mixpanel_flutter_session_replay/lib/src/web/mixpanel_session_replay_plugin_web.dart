@@ -17,8 +17,23 @@ class MixpanelSessionReplayPluginWeb {
     channel.setMethodCallHandler(_handleMethodCall);
   }
 
+  /// The native-only calls that legitimately reach this channel on web.
+  static const _webNoOps = {
+    'getAppInfo',
+    'beginBackgroundTask',
+    'endBackgroundTask',
+    'disposeCache',
+  };
+
   static Future<dynamic> _handleMethodCall(MethodCall call) async {
-    // All methods are no-ops on web
-    return null;
+    if (_webNoOps.contains(call.method)) return null;
+    // Anything else reaching web is a routing mistake. Returning null for it
+    // would let the caller treat a call that never ran as having succeeded.
+    throw PlatformException(
+      code: 'Unimplemented',
+      message:
+          '${call.method} is not implemented on web for '
+          'com.mixpanel.flutter_session_replay',
+    );
   }
 }

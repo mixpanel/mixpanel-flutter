@@ -9,7 +9,6 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/logger.dart';
-import 'package:mixpanel_flutter_session_replay/src/internal/native_image_compressor.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/screenshot_capturer.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/session/session_manager.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/wireframe/wireframe_emitter.dart';
@@ -20,6 +19,7 @@ import 'package:mixpanel_flutter_session_replay/src/models/results.dart';
 import 'package:mixpanel_flutter_session_replay/src/widgets/widgets.dart';
 
 import 'utils/golden_test_utils.dart';
+import 'helpers/dart_png_compressor.dart';
 
 class _UnavailableCompressor extends ImageCompressor {
   @override

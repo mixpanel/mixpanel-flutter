@@ -22,6 +22,10 @@ abstract class SessionPersistence {
   /// Persists nothing and never offers a session to resume.
   factory SessionPersistence.none() = _NoSessionPersistence;
 
+  /// Whether events can outlive the process, so a backlog may be waiting at
+  /// startup. False on native, where the queue is cleared during init.
+  bool get persistsAcrossLoads;
+
   /// Takes the replay waiting to be resumed, if any. It is offered only once.
   ResumableSession? takeResumable();
 
@@ -42,6 +46,9 @@ abstract class SessionPersistence {
 
 class _NoSessionPersistence implements SessionPersistence {
   @override
+  bool get persistsAcrossLoads => false;
+
+  @override
   ResumableSession? takeResumable() => null;
 
   @override
@@ -60,6 +67,9 @@ class _NoSessionPersistence implements SessionPersistence {
 /// Persists deadlines through a [SessionDeadlineWriter] (IndexedDB on web)
 /// and offers the replay a previous page load left recording.
 class StoredSessionPersistence implements SessionPersistence {
+  @override
+  bool get persistsAcrossLoads => true;
+
   final SessionDeadlineWriter _write;
   final MixpanelLogger _logger;
   ResumableSession? _resumable;

@@ -12,7 +12,6 @@ import 'package:http/testing.dart' as http_testing;
 import 'package:mixpanel_flutter_session_replay/src/internal/session_replay_coordinator.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/event_recorder.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/screenshot_capturer.dart';
-import 'package:mixpanel_flutter_session_replay/src/internal/native_image_compressor.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/upload/upload_service.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/settings/settings_service.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/settings/settings_storage_provider.dart';
@@ -35,6 +34,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'helpers/fake_http_client.dart';
 import 'helpers/in_memory_event_queue.dart';
+import 'helpers/dart_png_compressor.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

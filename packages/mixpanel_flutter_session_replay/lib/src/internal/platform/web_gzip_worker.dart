@@ -41,6 +41,9 @@ class WebGzipWorker {
   WebGzipWorker._(this._worker, this._blobUrl) {
     _worker.onmessage = _onMessage.toJS;
     _worker.onerror = _onError.toJS;
+    // A deserialization failure fires messageerror, not error, and would
+    // otherwise only surface through the request timeout.
+    _worker.addEventListener('messageerror', _onError.toJS);
   }
 
   static WebGzipWorker? create() {
@@ -115,10 +118,13 @@ class WebGzipWorker {
   }
 
   void _onError(web.Event event) {
+    // Without this the error is re-reported on the host page's window,
+    // landing in the app's own onerror handler and error reporting.
+    event.preventDefault();
     final completer = _pending;
     if (completer == null) return;
     _pending = null;
-    completer.completeError(Exception('Worker execution error'));
+    completer.completeError(Exception('Worker ${event.type}'));
   }
 
   void dispose() {

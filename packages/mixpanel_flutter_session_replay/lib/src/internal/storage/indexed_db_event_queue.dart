@@ -347,11 +347,8 @@ class IndexedDbEventQueue
   /// leftovers of expired ones. Orphaned events with no metadata have no live
   /// owner and are always eligible. A record with no deadlines yet is treated
   /// as live until it is older than the longest possible recording.
-  Future<Set<String>> _foreignLiveSessionIds() async {
-    final txn = _transaction(_metadataStore.toJS, 'readonly');
-    final result = await _awaitRequest(
-      txn.objectStore(_metadataStore).getAll(),
-    );
+  /// Sessions another runtime is still recording, from a metadata getAll().
+  Set<String> _foreignLiveSessionIdsFrom(JSAny? result) {
     final blocked = <String>{};
     if (_isNullish(result)) return blocked;
     final nowMs = DateTime.now().millisecondsSinceEpoch;
@@ -393,9 +390,25 @@ class IndexedDbEventQueue
     Set<String> excludeSessionIds = const {},
   }) async {
     await _ensureOpen();
-    final blocked = {...await _foreignLiveSessionIds(), ...excludeSessionIds};
 
-    final txn = _transaction(_eventsStore.toJS, 'readonly');
+    // Both reads share one transaction, and both requests are issued before
+    // any await so it cannot commit between them. Read separately, another
+    // tab could write its first session metadata and its first event in the
+    // gap, and this tab would treat that live session as uploadable.
+    // IndexedDB delivers results in request order, so the metadata callback
+    // runs before the cursor's.
+    final txn = _transaction(
+      [_eventsStore, _metadataStore].map((store) => store.toJS).toList().toJS,
+      'readonly',
+    );
+    var foreignLive = const <String>{};
+    final metadataRequest = txn.objectStore(_metadataStore).getAll();
+    metadataRequest.onsuccess = (web.Event event) {
+      foreignLive = _foreignLiveSessionIdsFrom(
+        (event.target as web.IDBRequest).result,
+      );
+    }.toJS;
+
     final index = txn.objectStore(_eventsStore).index(_eventHeaderIndex);
     final request = index.openKeyCursor(null, direction);
 
@@ -410,7 +423,9 @@ class IndexedDbEventQueue
 
       final cursor = result as web.IDBCursor;
       final key = (cursor.key.dartify()! as List).cast<Object?>();
-      if (blocked.contains(key[1])) {
+      final sessionId = key[1];
+      if (foreignLive.contains(sessionId) ||
+          excludeSessionIds.contains(sessionId)) {
         cursor.continue_();
         return;
       }

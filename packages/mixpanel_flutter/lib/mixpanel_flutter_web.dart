@@ -289,11 +289,23 @@ class MixpanelFlutterPlugin {
     }
 
     final jsConfig = safeJsify(initConfig) as JSObject;
+    // Under dart2wasm `is JSObject` is true for any non-null JS value, so a
+    // string or number in `hooks` would reach setProperty and throw out of
+    // init() to the caller. Check the JS type instead, and never let hook
+    // installation take down initialization.
     final hooks = jsConfig.getProperty<JSAny?>('hooks'.toJS);
-    final JSObject jsHooks =
-        hooks is JSObject ? hooks : <String, Object?>{}.jsify() as JSObject;
-    jsHooks.setProperty('on_track'.toJS, _onTrackHook);
-    jsConfig.setProperty('hooks'.toJS, jsHooks);
+    final JSObject jsHooks = (hooks != null && hooks.typeofEquals('object'))
+        ? hooks as JSObject
+        : <String, Object?>{}.jsify() as JSObject;
+    try {
+      jsHooks.setProperty('on_track'.toJS, _onTrackHook);
+      jsConfig.setProperty('hooks'.toJS, jsHooks);
+    } catch (e) {
+      developer.log(
+        '`init` could not install the on_track hook: $e',
+        name: 'Mixpanel',
+      );
+    }
     init(token, jsConfig);
   }
 

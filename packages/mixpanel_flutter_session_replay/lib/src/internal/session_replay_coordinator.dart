@@ -580,14 +580,17 @@ class SessionReplayCoordinator implements WidgetCoordinator {
 
               // A previous page may have persisted events without completing
               // its page-hide flush. Drain that backlog even when this page's
-              // sampling decision does not start a new recording.
-              _uploadService.flush().catchError((error) {
-                _logger.warning(
-                  'Failed to flush persisted replay backlog: $error',
-                  tag: 'coordinator',
-                );
-                return FlushResult();
-              });
+              // sampling decision does not start a new recording. Native
+              // clears its queue during init, so there is never one there.
+              if (_persistence.persistsAcrossLoads) {
+                _uploadService.flush().catchError((error) {
+                  _logger.warning(
+                    'Failed to flush persisted replay backlog: $error',
+                    tag: 'coordinator',
+                  );
+                  return FlushResult();
+                });
+              }
 
               // Verify still in foreground after async settings check
               if (!_isAppInForeground) {
@@ -642,7 +645,7 @@ class SessionReplayCoordinator implements WidgetCoordinator {
         );
         stopRecording(cancelPendingResume: false);
       } else {
-        _resumeFromBackground();
+        _resumeFromPause();
         return;
       }
     }
@@ -662,7 +665,7 @@ class SessionReplayCoordinator implements WidgetCoordinator {
     final pending = _persistence.takeResumable();
     if (pending != null) {
       if (!pending.isExpired(_lifetime.maximumDuration)) {
-        resumeSession(pending.session, idleExpiry: pending.idleExpiry);
+        restorePersistedReplay(pending.session, idleExpiry: pending.idleExpiry);
         return;
       }
       _persistence.expire(pending.session.id);
@@ -974,7 +977,7 @@ class SessionReplayCoordinator implements WidgetCoordinator {
   }
 
   /// Resume a paused replay with the same replay ID.
-  void _resumeFromBackground() {
+  void _resumeFromPause() {
     if (_isDisposed) {
       _logger.debug(
         'Coordinator disposed, skipping foreground resume',
@@ -1014,7 +1017,7 @@ class SessionReplayCoordinator implements WidgetCoordinator {
     SessionReplaySender.register({'\$mp_replay_id': session.id});
 
     _recordingState = RecordingState.recording;
-    _lifetime.resumeBackground();
+    _lifetime.clearPauseDeadline();
     _uploadService.startAutoFlush();
 
     // If backgrounding interrupted initial session setup, the metadata callback
@@ -1142,6 +1145,7 @@ class SessionReplayCoordinator implements WidgetCoordinator {
   /// Called by [IdleTimeoutTimer] when the idle timeout fires. Stops
   /// recording so the next user interaction starts a new session via
   /// [onUserActivity].
+  @visibleForTesting
   void handleIdleTimeout() {
     if (_isDisposed || _recordingState == RecordingState.notRecording) return;
 
@@ -1154,12 +1158,13 @@ class SessionReplayCoordinator implements WidgetCoordinator {
   /// Called during initialization when a valid non-expired session is found
   /// in IndexedDB. Restores the session without creating a new one or
   /// re-rolling sampling.
-  void resumeSession(Session session, {DateTime? idleExpiry}) {
+  @visibleForTesting
+  void restorePersistedReplay(Session session, {DateTime? idleExpiry}) {
     if (_isDisposed) return;
 
     _logger.info('Resuming session: ${session.id}', tag: 'coordinator');
 
-    _lifetime.resumeBackground();
+    _lifetime.clearPauseDeadline();
     _isIdledOut = false;
     _sessionManager.resumeSession(session);
     _lifetime.begin(session.startTime);
@@ -1239,13 +1244,22 @@ class SessionReplayCoordinator implements WidgetCoordinator {
       SessionReplaySender.unregister('\$mp_replay_id');
     }
     _recordingState = RecordingState.notRecording;
+    // A capture already in flight would otherwise finish acquiring pixels
+    // and call recordSnapshot on a disposed recorder.
+    _captureInvalidation.noteStop();
     _logger.debug(
       'Marked as disposed - no more captures will be accepted',
       tag: 'coordinator',
     );
 
-    // STEP 2: Flush any pending events before cleanup
-    await flush();
+    // STEP 2: Flush any pending events before cleanup. Timers are stopped
+    // regardless of how the flush ends: a throw here would otherwise leave
+    // the 24h lifetime timer running for the rest of the process.
+    try {
+      await flush();
+    } finally {
+      _lifetime.dispose();
+    }
 
     // STEP 3: Dispose services (stops timers, closes database)
     await _triggerService.dispose();

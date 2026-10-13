@@ -94,7 +94,7 @@ class SessionLifetime {
 
   void pause(Duration retention) =>
       _backgroundExpiry = clock.now().add(retention);
-  void resumeBackground() => _backgroundExpiry = null;
+  void clearPauseDeadline() => _backgroundExpiry = null;
 
   /// Rebase remote limits on the original start/last activity, not fetch time.
   /// The caller checks expiry before making the next recording transition.

@@ -175,6 +175,10 @@ class UploadService {
   /// If events are falling behind (oldest event is older than flush interval),
   /// schedules another immediate flush to catch up.
   Future<void> flushOneBatch() async {
+    if (_isDisposed) {
+      _logger.debug('flushOneBatch skipped - service disposed');
+      return;
+    }
     _logger.debug(
       'flushOneBatch called (timer active: ${_flushTimer?.isActive})',
     );
@@ -216,8 +220,12 @@ class UploadService {
         _consecutiveFailures = 0;
         _requestAllowedAfterTime = null;
 
-        // Check if we're falling behind - check oldest event across ALL sessions
-        final oldestEvent = await eventQueue.fetchOldestHeader();
+        // Check if we're falling behind. Sessions another tab is uploading
+        // are excluded: they stay old until that tab finishes, and counting
+        // them would reschedule on every round trip.
+        final oldestEvent = await eventQueue.fetchOldestHeader(
+          excludeSessionIds: _lastBusySessions,
+        );
         if (oldestEvent != null) {
           final age = clock.now().difference(oldestEvent.timestamp);
           _logger.debug(
@@ -260,6 +268,10 @@ class UploadService {
   /// [notAfter] caps the cutoff at the time a caller first asked to flush,
   /// when that request had to wait for another upload first.
   Future<FlushResult> _flush({DateTime? notAfter}) async {
+    if (_isDisposed) {
+      _logger.debug('Flush skipped - service disposed');
+      return FlushResult();
+    }
     // Check remote settings state
     final remoteState = getRemoteEnablementState();
     if (remoteState != RemoteEnablementState.enabled) {
@@ -362,9 +374,10 @@ class UploadService {
         if (result == UploadResult.success) {
           _consecutiveFailures = 0;
           _requestAllowedAfterTime = null;
-          // Yield to event loop to prevent UI blocking on web
-          await Future.delayed(Duration.zero);
-          // Fetch next oldest event for next iteration
+          // No explicit yield: the storage and HTTP awaits above already
+          // return to the event loop, and on web Future.delayed(zero) becomes
+          // setTimeout(0), which browsers throttle to at least a second in a
+          // hidden tab. The page-hide flush runs in exactly that state.
           oldestEvent = await eventQueue.fetchOldestHeader();
         } else if (result == UploadResult.networkError ||
             result == UploadResult.serverError) {
@@ -417,6 +430,25 @@ class UploadService {
   /// events recorded after it began.
   Future<UploadResult> _uploadBatch({DateTime? notAfter}) async {
     final busySessions = <String>{};
+    try {
+      return await _uploadBatchLeasing(busySessions, notAfter);
+    } finally {
+      _lastBusySessions = busySessions;
+    }
+  }
+
+  /// Sessions the last [_uploadBatch] found leased by another runtime.
+  ///
+  /// A leased session keeps looking old to the falling-behind check below,
+  /// so including it there reschedules a flush on every round trip until the
+  /// lease expires. Each round uploads only what this tab gathered in the
+  /// meantime, which can be a single event per request.
+  Set<String> _lastBusySessions = const {};
+
+  Future<UploadResult> _uploadBatchLeasing(
+    Set<String> busySessions,
+    DateTime? notAfter,
+  ) async {
     while (true) {
       // The queue decides which events this runtime may upload: on web that
       // is its own sessions plus expired ones, matching mixpanel-js. FIFO
@@ -445,6 +477,7 @@ class UploadService {
       // arises when several tabs drain the same expired session.
 
       var acquired = false;
+      var releaseLease = true;
       try {
         acquired = await uploadLease.acquireUploadLease(
           ownerId: uploadLease.uploadLeaseOwnerId,
@@ -459,12 +492,18 @@ class UploadService {
           busySessions.add(oldestEvent.sessionId);
           continue;
         }
-        return await _uploadNextBatch(oldestEvent);
+        final result = await _uploadNextBatch(oldestEvent);
+        // A timed-out POST is not an aborted one: the request can still
+        // reach the server. Releasing the lease now would let another tab
+        // resend the same events under the same seq while it is in flight,
+        // so let the TTL expire it instead.
+        releaseLease = !_lastRequestTimedOut;
+        return result;
       } catch (e) {
         _logger.error('Failed to coordinate replay upload: $e');
         return UploadResult.storageError;
       } finally {
-        if (acquired) {
+        if (acquired && releaseLease) {
           try {
             await uploadLease.releaseUploadLease(
               ownerId: uploadLease.uploadLeaseOwnerId,
@@ -479,7 +518,12 @@ class UploadService {
   }
 
   /// Uploads the batch starting at [oldestEvent].
+  /// Set when the POST timed out rather than failed outright, so the caller
+  /// can leave the session lease to expire by TTL.
+  bool _lastRequestTimedOut = false;
+
   Future<UploadResult> _uploadNextBatch(QueuedEventHeader oldestEvent) async {
+    _lastRequestTimedOut = false;
     try {
       final sessionId = oldestEvent.sessionId;
       final distinctId = oldestEvent.distinctId;
@@ -604,6 +648,10 @@ class UploadService {
         _logger.error('Client error: ${response.statusCode}');
         return UploadResult.networkError;
       }
+    } on TimeoutException catch (e) {
+      _logger.error('Upload timed out: $e');
+      _lastRequestTimedOut = true;
+      return UploadResult.networkError;
     } catch (e) {
       _logger.error('Upload failed: $e');
       return UploadResult.networkError;
