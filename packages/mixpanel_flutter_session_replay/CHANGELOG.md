@@ -1,5 +1,14 @@
 # Changelog
 
+## [session-replay-v2.0.0](https://github.com/mixpanel/mixpanel-flutter/tree/session-replay-v2.0.0) (2026-10-13)
+
+### Breaking Changes ([#293](https://github.com/mixpanel/mixpanel-flutter/pull/293))
+- **iOS 15.0 minimum.** The plugin now requires iOS 15.0 to meet Xcode 27's minimum deployment target. CocoaPods apps must set `platform :ios, '15.0'` in `ios/Podfile`. Need iOS 13–14? Stay on 1.x and build with Xcode 26.
+- **macOS 12.0 minimum.** The plugin now requires macOS 12.0. CocoaPods apps must set `platform :osx, '12.0'` in `macos/Podfile`. Need macOS 10.15–11? Stay on 1.x and build with Xcode 26.
+- **Building with Xcode 27 requires Flutter 3.47+.** Earlier Flutter versions fail Xcode 27's architecture verification ([flutter/flutter#188461](https://github.com/flutter/flutter/issues/188461)). The package's own Flutter floor is unchanged at 3.38.
+
+[Full Changelog](https://github.com/mixpanel/mixpanel-flutter/compare/session-replay-v1.2.0...session-replay-v2.0.0)
+
 ## [session-replay-v1.2.0](https://github.com/mixpanel/mixpanel-flutter/tree/session-replay-v1.2.0) (2026-09-17)
 
 ### Features
