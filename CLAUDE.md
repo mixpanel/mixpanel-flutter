@@ -48,8 +48,8 @@ Future<void> methodName(parameters) async {
 
 ### Platform Dependencies
 - Android: Mixpanel Android SDK v8.11.1
-- iOS: Mixpanel-swift 6.8.0
-- macOS: Mixpanel-swift 6.8.0
+- iOS: Mixpanel-swift 7.0.0 (iOS 15+)
+- macOS: Mixpanel-swift 7.0.0 (macOS 12+)
 - Web: Mixpanel JavaScript library (loaded from CDN)
 
 ## Development Commands

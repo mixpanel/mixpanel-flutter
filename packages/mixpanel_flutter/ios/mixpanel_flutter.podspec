@@ -15,11 +15,11 @@ Pod::Spec.new do |s|
   s.source           = { :path => '.' }
   s.source_files = 'mixpanel_flutter/Sources/mixpanel_flutter/**/*.swift'
   s.dependency 'Flutter'
-  s.dependency 'Mixpanel-swift', '6.8.0'
+  s.dependency 'Mixpanel-swift', '7.0.0'
   # Explicit dependency (also pulled in transitively by Mixpanel-swift 6.4+)
   # so `import MixpanelSwiftCommon` in our plugin resolves reliably.
-  s.dependency 'MixpanelSwiftCommon', '~> 1.1.0'
-  s.platform = :ios, '13.0'
+  s.dependency 'MixpanelSwiftCommon', '~> 2.0.0'
+  s.platform = :ios, '15.0'
 
   # Flutter.framework does not contain a i386 slice.
   s.pod_target_xcconfig = { 'DEFINES_MODULE' => 'YES', 'EXCLUDED_ARCHS[sdk=iphonesimulator*]' => 'i386' }
