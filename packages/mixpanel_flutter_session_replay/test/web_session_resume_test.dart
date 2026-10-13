@@ -155,6 +155,41 @@ void main() {
       );
     });
 
+    test('refuses to resume when the idle timeout grew', () async {
+      // GIVEN a replay that already ended: last active 10 minutes ago under
+      // a 5 minute timeout, so its stored deadline passed 5 minutes back
+      final now = DateTime.now();
+      final lastActivity = now.subtract(const Duration(minutes: 10));
+      await queue.createSessionMetadata(
+        Session(
+          id: 'grown',
+          startTime: lastActivity,
+          status: SessionStatus.active,
+        ),
+      );
+      await updateWebSessionExpiry(
+        queue: queue,
+        sessionId: 'grown',
+        idleExpiresMs: lastActivity
+            .add(const Duration(minutes: 5))
+            .millisecondsSinceEpoch,
+        maxExpiresMs: now.add(const Duration(hours: 24)).millisecondsSinceEpoch,
+        lastActivityMs: lastActivity.millisecondsSinceEpoch,
+      );
+
+      // WHEN this load runs with a longer, 30 minute timeout
+      final result = await checkWebSessionResume(
+        queue: queue,
+        maxSessionDuration: const Duration(hours: 24),
+        logger: logger,
+        idleTimeout: const Duration(minutes: 30),
+      );
+
+      // THEN the replay stays dead. A longer timeout must not reach back and
+      // revive a replay the stored deadline already ended.
+      expect(result, isNull);
+    });
+
     test('returns null when no sessions exist', () async {
       final result = await checkWebSessionResume(
         queue: queue,

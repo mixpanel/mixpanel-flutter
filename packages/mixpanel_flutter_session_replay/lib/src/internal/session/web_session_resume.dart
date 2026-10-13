@@ -33,13 +33,22 @@ Future<ResumableSession?> checkWebSessionResume({
   }
 
   // A stored deadline bakes in the timeout that was in effect when it was
-  // written. Recompute from the last activity so a timeout that shrank since
-  // then is honored: otherwise a reload grants a fresh window to a replay
-  // that the new timeout says is already over.
+  // written, so a timeout that shrank since then would not be honored. The
+  // deadline the current timeout implies is therefore computed too, and the
+  // earlier of the two wins: a shrunk timeout must cut the window short, and
+  // a lengthened one must not revive a replay the stored deadline ended.
+  final storedIdleExpiresMs = metadata['idle_expires'] as int?;
   final lastActivityMs = metadata['last_activity'] as int?;
-  final idleExpiresMs = (lastActivityMs != null && idleTimeout != null)
+  final currentIdleExpiresMs = (lastActivityMs != null && idleTimeout != null)
       ? lastActivityMs + idleTimeout.inMilliseconds
-      : metadata['idle_expires'] as int?;
+      : null;
+  final idleExpiresMs = switch ((storedIdleExpiresMs, currentIdleExpiresMs)) {
+    (final int stored, final int current) =>
+      stored < current ? stored : current,
+    (final int stored, null) => stored,
+    (null, final int current) => current,
+    _ => null,
+  };
   if (idleExpiresMs != null && now >= idleExpiresMs) {
     logger.info('Previous session $sessionId expired (idle timeout exceeded)');
     return null;
