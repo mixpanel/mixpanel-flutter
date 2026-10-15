@@ -52,12 +52,17 @@ The minimum browser versions above are determined by the newest required API.
 Applications should still test the browser versions and devices represented in
 their own audience, particularly at desktop viewport sizes.
 
-Event-triggered recording on web requires a Mixpanel JS build with the
-`on_track` hook. The Flutter web plugin passes tracked events from that hook to
-the replay trigger evaluator. Until the hook is available in the CDN release,
-set `MIXPANEL_CUSTOM_LIB_URL` to a build that includes it before loading the
-Mixpanel Flutter web snippet. Older JS builds can still track events, but
-event-triggered recording will not start from those events.
+Event-triggered recording on web requires the `on_track` hook in Mixpanel JS,
+which the Flutter web plugin uses to pass tracked events to the replay trigger
+evaluator. Two minimums apply:
+
+* `mixpanel_flutter` 3.1.0 or later, which installs the hook.
+* `mixpanel-js` 2.84.0 or later, which provides it. The snippet in
+  `mixpanel_flutter` loads `mixpanel-2-latest`, so this is satisfied unless you
+  pin an older build through `MIXPANEL_CUSTOM_LIB_URL`.
+
+Below either minimum, events are still tracked and replays still record;
+event-triggered recording simply never starts from those events.
 
 #### Content Security Policy
 
@@ -287,6 +292,8 @@ and removes it when recording pauses or stops. On Flutter web this delegates to
 Mixpanel JS through `mixpanel_flutter`; macOS uses the same direct plugin
 channel. If the analytics SDK is not installed or initialized, replay recording
 continues but analytics events cannot be linked to the replay automatically.
+From `mixpanel_flutter` 3.1.0 the web registration is scoped to the current page
+load, so a replay ID cannot outlive its replay across a reload.
 
 #### Platform options
 
