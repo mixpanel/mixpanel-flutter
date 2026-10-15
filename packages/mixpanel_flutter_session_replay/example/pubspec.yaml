@@ -17,11 +17,12 @@ dependencies:
   provider: ^6.0.0
   path_provider: ^2.1.0
   image: ^4.3.0
-  mixpanel_flutter: ^2.14.0
+  mixpanel_flutter: ^3.1.0
 
-# Web replay relies on analytics plugin changes that ship with this repository
-# (per-tab `$mp_replay_id` registration and the event bridge). Build against the
-# local packages so the example and CI exercise the same code that is released.
+# Web replay needs the per-tab `$mp_replay_id` registration and the event bridge
+# that shipped in mixpanel_flutter 3.1.0, hence the constraint above. The
+# overrides keep the example and CI on the in-repo packages, so a change to
+# either is exercised here before it is released.
 dependency_overrides:
   mixpanel_flutter:
     path: ../../mixpanel_flutter

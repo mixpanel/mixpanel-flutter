@@ -172,10 +172,15 @@ flutter drive -d web-server \
   --browser-name=chrome \
   --browser-dimension=1920x1080 \
   --profile \
+  --dart-define=RUN_WEB_STRESS_TESTS=true \
   --driver=test_driver/web_validation_test.dart \
   --target=integration_test/web_validation_test.dart \
   --timeout=300
 ```
+
+The stress flag is what selects the capture benchmark and the dense scenes
+described above; without it the run performs the ordinary validation checks and
+writes no `performance.json`.
 
 Use `firefox` or `safari` for `--browser-name` with GeckoDriver or SafariDriver.
 Add `--wasm` to the Chrome command to validate the Dart2Wasm and Skwasm path;
