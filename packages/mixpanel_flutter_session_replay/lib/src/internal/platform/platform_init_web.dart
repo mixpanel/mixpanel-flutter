@@ -200,7 +200,6 @@ Future<ResumableSession?> _checkSessionResume(
       queue: queue,
       maxSessionDuration: maxSessionDuration,
       logger: logger,
-      idleTimeout: idleTimeout,
     );
     if (resumeInfo != null) {
       logger.info('Found resumable session: ${resumeInfo.session.id}');

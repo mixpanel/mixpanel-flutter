@@ -83,7 +83,7 @@ void main() {
       },
     );
 
-    test('refuses to resume when the idle timeout shrank', () async {
+    test('defers a shrunk idle timeout to the resume decision', () async {
       // GIVEN a replay last active 20 minutes ago under a 30 minute timeout,
       // so its stored deadline is still 10 minutes away
       final now = DateTime.now();
@@ -105,17 +105,28 @@ void main() {
         lastActivityMs: lastActivity.millisecondsSinceEpoch,
       );
 
-      // WHEN this load runs with a 5 minute timeout
+      // WHEN this load runs
       final result = await checkWebSessionResume(
         queue: queue,
         maxSessionDuration: const Duration(hours: 24),
         logger: logger,
-        idleTimeout: const Duration(minutes: 5),
       );
 
-      // THEN the replay is over by the current timeout and is not resumed,
-      // rather than being granted a fresh window from this page load
-      expect(result, isNull);
+      // THEN it is staged with the stored deadline and the raw activity time.
+      // Page load knows only the local timeout, so applying one here would
+      // cut the window short whenever the remote timeout is longer. The
+      // coordinator applies the timeout in force once settings have landed —
+      // see 'does not resume a replay a shortened remote timeout already
+      // ended' in coordinator_web_session_test.dart.
+      expect(result, isNotNull);
+      expect(
+        result!.idleExpiry!.millisecondsSinceEpoch,
+        lastActivity.add(const Duration(minutes: 30)).millisecondsSinceEpoch,
+      );
+      expect(
+        result.lastActivity!.millisecondsSinceEpoch,
+        lastActivity.millisecondsSinceEpoch,
+      );
     });
 
     test('still resumes when the shorter timeout has not elapsed', () async {
@@ -144,14 +155,13 @@ void main() {
         queue: queue,
         maxSessionDuration: const Duration(hours: 24),
         logger: logger,
-        idleTimeout: const Duration(minutes: 5),
       );
 
-      // THEN it resumes, with the deadline the current timeout implies
+      // THEN it resumes, carrying the stored deadline unchanged
       expect(result, isNotNull);
       expect(
         result!.idleExpiry!.millisecondsSinceEpoch,
-        lastActivity.add(const Duration(minutes: 5)).millisecondsSinceEpoch,
+        lastActivity.add(const Duration(minutes: 30)).millisecondsSinceEpoch,
       );
     });
 
@@ -177,12 +187,11 @@ void main() {
         lastActivityMs: lastActivity.millisecondsSinceEpoch,
       );
 
-      // WHEN this load runs with a longer, 30 minute timeout
+      // WHEN this load runs
       final result = await checkWebSessionResume(
         queue: queue,
         maxSessionDuration: const Duration(hours: 24),
         logger: logger,
-        idleTimeout: const Duration(minutes: 30),
       );
 
       // THEN the replay stays dead. A longer timeout must not reach back and

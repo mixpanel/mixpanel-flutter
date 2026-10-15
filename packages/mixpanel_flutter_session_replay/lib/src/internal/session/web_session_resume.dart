@@ -11,7 +11,6 @@ Future<ResumableSession?> checkWebSessionResume({
   required IndexedDbEventQueue queue,
   required Duration maxSessionDuration,
   required MixpanelLogger logger,
-  Duration? idleTimeout,
 }) async {
   // Only a session this tab recorded is a candidate, as in mixpanel-js where
   // the registry is keyed by tab id. Metadata rebuilt by the uploader is
@@ -32,23 +31,16 @@ Future<ResumableSession?> checkWebSessionResume({
     return null;
   }
 
-  // A stored deadline bakes in the timeout that was in effect when it was
-  // written, so a timeout that shrank since then would not be honored. The
-  // deadline the current timeout implies is therefore computed too, and the
-  // earlier of the two wins: a shrunk timeout must cut the window short, and
-  // a lengthened one must not revive a replay the stored deadline ended.
-  final storedIdleExpiresMs = metadata['idle_expires'] as int?;
+  // Only the stored deadline is applied here. It cannot be revived by a
+  // longer timeout, so a replay it already ended stays dead. The opposite
+  // direction is deliberately left alone: at page load the only timeout
+  // available is the local one, and applying it would cut the window short
+  // whenever the remote timeout is longer. Whichever timeout is actually in
+  // force is applied to [lastActivity] at the resume decision, by
+  // ResumableSession.isExpired and SessionLifetime.restoreIdleWindow. The
+  // maximum-duration check above works the same way.
+  final idleExpiresMs = metadata['idle_expires'] as int?;
   final lastActivityMs = metadata['last_activity'] as int?;
-  final currentIdleExpiresMs = (lastActivityMs != null && idleTimeout != null)
-      ? lastActivityMs + idleTimeout.inMilliseconds
-      : null;
-  final idleExpiresMs = switch ((storedIdleExpiresMs, currentIdleExpiresMs)) {
-    (final int stored, final int current) =>
-      stored < current ? stored : current,
-    (final int stored, null) => stored,
-    (null, final int current) => current,
-    _ => null,
-  };
   if (idleExpiresMs != null && now >= idleExpiresMs) {
     logger.info('Previous session $sessionId expired (idle timeout exceeded)');
     return null;
@@ -77,9 +69,8 @@ Future<ResumableSession?> checkWebSessionResume({
     idleExpiry: idleExpiresMs == null
         ? null
         : DateTime.fromMillisecondsSinceEpoch(idleExpiresMs),
-    // Raw, so the resume decision can re-apply whatever timeout is in force
-    // once remote settings have landed. The expiry above was computed with
-    // the locally configured one, which is all that exists at page load.
+    // Raw, so the resume decision can apply whatever timeout is in force
+    // once remote settings have landed.
     lastActivity: lastActivityMs == null
         ? null
         : DateTime.fromMillisecondsSinceEpoch(lastActivityMs),
