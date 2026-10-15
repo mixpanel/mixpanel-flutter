@@ -581,8 +581,7 @@ class MixpanelFlutterPlugin {
   Future<Map<String, dynamic>> handleGetVariant(MethodCall call) async {
     Map<Object?, Object?> args = call.arguments as Map<Object?, Object?>;
     String flagName = args['flagName'] as String;
-    Map<Object?, Object?> fallbackMap =
-        args['fallback'] as Map<Object?, Object?>? ?? {};
+    Map<Object?, Object?> fallbackMap = args['fallback'] as Map<Object?, Object?>? ?? {};
 
     JSAny? fallbackJs = safeJsify({
       'key': fallbackMap['key'],
@@ -594,8 +593,7 @@ class MixpanelFlutterPlugin {
       JSAny? jsResult = await promise.toDart;
       return _jsVariantToMap(jsResult, fallbackMap);
     } catch (e) {
-      debugPrint(
-          '[Mixpanel] getVariant failed with error: $e, returning fallback');
+      debugPrint('[Mixpanel] getVariant failed with error: $e, returning fallback');
       return _jsVariantToMap(null, fallbackMap);
     }
   }
@@ -613,12 +611,10 @@ class MixpanelFlutterPlugin {
     try {
       JSPromise promise = flags_get_variant(flagName, fallbackJs);
       JSAny? jsResult = await promise.toDart;
-      Map<String, dynamic> variant =
-          _jsVariantToMap(jsResult, {'key': flagName, 'value': fallbackValue});
+      Map<String, dynamic> variant = _jsVariantToMap(jsResult, {'key': flagName, 'value': fallbackValue});
       return variant['value'] ?? fallbackValue;
     } catch (e) {
-      debugPrint(
-          '[Mixpanel] getVariantValue failed with error: $e, returning fallback');
+      debugPrint('[Mixpanel] getVariantValue failed with error: $e, returning fallback');
       return fallbackValue;
     }
   }
@@ -636,20 +632,17 @@ class MixpanelFlutterPlugin {
     try {
       JSPromise promise = flags_get_variant(flagName, fallbackJs);
       JSAny? jsResult = await promise.toDart;
-      Map<String, dynamic> variant =
-          _jsVariantToMap(jsResult, {'key': flagName, 'value': fallbackValue});
+      Map<String, dynamic> variant = _jsVariantToMap(jsResult, {'key': flagName, 'value': fallbackValue});
       dynamic value = variant['value'];
       if (value is bool) {
         return value;
       }
       if (value != null) {
-        debugPrint(
-            '[Mixpanel] isEnabled flag \'$flagName\' has non-boolean value, returning fallback');
+        debugPrint('[Mixpanel] isEnabled flag \'$flagName\' has non-boolean value, returning fallback');
       }
       return fallbackValue;
     } catch (e) {
-      debugPrint(
-          '[Mixpanel] isEnabled failed with error: $e, returning fallback');
+      debugPrint('[Mixpanel] isEnabled failed with error: $e, returning fallback');
       return fallbackValue;
     }
   }
@@ -679,8 +672,7 @@ class MixpanelFlutterPlugin {
       final plain = raw == null ? null : object_from_entries(array_from(raw));
       return _convertJsFlagsMap(plain);
     } catch (e) {
-      debugPrint(
-          '[Mixpanel] getAllVariants failed with error: $e, returning empty map');
+      debugPrint('[Mixpanel] getAllVariants failed with error: $e, returning empty map');
       return <String, Map<String, dynamic>>{};
     }
   }
@@ -707,8 +699,7 @@ class MixpanelFlutterPlugin {
     return out;
   }
 
-  Map<String, dynamic> _jsVariantToMap(
-      JSAny? jsResult, Map<Object?, Object?> fallbackMap) {
+  Map<String, dynamic> _jsVariantToMap(JSAny? jsResult, Map<Object?, Object?> fallbackMap) {
     Map<String, dynamic> fallback() => {
           'key': fallbackMap['key'] as String? ?? '',
           'value': fallbackMap['value'],
@@ -719,18 +710,15 @@ class MixpanelFlutterPlugin {
         };
 
     if (jsResult == null) {
-      debugPrint(
-          '[Mixpanel] _jsVariantToMap received null result, returning fallback');
+      debugPrint('[Mixpanel] _jsVariantToMap received null result, returning fallback');
       return fallback();
     }
 
     // Convert JS object to Dart map
     try {
-      Map<Object?, Object?>? dartMap =
-          (jsResult as JSObject).dartify() as Map<Object?, Object?>?;
+      Map<Object?, Object?>? dartMap = (jsResult as JSObject).dartify() as Map<Object?, Object?>?;
       if (dartMap == null) {
-        debugPrint(
-            '[Mixpanel] _jsVariantToMap failed to convert JS object, returning fallback');
+        debugPrint('[Mixpanel] _jsVariantToMap failed to convert JS object, returning fallback');
         return fallback();
       }
 
@@ -743,8 +731,7 @@ class MixpanelFlutterPlugin {
         'source': _jsSourceToMap(dartMap),
       };
     } catch (e) {
-      debugPrint(
-          '[Mixpanel] _jsVariantToMap failed with error: $e, returning fallback');
+      debugPrint('[Mixpanel] _jsVariantToMap failed with error: $e, returning fallback');
       return fallback();
     }
   }
@@ -764,8 +751,7 @@ class MixpanelFlutterPlugin {
       final atRaw = variant['persisted_at_in_ms'];
       final atMs = atRaw is num ? atRaw.toInt() : null;
       if (atMs == null) {
-        debugPrint(
-            '[Mixpanel] persistence variant missing persisted_at_in_ms, defaulting to fallback');
+        debugPrint('[Mixpanel] persistence variant missing persisted_at_in_ms, defaulting to fallback');
         return {'kind': 'fallback'};
       }
       return {'kind': 'persistence', 'persistedAtMillis': atMs};
@@ -783,8 +769,7 @@ class MixpanelFlutterPlugin {
   Map<String, dynamic>? _flagsPersistenceFromPolicy(dynamic policyMap) {
     if (policyMap is! Map) return null;
     final policy = policyMap['policy'];
-    if (policy == 'persistenceUntilNetworkSuccess' ||
-        policy == 'networkFirst') {
+    if (policy == 'persistenceUntilNetworkSuccess' || policy == 'networkFirst') {
       return {
         'variantLookupPolicy': policy,
         if (policyMap['persistenceTtlMillis'] is num)
