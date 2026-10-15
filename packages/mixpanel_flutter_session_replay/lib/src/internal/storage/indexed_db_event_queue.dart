@@ -931,11 +931,15 @@ class IndexedDbEventQueue
 
         final cursor = result as web.IDBCursorWithValue;
         final map = (cursor.value.dartify()! as Map).cast<String, dynamic>();
+        // dart2wasm dartifies every stored number as double, so each field
+        // read back as an int has to be normalized here. Missing one throws
+        // at the cast site, which resume treats as unreadable metadata.
         for (final key in const [
           'session_start_time',
           'last_sequence_number',
           'idle_expires',
           'max_expires',
+          'last_activity',
         ]) {
           final value = map[key];
           if (value != null) map[key] = _asInt(value);

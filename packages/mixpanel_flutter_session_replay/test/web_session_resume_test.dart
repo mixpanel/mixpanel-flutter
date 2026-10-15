@@ -28,6 +28,38 @@ Future<void> _deleteDatabase(String name) {
   return completer.future;
 }
 
+/// Rewrites one metadata field as a double, reproducing how dart2wasm
+/// dartifies every stored IndexedDB number.
+Future<void> _storeFieldAsDouble(
+  String dbName,
+  String sessionId,
+  String field,
+  double value,
+) async {
+  final open = web.window.indexedDB.open(dbName);
+  await _awaitRequest(open);
+  final db = open.result as web.IDBDatabase;
+  final txn = db.transaction('session_metadata'.toJS, 'readwrite');
+  final store = txn.objectStore('session_metadata');
+  final get = store.get(sessionId.toJS);
+  await _awaitRequest(get);
+  final map = (get.result.dartify()! as Map).cast<String, dynamic>();
+  map[field] = value;
+  await _awaitRequest(store.put(map.jsify()!));
+  db.close();
+}
+
+Future<void> _awaitRequest(web.IDBRequest request) {
+  final completer = Completer<void>();
+  request.onsuccess = (web.Event event) {
+    completer.complete();
+  }.toJS;
+  request.onerror = (web.Event event) {
+    completer.completeError(StateError('IndexedDB request failed'));
+  }.toJS;
+  return completer.future;
+}
+
 void main() {
   late IndexedDbEventQueue queue;
   late MixpanelLogger logger;
@@ -82,6 +114,57 @@ void main() {
         expect(metadata['max_expires'], max);
       },
     );
+
+    test('resumes when last_activity was stored as a double', () async {
+      // GIVEN an otherwise resumable replay whose last_activity is a double.
+      // dart2wasm dartifies every stored IndexedDB number that way, so this
+      // is the shape a wasm build reads back on every reload.
+      final now = DateTime.now();
+      final lastActivity = now.subtract(const Duration(minutes: 2));
+      await queue.createSessionMetadata(
+        Session(
+          id: 'wasm-double',
+          startTime: lastActivity,
+          status: SessionStatus.active,
+        ),
+      );
+      await updateWebSessionExpiry(
+        queue: queue,
+        sessionId: 'wasm-double',
+        idleExpiresMs: lastActivity
+            .add(const Duration(minutes: 30))
+            .millisecondsSinceEpoch,
+        maxExpiresMs: now.add(const Duration(hours: 24)).millisecondsSinceEpoch,
+        lastActivityMs: lastActivity.millisecondsSinceEpoch,
+      );
+      await _storeFieldAsDouble(
+        _dbNameForToken(token),
+        'wasm-double',
+        'last_activity',
+        lastActivity.millisecondsSinceEpoch.toDouble(),
+      );
+
+      // WHEN the next page load looks for a replay to resume
+      final result = await checkWebSessionResume(
+        queue: queue,
+        maxSessionDuration: const Duration(hours: 24),
+        logger: logger,
+      );
+
+      // THEN it resumes with the activity time intact. Before the metadata
+      // read normalized this field, the cast threw, the caller treated the
+      // record as unreadable, and the active replay was abandoned.
+      //
+      // This only discriminates under dart2wasm. dart2js collapses a whole
+      // double back to int on dartify, so the faulty cast cannot throw there
+      // and this passes either way. It is here to fail once the web suites
+      // also run with --wasm.
+      expect(result, isNotNull);
+      expect(
+        result!.lastActivity!.millisecondsSinceEpoch,
+        lastActivity.millisecondsSinceEpoch,
+      );
+    });
 
     test('defers a shrunk idle timeout to the resume decision', () async {
       // GIVEN a replay last active 20 minutes ago under a 30 minute timeout,
