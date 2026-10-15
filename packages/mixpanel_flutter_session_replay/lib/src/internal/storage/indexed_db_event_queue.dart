@@ -887,7 +887,13 @@ class IndexedDbEventQueue
       final map = (result.dartify()! as Map).cast<String, dynamic>();
       map['idle_expires'] = idleExpiresMs;
       map['max_expires'] = maxExpiresMs;
-      if (lastActivityMs != null) map['last_activity'] = lastActivityMs;
+      // Written unconditionally: a null means the idle timer is off, and a
+      // stale value left behind would expire a replay once it is turned on.
+      if (lastActivityMs != null) {
+        map['last_activity'] = lastActivityMs;
+      } else {
+        map.remove('last_activity');
+      }
       // Adopt a legacy unowned record; never take one from another tab.
       map['owner_id'] ??= ownerId;
       store.put(map.jsify()!);
