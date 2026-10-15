@@ -2,7 +2,7 @@
   <img src="https://user-images.githubusercontent.com/71290498/231855731-2d3774c3-dc41-4595-abfb-9c49f5f84103.png" alt="Mixpanel Flutter SDK" height="150"/>
 </div>
 
-##### _October 13, 2026_ - [v3.0.0](https://github.com/mixpanel/mixpanel-flutter/releases/tag/v3.0.0)
+##### _October 15, 2026_ - [v3.1.0](https://github.com/mixpanel/mixpanel-flutter/releases/tag/v3.1.0)
 
 # Table of Contents
 
@@ -48,7 +48,7 @@ Version 3.x requires iOS 15.0+ and macOS 12.0+, and builds with Xcode 26 or Xcod
 
 ```
    dependencies:
-      mixpanel_flutter: 3.0.0
+      mixpanel_flutter: 3.1.0
 ```
 
 2. Install it \

@@ -1,5 +1,12 @@
 # Changelog
 
+## [v3.1.0](https://github.com/mixpanel/mixpanel-flutter/tree/v3.1.0) (2026-10-15)
+
+### Features
+- forward web events through the Mixpanel event bridge ([#296](https://github.com/mixpanel/mixpanel-flutter/pull/296))
+
+[Full Changelog](https://github.com/mixpanel/mixpanel-flutter/compare/v3.0.0...v3.1.0)
+
 ## [v3.0.0](https://github.com/mixpanel/mixpanel-flutter/tree/v3.0.0) (2026-10-13)
 
 ### Breaking Changes ([#292](https://github.com/mixpanel/mixpanel-flutter/pull/292))
