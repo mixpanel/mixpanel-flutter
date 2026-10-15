@@ -114,6 +114,11 @@ class MobileOptions {
 ///
 /// These options only apply to the web platform (Flutter web).
 ///
+/// **Beta.** Session replay on web is in beta. It may contain issues, and its
+/// behavior and captured output may change in a future release before general
+/// availability. Verify replays render as you expect, and pin your SDK version
+/// if you depend on the current behavior.
+///
 /// As in mixpanel-js, a replay is not affected by the page being hidden or
 /// the window losing focus: it continues across tab switches and ends only
 /// through [idleTimeout] or [maxSessionDuration]. Nothing is captured while
@@ -172,5 +177,7 @@ class PlatformOptions {
   final MobileOptions mobile;
 
   /// Web-specific options (Flutter web)
+  ///
+  /// **Beta.** See [WebOptions] for the beta notice.
   final WebOptions web;
 }

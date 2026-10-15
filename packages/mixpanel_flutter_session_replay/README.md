@@ -22,9 +22,14 @@ Session Replay provides powerful insights into user behavior, but it also introd
 | iOS      | 15.0+          |
 | Android  | API 24 (7.0+)  |
 | macOS    | 12.0+          |
-| Web      | Chrome 80+, Firefox 113+, Safari 16.4+ |
+| Web (beta) | Chrome 80+, Firefox 113+, Safari 16.4+ |
 
 ### Flutter Web requirements
+
+> **Beta.** Session replay on web is in beta. It may contain issues, and its
+> behavior and captured output may change in a future release before general
+> availability. Verify replays render as you expect, and pin your SDK version
+> if you depend on the current behavior.
 
 Web replay deliberately requires browser-native background processing. JPEG
 encoding, privacy-mask painting, and gzip compression run in Web Workers so

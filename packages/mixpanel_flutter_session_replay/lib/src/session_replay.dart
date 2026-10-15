@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart' show debugPrint, kDebugMode;
+import 'package:flutter/foundation.dart' show debugPrint, kDebugMode, kIsWeb;
 import 'package:http/http.dart' as http;
 import 'package:meta/meta.dart';
 
@@ -68,6 +68,29 @@ class MixpanelSessionReplay {
     );
   }
 
+  /// Tells an app running on Flutter web that the platform is in beta.
+  ///
+  /// Web is the newest capture backend and the one least exercised against
+  /// real applications. An integrator is pointed at that fact while they are
+  /// still evaluating, rather than after a release depends on it.
+  ///
+  /// Deliberately bypasses [MixpanelLogger] and its
+  /// [SessionReplayOptions.logLevel] gate, for the same reason as the
+  /// wireframes notice: the developer who needs to read this has no particular
+  /// reason to have turned logging up. [kDebugMode] keeps it out of a release
+  /// build.
+  static void _logWebBetaNotice() {
+    if (!kDebugMode || !kIsWeb) return;
+
+    debugPrint(
+      '[INFO] mixpanel.session_replay: Session replay on web is in beta. It '
+      'may contain issues, and its behavior and captured output may change in '
+      'a future release before general availability. Verify replays render as '
+      'you expect, and pin your SDK version if you depend on the current '
+      'behavior.',
+    );
+  }
+
   /// Tells an app that just turned wireframes on that the feature is in beta.
   ///
   /// The ask is verification. An integrator who has just turned wireframes on is
@@ -125,6 +148,7 @@ class MixpanelSessionReplay {
     logger.debug('WiFi Only: ${options.platformOptions.mobile.wifiOnly}');
     logger.debug('Flush Interval: ${options.flushInterval.inSeconds}s');
 
+    _logWebBetaNotice();
     _logWireframesBetaNotice(options);
 
     try {
