@@ -48,6 +48,26 @@ class WebRenderedSurfaceCapture extends RenderedSurfaceCapture {
   /// Whether [_frameSnapshot] holds pixels for the capture now in flight.
   bool _frameSnapshotIsFresh = false;
 
+  /// Frames Flutter has drawn, counted here because
+  /// `SchedulerBinding.currentFrameTimeStamp` asserts outside a frame and the
+  /// copy runs in a browser callback after the frame has ended.
+  int _framesPainted = 0;
+  bool _frameCounterArmed = false;
+
+  /// The value of [_framesPainted] when the copy was taken.
+  ///
+  /// ScreenshotCapturer awaits another painted frame before walking masks
+  /// whenever one is already scheduled, so an animation can move a masked
+  /// widget between the copy and the mask read. The masks would then describe
+  /// a frame these pixels are not from, and a mask could land beside the
+  /// content it is meant to cover. Captures are dropped rather than encoded
+  /// when that happens.
+  int? _frameSnapshotFrame;
+
+  /// Set by [dispose] so a frame callback already queued cannot allocate a new
+  /// snapshot canvas after cleanup released the old one.
+  bool _isDisposed = false;
+
   /// How long the last in-frame copy took. Measured because it runs inside the
   /// animation frame callback, where overruns cost a presented frame, and it
   /// is the one cost this strategy adds on WebGL surfaces.
@@ -60,6 +80,19 @@ class WebRenderedSurfaceCapture extends RenderedSurfaceCapture {
        _encoder = WebJpegEncoder(logger: logger, jpegQuality: jpegQuality);
 
   Future<void> initialize() => _encoder.initialize();
+
+  /// Armed only on the WebGL path, which already requires the binding to
+  /// schedule a frame. Surfaces that never copy do not touch the scheduler.
+  void _armFrameCounter() {
+    if (_frameCounterArmed) return;
+    _frameCounterArmed = true;
+    // Persistent callbacks cannot be removed, so this only ever increments a
+    // counter and holds nothing.
+    SchedulerBinding.instance.addPersistentFrameCallback((_) {
+      _framesPainted++;
+    });
+  }
+
   @override
   bool get isAvailable => _encoder.isAvailable;
 
@@ -119,6 +152,7 @@ class WebRenderedSurfaceCapture extends RenderedSurfaceCapture {
         (canvas.getContext('webgl2') != null ||
             canvas.getContext('webgl') != null);
     if (_requiresSameFrameSnapshot) {
+      _armFrameCounter();
       // Register after Flutter's requested frame so rasterization runs before
       // this callback, but snapshot before the browser clears the WebGL buffer.
       // This must happen before the mask walk: requesting a frame afterward
@@ -151,7 +185,8 @@ class WebRenderedSurfaceCapture extends RenderedSurfaceCapture {
     Size logicalSize,
   ) {
     _frameSnapshotIsFresh = false;
-    if (web.document.hidden) return Future.value(false);
+    _frameSnapshotFrame = null;
+    if (_isDisposed || web.document.hidden) return Future.value(false);
     final completer = Completer<bool>();
     late final int frameId;
     late final JSFunction onVisibilityChange;
@@ -211,6 +246,7 @@ class WebRenderedSurfaceCapture extends RenderedSurfaceCapture {
         height.toDouble(),
       );
       _frameSnapshotIsFresh = true;
+      _frameSnapshotFrame = _framesPainted;
       _lastFrameSnapshot = snapshotWatch.elapsed;
       if (_lastFrameSnapshot > _slowSnapshotThreshold) {
         // Inside the frame callback, so this directly delays presentation.
@@ -298,6 +334,15 @@ class WebRenderedSurfaceCapture extends RenderedSurfaceCapture {
         );
         return null;
       }
+      // Masks were read after this point and may describe a later frame.
+      if (_frameSnapshotFrame != _framesPainted) {
+        _frameSnapshotIsFresh = false;
+        _reportSkip(
+          'Flutter advanced past the copied frame before masks were read; '
+          'dropping the frame rather than masking stale pixels',
+        );
+        return null;
+      }
       bitmapSource = snapshot;
       // One capture per snapshot: a later attempt must take its own frame
       // rather than re-encode stale pixels.
@@ -358,11 +403,13 @@ class WebRenderedSurfaceCapture extends RenderedSurfaceCapture {
 
   @override
   Future<void> dispose() {
+    _isDisposed = true;
     // Drop the backing bitmap; a stale one would otherwise outlive the SDK.
     _frameSnapshot?.width = 0;
     _frameSnapshot?.height = 0;
     _frameSnapshot = null;
     _frameSnapshotIsFresh = false;
+    _frameSnapshotFrame = null;
     return _encoder.dispose();
   }
 }
