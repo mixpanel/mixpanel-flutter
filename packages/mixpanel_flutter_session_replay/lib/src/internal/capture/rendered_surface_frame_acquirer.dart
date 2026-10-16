@@ -98,6 +98,17 @@ class RenderedSurfaceFrameAcquirer extends FrameAcquirer {
 
   @override
   Future<FrameAcquisition> acquire(FrameRequest request) async {
+    // The capturer walks masks immediately before this call with nothing
+    // awaited in between, so this is where the copied pixels and the mask
+    // coordinates must describe the same frame.
+    if (!_surface.snapshotMatchesCurrentFrame) {
+      return const FrameRejected(
+        CaptureFailure(
+          CaptureError.maskDetectionFailed,
+          'Flutter advanced past the copied frame before masks were read',
+        ),
+      );
+    }
     if (_rasterCompletion case final barrier?) {
       if (request.isCancelled()) {
         return const FrameRejected(cancelledCaptureFailure);

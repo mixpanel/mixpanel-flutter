@@ -139,6 +139,13 @@ class WebRenderedSurfaceCapture extends RenderedSurfaceCapture {
           if (availability == RenderedSurfaceAvailability.unavailable) {
             return availability;
           }
+          // The copy already fixed this frame's pixels. Reporting a platform
+          // frame here would make the capturer await the next painted frame
+          // before walking masks, which on an animating screen always lands
+          // and strands the snapshot one frame behind the masks.
+          if (_requiresSameFrameSnapshot) {
+            return RenderedSurfaceAvailability.available;
+          }
           return RenderedSurfaceAvailability.availableAfterBrowserFrame;
         }
         if (lookup.isAmbiguous) break;
@@ -315,6 +322,15 @@ class WebRenderedSurfaceCapture extends RenderedSurfaceCapture {
     if (!_requiresSameFrameSnapshot) await _nextAnimationFrame();
   }
 
+  /// Whether [_frameSnapshot] still describes the frame Flutter has painted.
+  ///
+  /// Checked at the mask walk rather than at encode time: the walk is the
+  /// moment masks and pixels have to agree, and frames painted after it
+  /// cannot invalidate a pair that already matched.
+  @override
+  bool get snapshotMatchesCurrentFrame =>
+      !_requiresSameFrameSnapshot || _frameSnapshotFrame == _framesPainted;
+
   @override
   Future<CapturedSurface?> capture({
     required Size logicalSize,
@@ -340,15 +356,6 @@ class WebRenderedSurfaceCapture extends RenderedSurfaceCapture {
       if (snapshot == null || !_frameSnapshotIsFresh) {
         _reportSkip(
           'No in-frame surface snapshot for this capture; dropping the frame',
-        );
-        return null;
-      }
-      // Masks were read after this point and may describe a later frame.
-      if (_frameSnapshotFrame != _framesPainted) {
-        _frameSnapshotIsFresh = false;
-        _reportSkip(
-          'Flutter advanced past the copied frame before masks were read; '
-          'dropping the frame rather than masking stale pixels',
         );
         return null;
       }

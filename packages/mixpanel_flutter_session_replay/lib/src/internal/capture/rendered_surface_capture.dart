@@ -21,6 +21,10 @@ abstract class RenderedSurfaceCapture {
     Size? captureExtent,
   }) async => RenderedSurfaceAvailability.available;
 
+  /// Whether a surface that copies its pixels still holds the frame Flutter
+  /// has currently painted. Platforms that read the live surface always do.
+  bool get snapshotMatchesCurrentFrame => true;
+
   /// Waits for presentation only when the prepared surface needs it and its
   /// readable buffer survives it.
   Future<void> waitForRenderedSurfacePresentation() async {}
