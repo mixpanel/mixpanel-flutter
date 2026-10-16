@@ -1,6 +1,9 @@
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
+import 'package:mixpanel_flutter_session_replay/src/internal/debug_mask_overlay.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/widget_coordinator.dart';
+import 'package:mixpanel_flutter_session_replay/src/models/debug_overlay_colors.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/logger.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/settings/settings_service.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/configuration.dart';
@@ -26,6 +29,15 @@ class FakeWidgetCoordinator implements WidgetCoordinator {
   bool isAppInForeground;
 
   @override
+  bool leavesForegroundWhenInactive;
+
+  @override
+  bool followsUpFramesDuringCapture;
+
+  /// How [createDebugMaskOverlay] draws the overlay; in-tree by default.
+  DebugMaskOverlayFactory debugMaskOverlayFactory;
+
+  @override
   final MixpanelLogger logger;
 
   @override
@@ -36,8 +48,10 @@ class FakeWidgetCoordinator implements WidgetCoordinator {
   int onAppForegroundedCallCount = 0;
   int onAppBackgroundedCallCount = 0;
   int captureSnapshotCallCount = 0;
+  void Function()? onCaptureSnapshot;
   final List<({RenderRepaintBoundary boundary, Element boundaryElement})>
   capturedSnapshots = [];
+  int onUserActivityCallCount = 0;
 
   final List<({int interactionType, Offset position, DateTime timestamp})>
   capturedInteractions = [];
@@ -49,11 +63,25 @@ class FakeWidgetCoordinator implements WidgetCoordinator {
     this.recordingState = RecordingState.notRecording,
     this.remoteEnablementState = RemoteEnablementState.enabled,
     this.isAppInForeground = true,
+    this.leavesForegroundWhenInactive = true,
+    this.followsUpFramesDuringCapture = false,
+    this.debugMaskOverlayFactory = InTreeDebugMaskOverlay.new,
     MixpanelLogger? logger,
     ValueNotifier<List<MaskRegionInfo>>? maskRegionsNotifier,
   }) : logger = logger ?? MixpanelLogger(LogLevel.none),
        maskRegionsNotifier =
            maskRegionsNotifier ?? ValueNotifier<List<MaskRegionInfo>>([]);
+
+  @override
+  DebugMaskOverlay createDebugMaskOverlay({
+    required ValueListenable<List<MaskRegionInfo>> regions,
+    required DebugOverlayColors colors,
+    required RenderBox? Function() boundary,
+  }) => debugMaskOverlayFactory(
+    regions: regions,
+    colors: colors,
+    boundary: boundary,
+  );
 
   @override
   void onAppForegrounded() {
@@ -87,11 +115,20 @@ class FakeWidgetCoordinator implements WidgetCoordinator {
   Future<void> captureSnapshot(
     RenderRepaintBoundary boundary, {
     required Element boundaryElement,
+    void Function()? onRenderTreeRead,
   }) async {
+    // A real capture reads the render tree before its first yield.
+    onRenderTreeRead?.call();
+    onCaptureSnapshot?.call();
     captureSnapshotCallCount++;
     capturedSnapshots.add((
       boundary: boundary,
       boundaryElement: boundaryElement,
     ));
+  }
+
+  @override
+  void onUserActivity() {
+    onUserActivityCallCount++;
   }
 }

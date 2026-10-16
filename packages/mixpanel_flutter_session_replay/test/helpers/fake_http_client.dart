@@ -25,6 +25,7 @@ http.Client createFakeHttpClient({
 http.Client createFakeSettingsClient({
   required bool isEnabled,
   double? recordSessionsPercent,
+  Map<String, Object?>? sdkConfig,
   bool? wireframeEnabled,
   String? wireframeError,
 }) {
@@ -32,10 +33,12 @@ http.Client createFakeSettingsClient({
     final response = <String, dynamic>{
       'recording': {'is_enabled': isEnabled},
     };
-    if (recordSessionsPercent != null) {
-      response['sdk_config'] = {
-        'config': {'record_sessions_percent': recordSessionsPercent},
-      };
+    if (recordSessionsPercent != null || sdkConfig != null) {
+      final config = <String, Object?>{...?sdkConfig};
+      if (recordSessionsPercent != null) {
+        config['record_sessions_percent'] = recordSessionsPercent;
+      }
+      response['sdk_config'] = {'config': config};
     }
     if (wireframeEnabled != null) {
       response['wireframe'] = {

@@ -1,5 +1,6 @@
 import 'package:clock/clock.dart';
 import 'package:flutter/gestures.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
 import '../internal/widget_coordinator.dart';
@@ -11,7 +12,9 @@ import '../models/session_event.dart' show TouchPosition;
 /// Internal widget that translates the pointer stream into rrweb touch events.
 ///
 /// A gesture becomes `touchStart` → zero or more `touchMove` position batches →
-/// `touchEnd` (or `touchCancel`). Only the primary pointer is tracked, matching
+/// `touchEnd` (or `touchCancel`). Every pointer kind, mouse included, is
+/// recorded this way on every platform, web too, so all Flutter replays share
+/// one interaction model. Only the primary pointer is tracked, matching
 /// rrweb-web; secondary pointers going down or up mid-gesture are ignored.
 ///
 /// Nothing is deferred: batches drain on the next sampled move or when the
@@ -52,12 +55,43 @@ class _InteractionDetectorState extends State<InteractionDetector> {
   Duration _timeStampAnchor = Duration.zero;
 
   @override
+  void initState() {
+    super.initState();
+    // Observe even keys consumed by a focused text field or shortcut, without
+    // taking focus or recording the key's contents.
+    HardwareKeyboard.instance.addHandler(_handleKeyEvent);
+  }
+
+  @override
+  void dispose() {
+    HardwareKeyboard.instance.removeHandler(_handleKeyEvent);
+    super.dispose();
+  }
+
+  bool _handleKeyEvent(KeyEvent event) {
+    // Synthesized events reconcile keyboard state after focus changes and do
+    // not represent fresh user activity.
+    if (!event.synthesized &&
+        (event is KeyDownEvent || event is KeyRepeatEvent)) {
+      widget.coordinator.onUserActivity();
+    }
+    return false;
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Listener(
       onPointerDown: _handlePointerDown,
       onPointerMove: _handlePointerMove,
       onPointerUp: _handlePointerUp,
       onPointerCancel: _handlePointerCancel,
+      onPointerSignal: (event) {
+        if (event is PointerScrollEvent) {
+          widget.coordinator.onUserActivity();
+        }
+      },
+      onPointerPanZoomStart: (_) => widget.coordinator.onUserActivity(),
+      onPointerPanZoomUpdate: (_) => widget.coordinator.onUserActivity(),
       child: widget.child,
     );
   }
@@ -67,6 +101,9 @@ class _InteractionDetectorState extends State<InteractionDetector> {
     if (_activePointer != null) return;
 
     final coordinator = widget.coordinator;
+
+    // Notify coordinator of user activity (used to restart after idle timeout)
+    coordinator.onUserActivity();
 
     // Skip processing if remotely disabled
     if (coordinator.remoteEnablementState == RemoteEnablementState.disabled) {

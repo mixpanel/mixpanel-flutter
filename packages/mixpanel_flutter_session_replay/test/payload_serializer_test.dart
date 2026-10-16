@@ -307,6 +307,8 @@ void main() {
         expect(params['seq'], expectedSequenceNumber);
         expect(params['replay_id'], expectedSessionId);
         expect(params['\$lib_version'], sdkVersion);
+        expect(params['mp_lib'], 'flutter-sr');
+        expect(params['\$os'], operatingSystem);
       });
 
       test('includes dynamic timestamp parameters', () {

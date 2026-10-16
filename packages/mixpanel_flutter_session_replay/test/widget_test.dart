@@ -1,6 +1,19 @@
+import 'package:mixpanel_flutter_session_replay/src/internal/capture/raster_completion_barrier.dart';
+import 'package:mixpanel_flutter_session_replay/src/internal/debug_mask_overlay.dart';
+import 'package:mixpanel_flutter_session_replay/src/internal/capture/rendered_surface_frame_acquirer.dart';
+import 'dart:async';
+
+import 'package:clock/clock.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mixpanel_flutter_session_replay/src/internal/session/session_manager.dart';
+import 'package:mixpanel_flutter_session_replay/src/internal/screenshot_capturer.dart';
+import 'package:mixpanel_flutter_session_replay/src/internal/logger.dart';
+import 'package:mixpanel_flutter_session_replay/src/internal/capture/rendered_surface_capture.dart';
+import 'package:flutter/scheduler.dart';
+import 'dart:typed_data';
 import 'package:mixpanel_flutter_session_replay/src/internal/settings/settings_service.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/configuration.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/debug_overlay_colors.dart';
@@ -20,7 +33,10 @@ import 'package:mixpanel_flutter_session_replay/src/widgets/unmask_widget.dart';
 import 'helpers/fake_widget_coordinator.dart';
 import 'helpers/in_memory_event_queue.dart';
 
+import 'helpers/raster_test_binding.dart';
+
 void main() {
+  RasterTestBinding();
   // ─────────────────────────────────────────────────────────────────────
   // MixpanelMask / MixpanelUnmask (no dependencies needed)
   // ─────────────────────────────────────────────────────────────────────
@@ -182,40 +198,85 @@ void main() {
       ]);
     });
 
-    testWidgets('dispatches mouse pointer to coordinator when recording', (
-      tester,
-    ) async {
-      // GIVEN
-      final fake = FakeWidgetCoordinator(
-        recordingState: RecordingState.recording,
-      );
-
-      await tester.pumpWidget(
-        MaterialApp(
-          home: InteractionDetector(
-            coordinator: fake,
-            child: Container(
-              width: 200,
-              height: 200,
-              color: const Color(0xFFFFFFFF),
+    testWidgets(
+      'should record a mouse press as touch events when using a mouse',
+      (tester) async {
+        // GIVEN a mouse, which every platform (web and macOS included)
+        // records as touch with sampled moves
+        final fake = FakeWidgetCoordinator(
+          recordingState: RecordingState.recording,
+        );
+        await tester.pumpWidget(
+          MaterialApp(
+            home: InteractionDetector(
+              coordinator: fake,
+              child: Container(
+                width: 200,
+                height: 200,
+                color: const Color(0xFFFFFFFF),
+              ),
             ),
           ),
-        ),
-      );
+        );
 
-      // WHEN
-      final center = tester.getCenter(find.byType(Container));
-      final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
-      await gesture.down(center);
-      await tester.pump();
-      await gesture.up();
+        // WHEN the mouse is pressed, dragged and released
+        final center = tester.getCenter(find.byType(Container));
+        final gesture = await tester.createGesture(
+          kind: PointerDeviceKind.mouse,
+        );
+        await gesture.down(center);
+        await gesture.moveBy(
+          const Offset(20, 0),
+          timeStamp: const Duration(milliseconds: 60),
+        );
+        await gesture.up(timeStamp: const Duration(milliseconds: 120));
 
-      // THEN
-      expect(fake.capturedInteractions.map((i) => i.interactionType), [
-        RRWebMouseInteraction.touchStart,
-        RRWebMouseInteraction.touchEnd,
-      ]);
-    });
+        // THEN it is a touch gesture with its drag positions sampled
+        expect(fake.capturedInteractions.map((i) => i.interactionType), [
+          RRWebMouseInteraction.touchStart,
+          RRWebMouseInteraction.touchEnd,
+        ]);
+        expect(fake.capturedTouchMoves, isNotEmpty);
+      },
+    );
+
+    testWidgets(
+      'should record a secondary mouse button as touch when it is pressed',
+      (tester) async {
+        // GIVEN a mouse, whose buttons are all recorded like touches
+        final fake = FakeWidgetCoordinator(
+          recordingState: RecordingState.recording,
+        );
+        await tester.pumpWidget(
+          MaterialApp(
+            home: InteractionDetector(
+              coordinator: fake,
+              child: Container(
+                width: 200,
+                height: 200,
+                color: const Color(0xFFFFFFFF),
+              ),
+            ),
+          ),
+        );
+
+        // WHEN the right button is clicked
+        final center = tester.getCenter(find.byType(Container));
+        final gesture = await tester.createGesture(
+          kind: PointerDeviceKind.mouse,
+          buttons: kSecondaryMouseButton,
+        );
+        await gesture.down(center);
+        await tester.pump();
+        await gesture.up();
+
+        // THEN it is recorded as a touch
+        expect(fake.capturedInteractions.map((i) => i.interactionType), [
+          RRWebMouseInteraction.touchStart,
+          RRWebMouseInteraction.touchEnd,
+        ]);
+      },
+    );
 
     testWidgets('does not dispatch stylus pointer events', (tester) async {
       // GIVEN
@@ -276,6 +337,79 @@ void main() {
 
       // THEN - no interaction captured (disabled check comes first)
       expect(fake.capturedInteractions, isEmpty);
+    });
+
+    testWidgets(
+      'calls onUserActivity on pointer down even when not recording',
+      (tester) async {
+        // GIVEN
+        final fake = FakeWidgetCoordinator(
+          recordingState: RecordingState.notRecording,
+        );
+
+        await tester.pumpWidget(
+          MaterialApp(
+            home: InteractionDetector(
+              coordinator: fake,
+              child: Container(
+                width: 200,
+                height: 200,
+                color: const Color(0xFFFFFFFF),
+              ),
+            ),
+          ),
+        );
+
+        // WHEN
+        final center = tester.getCenter(find.byType(Container));
+        final gesture = await tester.createGesture(
+          kind: PointerDeviceKind.touch,
+        );
+        await gesture.down(center);
+        await tester.pump();
+        await gesture.up();
+
+        // THEN — onUserActivity called even though not recording
+        expect(fake.onUserActivityCallCount, 1);
+        // No interaction captured (recording is off)
+        expect(fake.capturedInteractions, isEmpty);
+      },
+    );
+
+    testWidgets('calls onUserActivity on pointer down when recording', (
+      tester,
+    ) async {
+      // GIVEN
+      final fake = FakeWidgetCoordinator(
+        recordingState: RecordingState.recording,
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: InteractionDetector(
+            coordinator: fake,
+            child: Container(
+              width: 200,
+              height: 200,
+              color: const Color(0xFFFFFFFF),
+            ),
+          ),
+        ),
+      );
+
+      // WHEN
+      final center = tester.getCenter(find.byType(Container));
+      final gesture = await tester.createGesture(kind: PointerDeviceKind.touch);
+      await gesture.down(center);
+      await tester.pump();
+      await gesture.up();
+
+      // THEN — activity is reported once and both gesture boundaries are kept
+      expect(fake.onUserActivityCallCount, 1);
+      expect(fake.capturedInteractions.map((event) => event.interactionType), [
+        RRWebMouseInteraction.touchStart,
+        RRWebMouseInteraction.touchEnd,
+      ]);
     });
   });
 
@@ -594,6 +728,133 @@ void main() {
       },
     );
 
+    group('on web', () {
+      Future<FakeWidgetCoordinator> pumpWebObserver(WidgetTester tester) async {
+        final fake = FakeWidgetCoordinator(leavesForegroundWhenInactive: false);
+        await tester.pumpWidget(
+          MaterialApp(
+            home: LifecycleObserver(coordinator: fake, child: const SizedBox()),
+          ),
+        );
+        tester.binding.handleAppLifecycleStateChanged(
+          AppLifecycleState.resumed,
+        );
+        await tester.pump();
+        return fake;
+      }
+
+      testWidgets(
+        'should keep the replay in the foreground when the window loses focus',
+        (tester) async {
+          // GIVEN a visible page
+          final fake = await pumpWebObserver(tester);
+
+          // WHEN focus moves to an iframe, the address bar or devtools, and
+          // back
+          tester.binding.handleAppLifecycleStateChanged(
+            AppLifecycleState.inactive,
+          );
+          await tester.pump();
+          tester.binding.handleAppLifecycleStateChanged(
+            AppLifecycleState.resumed,
+          );
+          await tester.pump();
+
+          // THEN nothing leaves or re-enters the foreground, as in mixpanel-js
+          expect(fake.onAppBackgroundedCallCount, 0);
+          expect(fake.onAppForegroundedCallCount, 1);
+        },
+      );
+
+      testWidgets('should enter the foreground when mounted while the window '
+          'is unfocused', (tester) async {
+        // GIVEN a visible page whose focus moved to the address bar, devtools
+        // or an iframe before the SDK finished initializing
+        tester.binding.handleAppLifecycleStateChanged(
+          AppLifecycleState.inactive,
+        );
+        addTearDown(
+          () => tester.binding.handleAppLifecycleStateChanged(
+            AppLifecycleState.resumed,
+          ),
+        );
+        final fake = FakeWidgetCoordinator(leavesForegroundWhenInactive: false);
+
+        // WHEN the observer mounts
+        await tester.pumpWidget(
+          MaterialApp(
+            home: LifecycleObserver(coordinator: fake, child: const SizedBox()),
+          ),
+        );
+
+        // THEN the page counts as foreground at once, as in later transitions,
+        // rather than waiting for focus to return
+        expect(fake.onAppForegroundedCallCount, 1);
+      });
+
+      testWidgets('should enter the foreground when a hidden page becomes '
+          'visible without focus', (tester) async {
+        // GIVEN a hidden page
+        final fake = await pumpWebObserver(tester);
+        tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+        await tester.pump();
+        expect(fake.onAppBackgroundedCallCount, 1);
+
+        // WHEN it becomes visible while another window has focus
+        tester.binding.handleAppLifecycleStateChanged(
+          AppLifecycleState.inactive,
+        );
+        await tester.pump();
+
+        // THEN it re-enters the foreground without waiting for focus
+        expect(fake.onAppForegroundedCallCount, 2);
+      });
+
+      testWidgets(
+        'should leave the foreground once when the page is hidden after a '
+        'blur',
+        (tester) async {
+          // GIVEN a page whose window lost focus
+          final fake = await pumpWebObserver(tester);
+          tester.binding.handleAppLifecycleStateChanged(
+            AppLifecycleState.inactive,
+          );
+          await tester.pump();
+
+          // WHEN the page is then hidden
+          tester.binding.handleAppLifecycleStateChanged(
+            AppLifecycleState.hidden,
+          );
+          await tester.pump();
+
+          // THEN it leaves the foreground exactly once
+          expect(fake.onAppBackgroundedCallCount, 1);
+        },
+      );
+    });
+
+    testWidgets('should not enter the foreground when mounted inactive on '
+        'native', (tester) async {
+      // GIVEN a native app that is inactive, the first step of backgrounding
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      addTearDown(
+        () => tester.binding.handleAppLifecycleStateChanged(
+          AppLifecycleState.resumed,
+        ),
+      );
+      final fake = FakeWidgetCoordinator();
+
+      // WHEN the observer mounts
+      await tester.pumpWidget(
+        MaterialApp(
+          home: LifecycleObserver(coordinator: fake, child: const SizedBox()),
+        ),
+      );
+
+      // THEN it waits for resumed, as before web support
+      expect(fake.onAppForegroundedCallCount, 0);
+    });
+
     testWidgets('calls onAppForegrounded when resuming from inactive', (
       tester,
     ) async {
@@ -689,6 +950,28 @@ void main() {
         await tester.pump();
 
         // THEN - no additional background call (inactive is more visible than paused)
+        expect(fake.onAppBackgroundedCallCount, 1);
+      },
+    );
+
+    testWidgets(
+      'calls onAppBackgrounded for direct resumed to hidden transition',
+      (tester) async {
+        final fake = FakeWidgetCoordinator();
+
+        await tester.pumpWidget(
+          MaterialApp(
+            home: LifecycleObserver(coordinator: fake, child: const SizedBox()),
+          ),
+        );
+
+        tester.binding.handleAppLifecycleStateChanged(
+          AppLifecycleState.resumed,
+        );
+        await tester.pump();
+        tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+        await tester.pump();
+
         expect(fake.onAppBackgroundedCallCount, 1);
       },
     );
@@ -1048,6 +1331,170 @@ void main() {
       expect(fake.captureSnapshotCallCount, 1);
     });
 
+    testWidgets('follows up once when a frame arrives during a capture', (
+      tester,
+    ) async {
+      // A static screen renders no further frames, so without a follow-up a
+      // capture that was rejected (or that saw an intermediate state) would
+      // leave replay on an older screen until something else repaints.
+      var now = DateTime(2026, 1, 1, 12);
+      await withClock(Clock(() => now), () async {
+        // GIVEN the initial capture is still running
+        final fake = _GatedCaptureCoordinator();
+        final frameNotifier = ChangeNotifier();
+        await tester.pumpWidget(
+          MaterialApp(
+            home: FrameMonitor(
+              frameNotifier: frameNotifier,
+              coordinator: fake,
+              child: const SizedBox(width: 100, height: 100),
+            ),
+          ),
+        );
+        await tester.pump();
+        expect(fake.captureSnapshotCallCount, 1);
+
+        // WHEN the screen settles with one more frame while it runs, and the
+        // capture then completes
+        // ignore: invalid_use_of_protected_member, invalid_use_of_visible_for_testing_member
+        frameNotifier.notifyListeners();
+        await tester.pump();
+        expect(fake.captureSnapshotCallCount, 1, reason: 'busy, so deferred');
+        fake.releaseCapture();
+        await tester.pump();
+
+        // THEN one rate-limited follow-up capture runs with no new frame
+        now = now.add(const Duration(milliseconds: 600));
+        await tester.pump(const Duration(milliseconds: 600));
+        expect(fake.captureSnapshotCallCount, 2);
+
+        // AND it does not repeat on its own
+        now = now.add(const Duration(seconds: 2));
+        await tester.pump(const Duration(seconds: 2));
+        expect(fake.captureSnapshotCallCount, 2);
+      });
+    });
+
+    testWidgets('should not follow up a frame that arrives during a capture '
+        'when follow-ups are off', (tester) async {
+      var now = DateTime(2026, 1, 1, 12);
+      await withClock(Clock(() => now), () async {
+        // GIVEN a native coordinator whose initial capture is still running
+        final fake = _GatedCaptureCoordinator(
+          followsUpFramesDuringCapture: false,
+        );
+        final frameNotifier = ChangeNotifier();
+        await tester.pumpWidget(
+          MaterialApp(
+            home: FrameMonitor(
+              frameNotifier: frameNotifier,
+              coordinator: fake,
+              child: const SizedBox(width: 100, height: 100),
+            ),
+          ),
+        );
+        await tester.pump();
+        expect(fake.captureSnapshotCallCount, 1);
+
+        // WHEN one more frame renders while it runs, and the capture then
+        // completes
+        // ignore: invalid_use_of_protected_member, invalid_use_of_visible_for_testing_member
+        frameNotifier.notifyListeners();
+        await tester.pump();
+        fake.releaseCapture();
+        await tester.pump();
+
+        // THEN no follow-up capture runs, as before web support
+        now = now.add(const Duration(seconds: 2));
+        await tester.pump(const Duration(seconds: 2));
+        expect(fake.captureSnapshotCallCount, 1);
+      });
+    });
+
+    testWidgets('a frame the capture requests does not re-arm it', (
+      tester,
+    ) async {
+      // On web the capturer asks Flutter for a fresh frame before reading the
+      // surface, so the canvas can catch up. The persistent frame callback
+      // reports that frame like any other, while the capture is running. If
+      // it counted as new content, every capture would owe a follow-up that
+      // requests another frame: a static screen captured every rate-limit
+      // interval, forever.
+      var now = DateTime(2026, 1, 1, 12);
+      await withClock(Clock(() => now), () async {
+        // GIVEN the production capturer behind a FrameMonitor, notified on
+        // every frame exactly as MixpanelSessionReplayWidget does
+        final coordinator = _CapturingCoordinator();
+        addTearDown(coordinator.capturer.dispose);
+        final frameNotifier = ChangeNotifier();
+        var notifying = true;
+        var framesDuringCapture = 0;
+        addTearDown(() => notifying = false);
+        SchedulerBinding.instance.addPersistentFrameCallback((_) {
+          if (!notifying) return;
+          if (coordinator.captureSnapshotCallCount > 0 &&
+              coordinator.inFlight) {
+            framesDuringCapture++;
+          }
+          // ignore: invalid_use_of_protected_member, invalid_use_of_visible_for_testing_member
+          frameNotifier.notifyListeners();
+        });
+        await tester.pumpWidget(
+          MaterialApp(
+            home: FrameMonitor(
+              frameNotifier: frameNotifier,
+              coordinator: coordinator,
+              child: const SizedBox(width: 100, height: 100),
+            ),
+          ),
+        );
+        await tester.pump();
+        await tester.pump();
+        expect(coordinator.captureSnapshotCallCount, 1);
+        expect(
+          framesDuringCapture,
+          1,
+          reason: 'the web capture draws the frame it requested mid-capture',
+        );
+
+        // GIVEN the first raster report is batched, request one reporting
+        // frame while still preparing, then simulate the engine acknowledgement.
+        await tester.binding.delayed(const Duration(milliseconds: 120));
+        expect(tester.binding.hasScheduledFrame, isTrue);
+        await tester.pump();
+        tester.platformDispatcher.onReportTimings!([
+          FrameTiming(
+            vsyncStart: 0,
+            buildStart: 1,
+            buildFinish: 2,
+            rasterStart: 3,
+            rasterFinish: 4,
+            rasterFinishWallTime: 4,
+            frameNumber: tester.platformDispatcher.frameData.frameNumber,
+          ),
+        ]);
+        await tester.idle();
+        expect(coordinator.lastResult, isA<CaptureSuccess>());
+        expect(framesDuringCapture, 2);
+
+        // WHEN the screen stays static: time passes, and a frame is drawn
+        // only when the SDK itself requests one
+        var framesRequested = 0;
+        for (var i = 0; i < 5; i++) {
+          now = now.add(const Duration(milliseconds: 600));
+          await tester.binding.delayed(const Duration(milliseconds: 600));
+          if (tester.binding.hasScheduledFrame) {
+            framesRequested++;
+            await tester.pump();
+          }
+        }
+
+        // THEN that frame did not re-arm the capture
+        expect(framesRequested, 0);
+        expect(coordinator.captureSnapshotCallCount, 1);
+      });
+    });
+
     testWidgets('renders debug mask overlay when debugOptions provided', (
       tester,
     ) async {
@@ -1070,6 +1517,74 @@ void main() {
 
       // THEN - debug overlay should be rendered (kDebugMode is true in tests)
       expect(find.byType(MaskOverlay), findsOneWidget);
+    });
+
+    testWidgets('keeps the debug overlay out of the rendered-surface tree', (
+      tester,
+    ) async {
+      // GIVEN - capture reads a shared rendered surface, so anything painted
+      // into the Flutter tree would be baked into the replay
+      final fake = FakeWidgetCoordinator(
+        recordingState: RecordingState.recording,
+        debugMaskOverlayFactory: OutOfSurfaceDebugMaskOverlay.new,
+      );
+      final frameNotifier = ChangeNotifier();
+      fake.onCaptureSnapshot = () {
+        expect(find.byType(MaskOverlay), findsNothing);
+      };
+
+      // WHEN
+      await tester.pumpWidget(
+        MaterialApp(
+          home: FrameMonitor(
+            frameNotifier: frameNotifier,
+            coordinator: fake,
+            debugOptions: const DebugOptions(),
+            child: const SizedBox(width: 100, height: 100),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      // THEN - never in the tree, so there is no per-capture hide/show cycle
+      expect(fake.captureSnapshotCallCount, 1);
+      expect(find.byType(MaskOverlay), findsNothing);
+    });
+
+    testWidgets('does not schedule a frame when mask regions change on web', (
+      tester,
+    ) async {
+      // GIVEN - the out-of-surface overlay redraws itself. A region change
+      // must not dirty the widget tree, because the frame that rebuild would
+      // schedule is what drives the next capture.
+      final fake = FakeWidgetCoordinator(
+        recordingState: RecordingState.recording,
+        debugMaskOverlayFactory: OutOfSurfaceDebugMaskOverlay.new,
+      );
+      final frameNotifier = ChangeNotifier();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: FrameMonitor(
+            frameNotifier: frameNotifier,
+            coordinator: fake,
+            debugOptions: const DebugOptions(),
+            child: const SizedBox(width: 100, height: 100),
+          ),
+        ),
+      );
+      await tester.pump();
+      // Precondition: without it the assertion below proves nothing.
+      expect(tester.binding.hasScheduledFrame, isFalse);
+
+      // WHEN
+      fake.maskRegionsNotifier.value = [
+        MaskRegionInfo(const Rect.fromLTWH(0, 0, 10, 10), MaskSource.auto),
+      ];
+
+      // THEN - an in-tree ValueListenableBuilder would have called setState
+      expect(tester.binding.hasScheduledFrame, isFalse);
     });
 
     testWidgets('cleans up listener on dispose', (tester) async {
@@ -1213,4 +1728,99 @@ void main() {
       expect(find.text('Replaced'), findsOneWidget);
     });
   });
+}
+
+/// Coordinator whose first capture stays in flight until [releaseCapture].
+class _GatedCaptureCoordinator extends FakeWidgetCoordinator {
+  _GatedCaptureCoordinator({super.followsUpFramesDuringCapture = true})
+    : super(recordingState: RecordingState.recording);
+
+  Completer<void>? _gate;
+
+  void releaseCapture() => _gate?.complete();
+
+  @override
+  Future<void> captureSnapshot(
+    RenderRepaintBoundary boundary, {
+    required Element boundaryElement,
+    void Function()? onRenderTreeRead,
+  }) async {
+    captureSnapshotCallCount++;
+    onRenderTreeRead?.call();
+    if (_gate == null) {
+      _gate = Completer<void>();
+      await _gate!.future;
+    }
+  }
+}
+
+/// Drives the production [ScreenshotCapturer] through the web surface path so
+/// a widget test observes the frames the real capture code requests.
+class _CapturingCoordinator extends FakeWidgetCoordinator {
+  _CapturingCoordinator()
+    : super(
+        recordingState: RecordingState.recording,
+        followsUpFramesDuringCapture: true,
+      );
+
+  final ScreenshotCapturer capturer = ScreenshotCapturer(
+    directive: MaskingDirective(autoMaskTypes: const {}),
+    logger: MixpanelLogger(LogLevel.none),
+    debugOverlayEnabled: false,
+    frameAcquirer: RenderedSurfaceFrameAcquirer(
+      _StaticSurfaceCapture(),
+      rasterCompletion: RasterCompletionBarrier(),
+    ),
+  );
+  final SessionManager sessionManager = SessionManager();
+
+  @override
+  Future<void> captureSnapshot(
+    RenderRepaintBoundary boundary, {
+    required Element boundaryElement,
+    void Function()? onRenderTreeRead,
+  }) async {
+    captureSnapshotCallCount++;
+    inFlight = true;
+    try {
+      lastResult = await capturer.capture(
+        boundary,
+        boundaryElement: boundaryElement,
+        getCurrentSession: sessionManager.getCurrentSession,
+        getDistinctId: () => 'widget-test-user',
+        onRenderTreeRead: onRenderTreeRead,
+      );
+    } finally {
+      inFlight = false;
+    }
+  }
+
+  CaptureResult? lastResult;
+
+  /// Whether a capture is running right now.
+  bool inFlight = false;
+}
+
+class _StaticSurfaceCapture extends RenderedSurfaceCapture {
+  @override
+  bool get isAvailable => true;
+
+  @override
+  Future<CapturedSurface?> capture({
+    required Size logicalSize,
+    required int outputWidth,
+    required int outputHeight,
+  }) async => _StaticSurface();
+
+  @override
+  Future<void> dispose() async {}
+}
+
+class _StaticSurface implements CapturedSurface {
+  @override
+  Future<Uint8List?> encode({required List<Rect> maskRects}) async =>
+      Uint8List.fromList(const [0xff, 0xd8, 0xff, 0xd9]);
+
+  @override
+  void dispose() {}
 }

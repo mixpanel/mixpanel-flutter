@@ -1,14 +1,15 @@
+import 'dart:async';
+
 import 'package:flutter/widgets.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
 
 import '../internal/widget_coordinator.dart';
 import '../internal/capture/capture_scheduler.dart';
+import '../internal/debug_mask_overlay.dart';
 import '../internal/settings/settings_service.dart';
 import '../models/debug_overlay_colors.dart';
-import '../models/masking_directive.dart';
 import '../models/results.dart';
-import 'mask_overlay.dart';
 
 /// Internal widget that monitors frame changes and schedules snapshots
 class FrameMonitor extends StatefulWidget {
@@ -33,12 +34,33 @@ class _FrameMonitorState extends State<FrameMonitor> {
   final GlobalKey _repaintBoundaryKey = GlobalKey();
   late final CaptureScheduler _scheduler;
 
+  /// Debug mask overlay, drawn wherever the coordinator's capture cannot see
+  /// it. Null unless the overlay is enabled.
+  DebugMaskOverlay? _debugOverlay;
+
   @override
   void initState() {
     super.initState();
 
     // Create timing scheduler (private to this widget)
-    _scheduler = CaptureScheduler(logger: widget.coordinator.logger);
+    _scheduler = CaptureScheduler(
+      followsUpFramesDuringCapture:
+          widget.coordinator.followsUpFramesDuringCapture,
+      logger: widget.coordinator.logger,
+    );
+
+    final overlayColors = widget.debugOptions?.overlayColors;
+    if (kDebugMode && overlayColors != null) {
+      _debugOverlay = widget.coordinator.createDebugMaskOverlay(
+        regions: widget.coordinator.maskRegionsNotifier,
+        colors: overlayColors,
+        boundary: () {
+          final boundary = _repaintBoundaryKey.currentContext
+              ?.findRenderObject();
+          return boundary is RenderBox ? boundary : null;
+        },
+      );
+    }
 
     // Listen to frame notifications from parent widget
     widget.frameNotifier.addListener(_onFrame);
@@ -52,6 +74,8 @@ class _FrameMonitorState extends State<FrameMonitor> {
 
   void _onFrame() {
     if (!mounted) return;
+
+    _debugOverlay?.onFrame();
 
     // Skip processing if remotely disabled
     if (widget.coordinator.remoteEnablementState ==
@@ -111,56 +135,51 @@ class _FrameMonitorState extends State<FrameMonitor> {
 
     final boundaryElement = _repaintBoundaryKey.currentContext;
     if (boundaryElement is! Element) return;
-
     final boundary = boundaryElement.findRenderObject();
     if (boundary is! RenderRepaintBoundary) return;
 
     // Tell scheduler we're starting
     _scheduler.markCaptureStarted();
+    unawaited(_runCapture(boundary, boundaryElement));
+  }
 
-    // Simple call to coordinator (like interactions)
-    widget.coordinator
-        .captureSnapshot(boundary, boundaryElement: boundaryElement)
-        .whenComplete(() {
-          if (mounted) {
-            // Tell scheduler we completed (500ms starts now)
-            // This runs whether capture succeeded or failed, ensuring we always
-            // wait 500ms before the next attempt (prevents excessive retries on failure)
-            _scheduler.markCaptureCompleted();
-          }
-        });
+  Future<void> _runCapture(
+    RenderRepaintBoundary boundary,
+    Element boundaryElement,
+  ) async {
+    try {
+      await widget.coordinator.captureSnapshot(
+        boundary,
+        boundaryElement: boundaryElement,
+        onRenderTreeRead: _scheduler.markRenderTreeRead,
+      );
+    } finally {
+      if (mounted) {
+        // The 500 ms rate limit starts whether capture succeeded or failed.
+        _scheduler.markCaptureCompleted();
+        // With follow-ups, a frame that rendered while this capture ran may
+        // show the settled screen, and a static screen produces no further
+        // frames. Attempt one rate-limited follow-up; the usual recording and
+        // foreground checks still apply when it fires.
+        if (_scheduler.takeFrameArrivedDuringCapture()) _attemptCapture();
+      }
+    }
   }
 
   @override
   void dispose() {
     widget.frameNotifier.removeListener(_onFrame);
+    _debugOverlay?.dispose();
     _scheduler.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    Widget child = RepaintBoundary(
+    final child = RepaintBoundary(
       key: _repaintBoundaryKey,
       child: widget.child,
     );
-
-    // Conditionally wrap with mask overlay for debugging (only in debug mode)
-    final overlayColors = widget.debugOptions?.overlayColors;
-    if (overlayColors != null && kDebugMode) {
-      child = ValueListenableBuilder<List<MaskRegionInfo>>(
-        valueListenable: widget.coordinator.maskRegionsNotifier,
-        builder: (context, maskRegions, child) {
-          return MaskOverlay(
-            maskRegions: maskRegions,
-            colors: overlayColors,
-            child: child!,
-          );
-        },
-        child: child,
-      );
-    }
-
-    return child;
+    return _debugOverlay?.wrap(child) ?? child;
   }
 }

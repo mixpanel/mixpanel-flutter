@@ -20,7 +20,7 @@ class InMemoryEventQueue implements EventQueue {
   }
 
   @override
-  Future<void> add(SessionReplayEvent event) async {
+  Future<bool> add(SessionReplayEvent event) async {
     _checkNotDisposed();
 
     // Rough estimate of data size for batching
@@ -37,6 +37,7 @@ class InMemoryEventQueue implements EventQueue {
         payload: event.payload,
       ),
     );
+    return true;
   }
 
   /// Estimate payload size in bytes (rough approximation)
@@ -59,7 +60,6 @@ class InMemoryEventQueue implements EventQueue {
     }
   }
 
-  @override
   Future<PersistedSessionReplayEvent?> fetchOldest() async {
     _checkNotDisposed();
     if (_events.isEmpty) return null;
@@ -67,10 +67,32 @@ class InMemoryEventQueue implements EventQueue {
   }
 
   @override
-  Future<PersistedSessionReplayEvent?> fetchNewest() async {
+  Future<QueuedEventHeader?> fetchOldestHeader({
+    Set<String> excludeSessionIds = const {},
+  }) async {
+    _checkNotDisposed();
+    for (final event in _events) {
+      if (!excludeSessionIds.contains(event.sessionId)) {
+        return _headerFor(event);
+      }
+    }
+    return null;
+  }
+
+  @override
+  Future<QueuedEventHeader?> fetchNewestHeader() async {
     _checkNotDisposed();
     if (_events.isEmpty) return null;
-    return _events.last;
+    return _headerFor(_events.last);
+  }
+
+  QueuedEventHeader _headerFor(PersistedSessionReplayEvent event) {
+    return QueuedEventHeader(
+      id: event.id,
+      sessionId: event.sessionId,
+      distinctId: event.distinctId,
+      timestamp: event.timestamp,
+    );
   }
 
   @override
@@ -86,9 +108,10 @@ class InMemoryEventQueue implements EventQueue {
     int totalBytes = 0;
 
     for (final event in _events) {
-      if (event.sessionId != sessionId || event.distinctId != distinctId) {
-        break;
-      }
+      // Same semantics as every production queue: other sessions are skipped,
+      // and the batch ends at the first identity change within this session.
+      if (event.sessionId != sessionId) continue;
+      if (event.distinctId != distinctId) break;
 
       // Use the dataSize field from the persisted event
       if (batch.isNotEmpty &&

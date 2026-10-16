@@ -1,0 +1,190 @@
+import 'dart:async';
+import 'package:clock/clock.dart';
+import 'idle_timeout_timer.dart';
+import 'recording_limits.dart';
+
+/// A replay deadline that ends the recording when it passes.
+enum ExpiredDeadline { maximum, idle }
+
+/// Owns a replay's deadlines and their timers across initialization, activity,
+/// background pauses and reloads. Deadlines also use wall-clock checks because
+/// browser timers can be frozen while the page is suspended.
+class SessionLifetime {
+  IdleTimeoutTimer? _idleTimer;
+  Duration? _maximumDuration;
+  final void Function() _onIdleExpired;
+  final void Function() _onMaximumExpired;
+  Timer? _maximumTimer;
+  DateTime? _idleExpiry;
+  DateTime? _maximumExpiry;
+  DateTime? _backgroundExpiry;
+
+  /// Without [limits] (native) nothing ever expires.
+  SessionLifetime({
+    RecordingDurationLimits? limits,
+    required void Function() onIdleExpired,
+    required void Function() onMaximumExpired,
+  }) : _maximumDuration = limits?.maximum,
+       _onIdleExpired = onIdleExpired,
+       _onMaximumExpired = onMaximumExpired {
+    final idle = limits?.idle;
+    if (idle != null && idle > Duration.zero) {
+      _idleTimer = IdleTimeoutTimer(timeout: idle, onTimeout: onIdleExpired);
+    }
+  }
+
+  /// Whether this replay has duration limits at all. Remote duration config
+  /// applies only then.
+  bool get hasLimits => _maximumDuration != null;
+
+  Duration? get maximumDuration => _maximumDuration;
+
+  /// The idle timeout in force now, which is the remote value once
+  /// settings have been applied. Null when idle expiry is disabled.
+  Duration? get idleTimeout => _idleTimer?.timeout;
+  DateTime? get maximumExpiry => _maximumExpiry;
+  bool get hasMaximumTimer => _maximumTimer?.isActive ?? false;
+  bool get needsIdleWindow => _idleTimer != null && _idleExpiry == null;
+  bool get isIdleExpired => expired(_idleExpiry);
+  bool get isMaximumExpired => expired(_maximumExpiry);
+  bool get isBackgroundExpired => expired(_backgroundExpiry);
+
+  /// The deadline that has passed by wall clock, if any. The maximum wins
+  /// when both have. [includeIdle] false checks only the maximum.
+  ExpiredDeadline? expiredDeadline({bool includeIdle = true}) {
+    if (isMaximumExpired) return ExpiredDeadline.maximum;
+    if (includeIdle && isIdleExpired) return ExpiredDeadline.idle;
+    return null;
+  }
+
+  static bool expired(DateTime? deadline) =>
+      deadline != null && !clock.now().isBefore(deadline);
+
+  /// When the user was last active, recovered from the idle deadline.
+  ///
+  /// Persisted so a page load can apply the *current* idle timeout to it. The
+  /// stored deadline alone bakes in whichever timeout was in effect when it
+  /// was written, so a timeout that shrank in between cannot be honored.
+  DateTime? get lastActivity {
+    final timeout = _idleTimer?.timeout;
+    if (timeout == null) return null;
+    return _idleExpiry?.subtract(timeout);
+  }
+
+  /// Storage requires an idle deadline even when activity idle is disabled.
+  DateTime? get persistedIdleExpiry =>
+      _idleExpiry ??
+      (_idleTimer == null
+          ? _maximumExpiry
+          : clock.now().add(_idleTimer!.timeout));
+
+  void begin(DateTime startTime) {
+    _maximumExpiry = _maximumDuration == null
+        ? null
+        : startTime.add(_maximumDuration!);
+    _armMaximumTimer();
+  }
+
+  void recordActivity({DateTime? deadline}) {
+    final timer = _idleTimer;
+    if (timer == null) return;
+    final now = clock.now();
+    _idleExpiry = deadline ?? now.add(timer.timeout);
+    final remaining = _idleExpiry!.difference(now);
+    timer.resetWith(remaining.isNegative ? Duration.zero : remaining);
+  }
+
+  void restoreIdleWindow(DateTime? storedDeadline, {DateTime? lastActivity}) {
+    final timeout = _idleTimer?.timeout;
+    // The earliest of: the deadline stored at page load, the window the
+    // current timeout allows from the last input, and a full window from
+    // now. The middle term is what honors a timeout that shrank after the
+    // stored deadline was written; the last bounds a record with no
+    // activity time.
+    final candidates = <DateTime>[
+      ?storedDeadline,
+      if (timeout != null) ...[
+        clock.now().add(timeout),
+        ?lastActivity?.add(timeout),
+      ],
+    ];
+    if (candidates.isEmpty) {
+      recordActivity();
+      return;
+    }
+    recordActivity(
+      deadline: candidates.reduce((a, b) => a.isBefore(b) ? a : b),
+    );
+  }
+
+  void pause(Duration retention) =>
+      _backgroundExpiry = clock.now().add(retention);
+  void clearPauseDeadline() => _backgroundExpiry = null;
+
+  /// Rebase remote limits on the original start/last activity, not fetch time.
+  /// The caller checks expiry before making the next recording transition.
+  void updateLimits({
+    Duration? maximumDuration,
+    Duration? idleTimeout,
+    DateTime? activeSessionStart,
+    required bool initializing,
+  }) {
+    final oldTimeout = _idleTimer?.timeout;
+    final lastActivity = _idleExpiry != null && oldTimeout != null
+        ? _idleExpiry!.subtract(oldTimeout)
+        : clock.now();
+    if (maximumDuration != null) _maximumDuration = maximumDuration;
+    if (idleTimeout != null) {
+      _idleTimer?.dispose();
+      _idleTimer = IdleTimeoutTimer(
+        timeout: idleTimeout,
+        onTimeout: _onIdleExpired,
+      );
+    }
+    if (activeSessionStart == null) return;
+    if (maximumDuration != null) begin(activeSessionStart);
+    if (idleTimeout != null && !initializing) {
+      recordActivity(deadline: lastActivity.add(idleTimeout));
+    }
+  }
+
+  void _armMaximumTimer() {
+    _maximumTimer?.cancel();
+    final expiry = _maximumExpiry;
+    if (expiry == null) return;
+    final remaining = expiry.difference(clock.now());
+    // This remains armed while metadata is being persisted or replay is paused.
+    _maximumTimer = Timer(
+      remaining.isNegative ? Duration.zero : remaining,
+      _onMaximumTimerFired,
+    );
+  }
+
+  /// A Timer counts elapsed real time, but the deadline is wall clock. If the
+  /// clock moves backward after arming, the callback finds the deadline still
+  /// ahead and declines to end the replay. The one-shot timer has already
+  /// fired by then, so without rearming nothing would enforce the maximum
+  /// again and a replay with no idle timeout would run indefinitely.
+  ///
+  /// Rearmed only while the deadline is genuinely in the future: an expired
+  /// deadline that did not end the replay would otherwise rearm at
+  /// Duration.zero and spin.
+  void _onMaximumTimerFired() {
+    _onMaximumExpired();
+    if (_maximumExpiry != null && !expired(_maximumExpiry)) _armMaximumTimer();
+  }
+
+  void stop() {
+    _idleTimer?.stop();
+    _maximumTimer?.cancel();
+    _maximumTimer = null;
+    _idleExpiry = null;
+    _maximumExpiry = null;
+    _backgroundExpiry = null;
+  }
+
+  void dispose() {
+    stop();
+    _idleTimer?.dispose();
+  }
+}

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/session_replay_sender.dart';
@@ -7,26 +8,43 @@ void main() {
 
   group('SessionReplaySender', () {
     late List<MethodCall> methodCalls;
+    late List<MethodCall> mixpanelCalls;
 
     setUp(() {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
       methodCalls = [];
+      mixpanelCalls = [];
 
-      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(
-            const MethodChannel('com.mixpanel.flutter_session_replay'),
-            (call) async {
-              methodCalls.add(call);
-              return null;
-            },
-          );
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      messenger.setMockMethodCallHandler(
+        const MethodChannel('com.mixpanel.flutter_session_replay'),
+        (call) async {
+          methodCalls.add(call);
+          return null;
+        },
+      );
+      messenger.setMockMethodCallHandler(
+        const MethodChannel('mixpanel_flutter'),
+        (call) async {
+          mixpanelCalls.add(call);
+          return null;
+        },
+      );
     });
 
     tearDown(() {
-      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(
-            const MethodChannel('com.mixpanel.flutter_session_replay'),
-            null,
-          );
+      debugDefaultTargetPlatformOverride = null;
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      messenger.setMockMethodCallHandler(
+        const MethodChannel('com.mixpanel.flutter_session_replay'),
+        null,
+      );
+      messenger.setMockMethodCallHandler(
+        const MethodChannel('mixpanel_flutter'),
+        null,
+      );
     });
 
     test(
@@ -87,6 +105,42 @@ void main() {
 
       // WHEN / THEN - should not throw
       await SessionReplaySender.unregister('\$mp_replay_id');
+    });
+
+    test('register routes through mixpanel_flutter on macOS', () async {
+      // GIVEN
+      debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+
+      // WHEN
+      await SessionReplaySender.register({'\$mp_replay_id': 'test-id'});
+
+      // THEN
+      expect(methodCalls, isEmpty);
+      expect(mixpanelCalls, [
+        isMethodCall(
+          'registerSuperProperties',
+          arguments: {
+            'properties': {'\$mp_replay_id': 'test-id'},
+          },
+        ),
+      ]);
+    });
+
+    test('unregister routes through mixpanel_flutter on macOS', () async {
+      // GIVEN
+      debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+
+      // WHEN
+      await SessionReplaySender.unregister('\$mp_replay_id');
+
+      // THEN
+      expect(methodCalls, isEmpty);
+      expect(mixpanelCalls, [
+        isMethodCall(
+          'unregisterSuperProperty',
+          arguments: {'propertyName': '\$mp_replay_id'},
+        ),
+      ]);
     });
   });
 }

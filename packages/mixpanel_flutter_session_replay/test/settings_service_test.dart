@@ -634,6 +634,41 @@ void main() {
     });
 
     group('SdkConfig', () {
+      test(
+        'parses and round-trips web recording durations in milliseconds',
+        () {
+          // GIVEN the duration fields used by the JS SDK settings response
+          final json = {
+            'record_max_ms': 60000,
+            'record_idle_timeout_ms': 30000,
+          };
+
+          // WHEN
+          final config = SdkConfig.fromJson(json);
+          final restored = SdkConfig.fromJson(config.toJson());
+
+          // THEN
+          expect(config.recordMaxMs, 60000);
+          expect(config.recordIdleTimeoutMs, 30000);
+          expect(restored.recordMaxMs, 60000);
+          expect(restored.recordIdleTimeoutMs, 30000);
+        },
+      );
+
+      test('ignores invalid remote recording durations', () {
+        // GIVEN malformed, negative, and zero values
+        final config = SdkConfig.fromJson({
+          'record_max_ms': -1,
+          'record_idle_timeout_ms': 'not a duration',
+        });
+        final zero = SdkConfig.fromJson({'record_idle_timeout_ms': 0});
+
+        // THEN local limits remain available as fallback
+        expect(config.recordMaxMs, isNull);
+        expect(config.recordIdleTimeoutMs, isNull);
+        expect(zero.recordIdleTimeoutMs, isNull);
+      });
+
       test('parses record_sessions_percent from JSON', () {
         // GIVEN
         final json = {'record_sessions_percent': 42.5};

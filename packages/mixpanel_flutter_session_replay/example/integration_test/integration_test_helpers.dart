@@ -9,7 +9,7 @@ import 'package:mixpanel_flutter_session_replay/mixpanel_flutter_session_replay.
 /// Mixpanel project token provided via --dart-define or --dart-define-from-file.
 ///
 /// Set via: --dart-define=MIXPANEL_TOKEN=your_token
-/// Or via .vscode/settings.json: --dart-define-from-file=local.env
+/// Or via --dart-define-from-file=local.env (see .vscode/launch.json)
 const mixpanelToken = String.fromEnvironment('MIXPANEL_TOKEN');
 
 /// Log level for integration tests, controlled via --dart-define=LOG_LEVEL=debug.

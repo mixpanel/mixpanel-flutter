@@ -66,9 +66,15 @@ void main() {
 
         await queue.add(event);
 
-        final oldest = await queue.fetchOldest();
-        expect(oldest, isNotNull);
-        expect(oldest!.sessionId, 'session1');
+        final batch = await queue.fetchBatch(
+          sessionId: 'session1',
+          distinctId: 'user1',
+          maxBytes: 5000000,
+          maxCount: 1,
+        );
+        expect(batch, hasLength(1));
+        final oldest = batch.single;
+        expect(oldest.sessionId, 'session1');
         expect(oldest.distinctId, 'user1');
         expect(oldest.timestamp.millisecondsSinceEpoch, 100);
         expect(oldest.type, EventType.interaction);
@@ -110,9 +116,15 @@ void main() {
 
         await queue.add(event);
 
-        final oldest = await queue.fetchOldest();
-        expect(oldest, isNotNull);
-        expect(oldest!.type, EventType.screenshot);
+        final batch = await queue.fetchBatch(
+          sessionId: 'session1',
+          distinctId: 'user1',
+          maxBytes: 5000000,
+          maxCount: 1,
+        );
+        expect(batch, hasLength(1));
+        final oldest = batch.single;
+        expect(oldest.type, EventType.screenshot);
 
         final payload = oldest.payload as ScreenshotPayload;
         expect(payload.imageData.length, imageData.length);
@@ -155,11 +167,11 @@ void main() {
         await queue.add(event1);
         await queue.add(event2);
 
-        final oldest = await queue.fetchOldest();
+        final oldest = await queue.fetchOldestHeader();
         expect(oldest, isNotNull);
         expect(oldest!.timestamp.millisecondsSinceEpoch, 100);
 
-        final newest = await queue.fetchNewest();
+        final newest = await queue.fetchNewestHeader();
         expect(newest, isNotNull);
         expect(newest!.timestamp.millisecondsSinceEpoch, 200);
       } finally {
@@ -196,7 +208,7 @@ void main() {
         }
 
         // Fetch first 2 events
-        final oldest = await queue.fetchOldest();
+        final oldest = await queue.fetchOldestHeader();
         final batch = await queue.fetchBatch(
           sessionId: oldest!.sessionId,
           distinctId: oldest.distinctId,
@@ -209,7 +221,7 @@ void main() {
         await queue.remove(batch);
 
         // Should only have 1 event left
-        final remaining = await queue.fetchOldest();
+        final remaining = await queue.fetchOldestHeader();
         expect(remaining, isNotNull);
         expect(remaining!.timestamp.millisecondsSinceEpoch, 300);
 
@@ -266,7 +278,7 @@ void main() {
         await queue.add(event3);
 
         // Query with 1500 byte limit - should get events 1 and 2 but not 3
-        final oldest = await queue.fetchOldest();
+        final oldest = await queue.fetchOldestHeader();
         final batch = await queue.fetchBatch(
           sessionId: oldest!.sessionId,
           distinctId: oldest.distinctId,
@@ -310,7 +322,7 @@ void main() {
           );
         }
 
-        final oldest = await queue.fetchOldest();
+        final oldest = await queue.fetchOldestHeader();
         final batch = await queue.fetchBatch(
           sessionId: oldest!.sessionId,
           distinctId: oldest.distinctId,
@@ -379,7 +391,7 @@ void main() {
         );
 
         // Batch 1: should get the 2 anonymous123 events, stopping before user@example.com
-        var oldest = await queue.fetchOldest();
+        var oldest = await queue.fetchOldestHeader();
         final batch1 = await queue.fetchBatch(
           sessionId: oldest!.sessionId,
           distinctId: oldest.distinctId,
@@ -396,7 +408,7 @@ void main() {
         // Delete batch 1, fetch batch 2
         await queue.remove(batch1);
 
-        oldest = await queue.fetchOldest();
+        oldest = await queue.fetchOldestHeader();
         final batch2 = await queue.fetchBatch(
           sessionId: oldest!.sessionId,
           distinctId: oldest.distinctId,
@@ -411,7 +423,7 @@ void main() {
         // Delete batch 2, fetch batch 3
         await queue.remove(batch2);
 
-        oldest = await queue.fetchOldest();
+        oldest = await queue.fetchOldestHeader();
         final batch3 = await queue.fetchBatch(
           sessionId: oldest!.sessionId,
           distinctId: oldest.distinctId,
@@ -453,7 +465,7 @@ void main() {
         );
 
         // Verify first event was stored
-        final oldest = await queue.fetchOldest();
+        final oldest = await queue.fetchOldestHeader();
         expect(oldest, isNotNull);
 
         // Try to add another event that would exceed quota
@@ -571,9 +583,15 @@ void main() {
         await queue2.initialize();
 
         // Verify event persisted
-        final oldest = await queue2.fetchOldest();
-        expect(oldest, isNotNull);
-        expect(oldest!.sessionId, 'session1');
+        final batch = await queue2.fetchBatch(
+          sessionId: 'session1',
+          distinctId: 'user1',
+          maxBytes: 5000000,
+          maxCount: 1,
+        );
+        expect(batch, hasLength(1));
+        final oldest = batch.single;
+        expect(oldest.sessionId, 'session1');
         expect(oldest.timestamp.millisecondsSinceEpoch, 100);
 
         final payload = oldest.payload as InteractionPayload;
@@ -630,7 +648,7 @@ void main() {
         await queue.removeAll();
 
         // Verify events are cleared
-        final oldest = await queue.fetchOldest();
+        final oldest = await queue.fetchOldestHeader();
         expect(oldest, isNull);
 
         // Verify metadata is cleared

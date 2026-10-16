@@ -1,11 +1,15 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:clock/clock.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:http/http.dart' as http;
+import 'package:http/testing.dart' as http_testing;
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mixpanel_flutter_session_replay/src/internal/storage/event_queue_interface.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/upload/upload_service.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/upload/payload_serializer.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/settings/settings_service.dart';
@@ -18,6 +22,7 @@ import 'package:mixpanel_flutter_session_replay/src/models/session_event.dart';
 import 'helpers/fake_http_client.dart';
 import 'helpers/fake_connectivity.dart';
 import 'helpers/in_memory_event_queue.dart';
+import 'helpers/lease_event_queue.dart';
 
 void main() {
   group('UploadService', () {
@@ -832,28 +837,38 @@ void main() {
         service.dispose();
       });
 
-      test('handles missing session metadata gracefully', () async {
-        // GIVEN - add event without creating session metadata
-        await eventQueue.add(
-          SessionReplayEvent(
-            sessionId: 'orphan-session',
-            distinctId: testDistinctId,
-            timestamp: DateTime.fromMillisecondsSinceEpoch(1000, isUtc: true),
-            type: EventType.interaction,
-            payload: InteractionPayload(interactionType: 7, x: 1.0, y: 2.0),
-          ),
-        );
+      test(
+        'rebuilds missing session metadata and uploads the events',
+        () async {
+          // GIVEN - add event without creating session metadata
+          await eventQueue.add(
+            SessionReplayEvent(
+              sessionId: 'orphan-session',
+              distinctId: testDistinctId,
+              timestamp: DateTime.fromMillisecondsSinceEpoch(1000, isUtc: true),
+              type: EventType.interaction,
+              payload: InteractionPayload(interactionType: 7, x: 1.0, y: 2.0),
+            ),
+          );
 
-        final service = createService(eventQueue: eventQueue);
+          final service = createService(eventQueue: eventQueue);
 
-        // WHEN
-        await service.flush();
+          // WHEN
+          await service.flush();
 
-        // THEN - event remains (upload returned networkError due to missing metadata)
-        expect(eventQueue.eventCount, 1);
+          // THEN - the orphaned event uploads as the first batch of a replay
+          // that starts at its timestamp, instead of blocking the queue
+          expect(eventQueue.eventCount, 0);
+          final session = await eventQueue.getSessionMetadata('orphan-session');
+          expect(
+            session?.startTime,
+            DateTime.fromMillisecondsSinceEpoch(1000, isUtc: true),
+          );
+          expect(await eventQueue.getLastSequenceNumber('orphan-session'), 0);
 
-        service.dispose();
-      });
+          service.dispose();
+        },
+      );
 
       test('uploads screenshot binary data correctly', () async {
         // GIVEN
@@ -1175,6 +1190,374 @@ void main() {
       );
     });
 
+    group('upload lease', () {
+      test('acquires and releases the lease as the queue owner', () async {
+        // GIVEN a shared queue whose owner id survives page reloads
+        final leaseQueue = LeaseEventQueue(uploadLeaseOwnerId: 'tab-42');
+        await leaseQueue.initialize();
+        final session = Session(
+          id: testSessionId,
+          startTime: DateTime.fromMillisecondsSinceEpoch(1000, isUtc: true),
+          status: SessionStatus.active,
+        );
+        await leaseQueue.createSessionMetadata(session);
+        await leaseQueue.add(
+          SessionReplayEvent(
+            sessionId: testSessionId,
+            distinctId: testDistinctId,
+            timestamp: DateTime.fromMillisecondsSinceEpoch(2000, isUtc: true),
+            type: EventType.interaction,
+            payload: InteractionPayload(interactionType: 7, x: 1, y: 2),
+          ),
+        );
+        final service = createService(eventQueue: leaseQueue);
+
+        // WHEN one batch is uploaded
+        await service.flushOneBatch();
+
+        // THEN the lease was taken and released under the queue's identity,
+        // not a per-service one that a reload would lose
+        expect(leaseQueue.acquireOwnerIds, contains('tab-42'));
+        expect(leaseQueue.acquireOwnerIds.toSet(), {'tab-42'});
+        expect(leaseQueue.releaseOwnerIds, ['tab-42']);
+        // AND the lease is scoped to the session being uploaded
+        expect(leaseQueue.acquireSessionIds.toSet(), {testSessionId});
+        expect(leaseQueue.releaseSessionIds, [testSessionId]);
+        expect(leaseQueue.eventCount, 0);
+      });
+
+      test('reports busy when another owner holds the lease', () async {
+        final leaseQueue = LeaseEventQueue()..acquireResults.add(false);
+        await leaseQueue.initialize();
+        final session = Session(
+          id: testSessionId,
+          startTime: DateTime.fromMillisecondsSinceEpoch(1000, isUtc: true),
+          status: SessionStatus.active,
+        );
+        await leaseQueue.createSessionMetadata(session);
+        await leaseQueue.add(
+          SessionReplayEvent(
+            sessionId: testSessionId,
+            distinctId: testDistinctId,
+            timestamp: DateTime.fromMillisecondsSinceEpoch(2000, isUtc: true),
+            type: EventType.interaction,
+            payload: InteractionPayload(interactionType: 7, x: 1, y: 2),
+          ),
+        );
+        final service = createService(eventQueue: leaseQueue);
+
+        await service.flushOneBatch();
+
+        expect(leaseQueue.eventCount, 1, reason: 'nothing uploaded');
+        expect(leaseQueue.releaseOwnerIds, isEmpty);
+      });
+
+      test(
+        'uploads the next session when another owner holds the oldest lease',
+        () async {
+          // GIVEN an expired session another tab is draining sits ahead of
+          // this tab's own session in the queue
+          final leaseQueue = LeaseEventQueue()
+            ..busySessionIds.add('contended-session');
+          await leaseQueue.initialize();
+          for (final (id, timestamp) in [
+            ('contended-session', 1000),
+            ('own-session', 2000),
+          ]) {
+            await leaseQueue.createSessionMetadata(
+              Session(
+                id: id,
+                startTime: DateTime.fromMillisecondsSinceEpoch(
+                  timestamp,
+                  isUtc: true,
+                ),
+                status: SessionStatus.active,
+              ),
+            );
+            await leaseQueue.add(
+              SessionReplayEvent(
+                sessionId: id,
+                distinctId: testDistinctId,
+                timestamp: DateTime.fromMillisecondsSinceEpoch(
+                  timestamp + 1,
+                  isUtc: true,
+                ),
+                type: EventType.interaction,
+                payload: InteractionPayload(interactionType: 7, x: 1, y: 2),
+              ),
+            );
+          }
+          final service = createService(eventQueue: leaseQueue);
+
+          // WHEN a flush runs while the other tab holds the first lease
+          await service.flush();
+
+          // THEN the busy session is left alone and this tab's replay is
+          // uploaded instead of waiting behind it; the flush ends once the
+          // contended session is all that remains
+          expect(leaseQueue.acquireSessionIds, [
+            'contended-session',
+            'own-session',
+            'contended-session',
+          ]);
+          expect(leaseQueue.releaseSessionIds, ['own-session']);
+          expect(
+            (await leaseQueue.fetchOldestHeader())?.sessionId,
+            'contended-session',
+            reason: 'only the contended session still has events queued',
+          );
+        },
+      );
+      test(
+        'should stop at the flush cutoff when skipping a session another tab '
+        'has leased',
+        () async {
+          // GIVEN a contended session another tab is draining ahead of this
+          // tab's own session, which keeps recording while the flush runs
+          final leaseQueue = _RecordingDuringCommitQueue()
+            ..busySessionIds.add('contended-session');
+          await leaseQueue.initialize();
+          for (final (id, timestamp) in [
+            ('contended-session', 1000),
+            ('own-session', 2000),
+          ]) {
+            await leaseQueue.createSessionMetadata(
+              Session(
+                id: id,
+                startTime: DateTime.fromMillisecondsSinceEpoch(
+                  timestamp,
+                  isUtc: true,
+                ),
+                status: SessionStatus.active,
+              ),
+            );
+            await leaseQueue.add(_interactionAt(id, timestamp + 1));
+          }
+          final service = createService(eventQueue: leaseQueue);
+
+          // WHEN a flush runs
+          await service.flush();
+
+          // THEN only the event that existed when the flush began is sent;
+          // the one recorded afterward waits for the next flush
+          expect(leaseQueue.commitCount, 1);
+          final remaining = await leaseQueue.fetchOldestHeader(
+            excludeSessionIds: {'contended-session'},
+          );
+          expect(remaining?.timestamp.millisecondsSinceEpoch, 9000);
+        },
+      );
+    });
+
+    group('storage failures', () {
+      test('flush returns a result instead of throwing', () async {
+        // GIVEN a queue whose header reads fail, as IndexedDB does while its
+        // connection is closed
+        final failingQueue = _FailingHeaderQueue();
+        await failingQueue.initialize();
+        final service = createService(eventQueue: failingQueue);
+
+        // WHEN / THEN the failure is logged, not thrown to the caller
+        await expectLater(service.flush(), completes);
+
+        // AND the flush mutex is released so the next flush can run
+        await expectLater(service.flush(), completes);
+      });
+
+      test('flushOneBatch swallows a failing progress read', () async {
+        // GIVEN a healthy upload whose falling-behind header read fails. The
+        // first oldest-header read (batch selection) succeeds; the second,
+        // outside _uploadBatch, throws.
+        final failingQueue = _FailingHeaderQueue(failAfterFetches: 1);
+        await failingQueue.initialize();
+        final session = Session(
+          id: testSessionId,
+          startTime: DateTime.fromMillisecondsSinceEpoch(1000, isUtc: true),
+          status: SessionStatus.active,
+        );
+        await failingQueue.createSessionMetadata(session);
+        await failingQueue.add(
+          SessionReplayEvent(
+            sessionId: testSessionId,
+            distinctId: testDistinctId,
+            timestamp: DateTime.fromMillisecondsSinceEpoch(2000, isUtc: true),
+            type: EventType.interaction,
+            payload: InteractionPayload(interactionType: 7, x: 1, y: 2),
+          ),
+        );
+        final service = createService(eventQueue: failingQueue);
+
+        // WHEN / THEN
+        await expectLater(service.flushOneBatch(), completes);
+        await expectLater(service.flushOneBatch(), completes);
+      });
+
+      test(
+        'should not back off uploads when the queue could not be read',
+        () async {
+          // GIVEN a queue whose reads fail transiently, then recover
+          final queue = _ToggleFailingQueue()..failing = true;
+          await queue.initialize();
+          await queue.createSessionMetadata(
+            Session(
+              id: testSessionId,
+              startTime: DateTime.fromMillisecondsSinceEpoch(1000, isUtc: true),
+              status: SessionStatus.active,
+            ),
+          );
+          await queue.add(_interactionAt(testSessionId, 2000));
+          var uploads = 0;
+          final service = createService(
+            eventQueue: queue,
+            httpClient: http_testing.MockClient((request) async {
+              uploads++;
+              return http.Response('', 200);
+            }),
+          );
+
+          // WHEN several periodic uploads hit the storage error, enough to
+          // trigger backoff had they been network failures
+          for (var i = 0; i < 3; i++) {
+            await service.flushOneBatch();
+          }
+          queue.failing = false;
+          await service.flushOneBatch();
+
+          // THEN the next attempt uploads at once: no request was ever sent,
+          // so there was nothing to back off from
+          expect(uploads, 1);
+        },
+      );
+
+      test(
+        'should keep its cutoff when a flush waits for a periodic upload',
+        () async {
+          // GIVEN a periodic upload whose request is in flight
+          final requestedAt = DateTime.utc(2026, 1, 1, 12);
+          await seedQueue(eventCount: 2);
+          final release = Completer<void>();
+          var uploads = 0;
+          final service = createService(
+            eventQueue: eventQueue,
+            maxEventsPerBatch: 1,
+            // Old seeded events would otherwise trigger periodic catch-up
+            // uploads, which are not what this test measures.
+            flushInterval: const Duration(days: 36500),
+            httpClient: http_testing.MockClient((request) async {
+              uploads++;
+              if (uploads == 1) await release.future;
+              return http.Response('', 200);
+            }),
+          );
+          final periodic = service.flushOneBatch();
+          await pumpEventQueue();
+
+          // WHEN a flush is requested, and recording adds an event while it
+          // waits
+          final flushing = withClock(
+            Clock.fixed(requestedAt),
+            () => service.flush(),
+          );
+          await eventQueue.add(
+            SessionReplayEvent(
+              sessionId: testSessionId,
+              distinctId: testDistinctId,
+              timestamp: requestedAt.add(const Duration(seconds: 1)),
+              type: EventType.interaction,
+              payload: InteractionPayload(interactionType: 7, x: 1, y: 2),
+            ),
+          );
+          release.complete();
+          await periodic;
+          await flushing;
+
+          // THEN the flush drains only what existed when it was requested
+          expect(uploads, 2);
+          final remaining = await eventQueue.fetchOldestHeader();
+          expect(
+            remaining?.timestamp,
+            requestedAt.add(const Duration(seconds: 1)),
+          );
+        },
+      );
+
+      test(
+        'should upload an already-queued event when the clock has moved back',
+        () async {
+          // GIVEN a queued event stamped after the wall clock, as after a
+          // clock rollback during a gesture, and a periodic upload in flight
+          final now = DateTime.utc(2026, 1, 1, 12);
+          await seedQueue(eventCount: 1);
+          await eventQueue.add(
+            SessionReplayEvent(
+              sessionId: testSessionId,
+              distinctId: testDistinctId,
+              timestamp: now.add(const Duration(seconds: 10)),
+              type: EventType.interaction,
+              payload: InteractionPayload(interactionType: 7, x: 1, y: 2),
+            ),
+          );
+          final release = Completer<void>();
+          var uploads = 0;
+          final service = createService(
+            eventQueue: eventQueue,
+            maxEventsPerBatch: 1,
+            flushInterval: const Duration(days: 36500),
+            httpClient: http_testing.MockClient((request) async {
+              uploads++;
+              if (uploads == 1) await release.future;
+              return http.Response('', 200);
+            }),
+          );
+          final periodic = service.flushOneBatch();
+          await pumpEventQueue();
+
+          // WHEN a flush is requested meanwhile
+          final flushing = withClock(Clock.fixed(now), () => service.flush());
+          release.complete();
+          await periodic;
+          await flushing;
+
+          // THEN the event queued before the request is uploaded too
+          expect(uploads, 2);
+          expect(await eventQueue.fetchOldestHeader(), isNull);
+        },
+      );
+
+      test(
+        'should run a full flush when called during a periodic upload',
+        () async {
+          // GIVEN a periodic single-batch upload whose request is in flight,
+          // with more events queued behind it
+          await seedQueue(eventCount: 3);
+          final release = Completer<void>();
+          var uploads = 0;
+          final service = createService(
+            eventQueue: eventQueue,
+            maxEventsPerBatch: 1,
+            httpClient: http_testing.MockClient((request) async {
+              uploads++;
+              if (uploads == 1) await release.future;
+              return http.Response('', 200);
+            }),
+          );
+          final periodic = service.flushOneBatch();
+          await pumpEventQueue();
+
+          // WHEN a full flush is requested meanwhile, as on page hide
+          final flushing = service.flush();
+          release.complete();
+          await periodic;
+          await flushing;
+
+          // THEN the flush waited for the periodic upload and then drained
+          // the rest of the queue instead of returning at once
+          expect(uploads, 3);
+          expect(await eventQueue.fetchOldestHeader(), isNull);
+        },
+      );
+    });
+
     group('dispose', () {
       test('stops auto flush timer', () async {
         // GIVEN
@@ -1214,4 +1597,74 @@ void main() {
 List<dynamic> decodeRequestEvents(http.Request request) {
   final decompressed = gzip.decode(request.bodyBytes);
   return jsonDecode(utf8.decode(decompressed)) as List<dynamic>;
+}
+
+/// Queue whose header reads fail the way IndexedDB does while its connection
+/// is closed. [failAfterFetches] oldest-header reads succeed first.
+class _FailingHeaderQueue extends InMemoryEventQueue {
+  _FailingHeaderQueue({this.failAfterFetches = 0});
+
+  final int failAfterFetches;
+  int _oldestHeaderFetches = 0;
+
+  @override
+  Future<QueuedEventHeader?> fetchNewestHeader() async {
+    throw StateError('IndexedDB connection is closed');
+  }
+
+  @override
+  Future<QueuedEventHeader?> fetchOldestHeader({
+    Set<String> excludeSessionIds = const {},
+  }) {
+    if (_oldestHeaderFetches++ >= failAfterFetches) {
+      throw StateError('IndexedDB connection is closed');
+    }
+    return super.fetchOldestHeader(excludeSessionIds: excludeSessionIds);
+  }
+}
+
+SessionReplayEvent _interactionAt(String sessionId, int timestampMs) =>
+    SessionReplayEvent(
+      sessionId: sessionId,
+      distinctId: 'user-1',
+      timestamp: DateTime.fromMillisecondsSinceEpoch(timestampMs, isUtc: true),
+      type: EventType.interaction,
+      payload: InteractionPayload(interactionType: 7, x: 1, y: 2),
+    );
+
+/// Lease queue whose own session records a new event each time a batch is
+/// committed, as a replay that keeps recording during a flush does. Bounded
+/// so a flush that ignores its cutoff fails the test instead of hanging it.
+class _RecordingDuringCommitQueue extends LeaseEventQueue {
+  var _recorded = 0;
+
+  @override
+  Future<void> commitUploadedBatch({
+    required List<PersistedSessionReplayEvent> events,
+    required String sessionId,
+    required int sequenceNumber,
+  }) async {
+    await super.commitUploadedBatch(
+      events: events,
+      sessionId: sessionId,
+      sequenceNumber: sequenceNumber,
+    );
+    if (_recorded++ < 3) {
+      await add(_interactionAt('own-session', 9000 + _recorded - 1));
+    }
+  }
+}
+
+/// In-memory queue whose reads fail while [failing] is set, as IndexedDB's
+/// do while its connection is being reopened.
+class _ToggleFailingQueue extends InMemoryEventQueue {
+  bool failing = false;
+
+  @override
+  Future<QueuedEventHeader?> fetchOldestHeader({
+    Set<String> excludeSessionIds = const {},
+  }) {
+    if (failing) throw StateError('IndexedDB connection is closed');
+    return super.fetchOldestHeader(excludeSessionIds: excludeSessionIds);
+  }
 }

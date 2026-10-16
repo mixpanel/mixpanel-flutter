@@ -4,6 +4,7 @@ import 'package:clock/clock.dart';
 import 'package:flutter/widgets.dart';
 
 import '../logger.dart';
+import 'frame_acquirer.dart';
 
 /// Helper class that manages capture timing and rate limiting
 ///
@@ -23,11 +24,31 @@ class CaptureScheduler {
   /// Flag to track if a capture is currently in progress
   bool _isCaptureInProgress = false;
 
+  /// A frame rendered while a capture was in progress, after that capture
+  /// read the render tree. The screen it showed may be the settled state that
+  /// capture missed or rejected, so one more rate-limited capture is owed
+  /// once the current one completes.
+  bool _frameArrivedDuringCapture = false;
+
+  /// Whether the capture in progress has read the render tree yet.
+  ///
+  /// A frame that ends before the read is part of what the capture records,
+  /// including any frame the capture itself requested, so it owes nothing.
+  /// Counting it would let a capture re-arm itself: its own frame would
+  /// schedule a follow-up that requests another frame, every rate-limit
+  /// interval, on a screen that never changed.
+  bool _renderTreeRead = false;
+
+  /// Whether frames rendered during a capture are noted for a follow-up. See
+  /// [FrameAcquirer.followsUpFramesDuringCapture].
+  final bool followsUpFramesDuringCapture;
+
   /// Timer for debouncing capture requests
   Timer? _debounceTimer;
 
   CaptureScheduler({
     this.minInterval = const Duration(milliseconds: 500),
+    required this.followsUpFramesDuringCapture,
     required MixpanelLogger logger,
   }) : _logger = logger;
 
@@ -53,18 +74,20 @@ class CaptureScheduler {
   /// Schedule a capture after the remaining rate limit time
   ///
   /// This method is smart about timer management:
-  /// - If a capture is in progress, updates timestamp and returns null (ensures re-capture after completion)
+  /// - If a capture is in progress, returns null, noting the frame for a follow-up if [followsUpFramesDuringCapture]
   /// - If a timer is already active, does nothing and returns null
   /// - If enough time has passed, schedules callback to execute immediately (Duration.zero timer)
   /// - Otherwise, schedules the callback to run after the remaining time
   Duration? scheduleAfterRateLimit(VoidCallback callback) {
-    // Don't schedule if a capture is already in progress
-    // But update _lastCaptureTime so next frame callback will schedule a capture after completion
+    // Don't schedule while a capture is in progress. With follow-ups,
+    // remember that a frame arrived so the caller can retry after completion.
     if (_isCaptureInProgress) {
-      _lastCaptureTime = clock.now();
-      _logger.debug(
-        'Capture in progress, updating timestamp for pending capture',
-      );
+      if (followsUpFramesDuringCapture && _renderTreeRead) {
+        _frameArrivedDuringCapture = true;
+        _logger.debug(
+          'Capture in progress, frame noted for a follow-up capture',
+        );
+      }
       return null;
     }
 
@@ -97,6 +120,22 @@ class CaptureScheduler {
     final now = clock.now();
     _logger.debug('Capture started at ${now.millisecondsSinceEpoch}');
     _isCaptureInProgress = true;
+    _frameArrivedDuringCapture = false;
+    _renderTreeRead = false;
+  }
+
+  /// Mark that the capture in progress has read the render tree. Frames from
+  /// here on may show content it did not record.
+  void markRenderTreeRead() => _renderTreeRead = true;
+
+  /// Whether a frame rendered during the capture that just completed, and
+  /// clears that note. The caller schedules one rate-limited follow-up so a
+  /// rejected or stale capture cannot leave the settled screen unrecorded
+  /// until something else repaints.
+  bool takeFrameArrivedDuringCapture() {
+    final arrived = _frameArrivedDuringCapture;
+    _frameArrivedDuringCapture = false;
+    return arrived;
   }
 
   /// Mark that a capture has completed (success or failure)
