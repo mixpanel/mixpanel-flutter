@@ -3,7 +3,7 @@
 ## [session-replay-v2.1.0](https://github.com/mixpanel/mixpanel-flutter/tree/session-replay-v2.1.0) (2026-10-16)
 
 ### Features
-- (Beta) Add web support to Session Replay ([#283](https://github.com/mixpanel/mixpanel-flutter/pull/283))
+- (Beta) Add web support to Session Replay and introduce background -> foreground resume on native ([#283](https://github.com/mixpanel/mixpanel-flutter/pull/283))
 
 [Full Changelog](https://github.com/mixpanel/mixpanel-flutter/compare/session-replay-v2.0.0...session-replay-v2.1.0)
 
