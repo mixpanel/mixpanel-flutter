@@ -216,6 +216,10 @@ class WebRenderedSurfaceCapture extends RenderedSurfaceCapture {
   /// also relieves `createImageBitmap` of the same resize later, so most of
   /// this cost is moved rather than added.
   bool _copyIntoFrameSnapshot(web.HTMLCanvasElement source, Size logicalSize) {
+    // A frame callback queued before [dispose] still runs after it. Without
+    // this, the copy below would allocate a replacement for the canvas
+    // cleanup just released and leak it for the life of the page.
+    if (_isDisposed) return false;
     if (source.width == 0 || source.height == 0) return false;
     final snapshotWatch = Stopwatch()..start();
     final wanted = _snapshotExtent(source, logicalSize);
