@@ -3,7 +3,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'internal/platform/platform_info.dart';
 
 /// SDK version constant. Update this alongside pubspec.yaml when releasing.
-const String sdkVersion = '2.0.0';
+const String sdkVersion = '2.1.0';
 
 /// Library identity shared by settings and replay upload requests.
 /// Web replays report separately so the backend can tell them from native.

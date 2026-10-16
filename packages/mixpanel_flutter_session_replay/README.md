@@ -1,6 +1,6 @@
 # Mixpanel Flutter Session Replay
 
-##### _October 13, 2026_ - [session-replay-v2.0.0](https://github.com/mixpanel/mixpanel-flutter/releases/tag/session-replay-v2.0.0)
+##### _October 16, 2026_ - [session-replay-v2.1.0](https://github.com/mixpanel/mixpanel-flutter/releases/tag/session-replay-v2.1.0)
 
 ## Overview
 
@@ -119,7 +119,7 @@ Add to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  mixpanel_flutter_session_replay: 2.0.0
+  mixpanel_flutter_session_replay: 2.1.0
 ```
 
 ## Initialize
