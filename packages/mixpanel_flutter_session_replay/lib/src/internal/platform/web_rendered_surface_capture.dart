@@ -35,6 +35,49 @@ class WebRenderedSurfaceCapture extends RenderedSurfaceCapture {
   // Without preserveDrawingBuffer, its pixels expire after presentation.
   bool _requiresSameFrameSnapshot = false;
 
+  /// A copy of the WebGL surface taken inside the frame callback that drew it.
+  ///
+  /// The drawing buffer is discarded as soon as that task yields, and the mask
+  /// walk plus `createImageBitmap` both run afterwards, so reading the live
+  /// canvas in [capture] returns a cleared — black — surface whenever anything
+  /// in between crosses a macrotask boundary. Copying into a 2D canvas while
+  /// still inside the frame callback makes the pixels stable for the rest of
+  /// the pipeline. Only browsers that need it pay for the copy.
+  web.HTMLCanvasElement? _frameSnapshot;
+
+  /// Whether [_frameSnapshot] holds pixels for the capture now in flight.
+  bool _frameSnapshotIsFresh = false;
+
+  /// Frames Flutter has drawn, counted here because
+  /// `SchedulerBinding.currentFrameTimeStamp` asserts outside a frame and the
+  /// copy runs in a browser callback after the frame has ended.
+  ///
+  /// Static because the callback below can never be removed: an instance field
+  /// would make the closure capture `this`, pinning every disposed capture and
+  /// adding a second callback each time replay reinitializes. Only equality
+  /// between two reads of this counter matters, so one shared count is enough.
+  static int _framesPainted = 0;
+  static bool _frameCounterArmed = false;
+
+  /// The value of [_framesPainted] when the copy was taken.
+  ///
+  /// ScreenshotCapturer awaits another painted frame before walking masks
+  /// whenever one is already scheduled, so an animation can move a masked
+  /// widget between the copy and the mask read. The masks would then describe
+  /// a frame these pixels are not from, and a mask could land beside the
+  /// content it is meant to cover. Captures are dropped rather than encoded
+  /// when that happens.
+  int? _frameSnapshotFrame;
+
+  /// Set by [dispose] so a frame callback already queued cannot allocate a new
+  /// snapshot canvas after cleanup released the old one.
+  bool _isDisposed = false;
+
+  /// How long the last in-frame copy took. Measured because it runs inside the
+  /// animation frame callback, where overruns cost a presented frame, and it
+  /// is the one cost this strategy adds on WebGL surfaces.
+  Duration _lastFrameSnapshot = Duration.zero;
+
   WebRenderedSurfaceCapture({
     required MixpanelLogger logger,
     double jpegQuality = 0.8,
@@ -42,18 +85,35 @@ class WebRenderedSurfaceCapture extends RenderedSurfaceCapture {
        _encoder = WebJpegEncoder(logger: logger, jpegQuality: jpegQuality);
 
   Future<void> initialize() => _encoder.initialize();
+
+  /// Armed only on the WebGL path, which already requires the binding to
+  /// schedule a frame. Surfaces that never copy do not touch the scheduler.
+  void _armFrameCounter() {
+    if (_frameCounterArmed) return;
+    _frameCounterArmed = true;
+    // Persistent callbacks cannot be removed, so this closure must stay free
+    // of instance state; it touches only the static counter above.
+    SchedulerBinding.instance.addPersistentFrameCallback((_) {
+      _framesPainted++;
+    });
+  }
+
   @override
   bool get isAvailable => _encoder.isAvailable;
 
   @override
   Future<RenderedSurfaceAvailability> waitUntilRenderedSurfaceAvailable(
-    Size logicalSize,
-  ) async {
+    Size logicalSize, {
+    Size? captureExtent,
+  }) async {
     if (web.document.hidden) return RenderedSurfaceAvailability.unavailable;
     var lookup = _SurfaceLookup.of(logicalSize);
     if (lookup.isReady) {
       _lastSkipReason = null;
-      return _prepareReadableSurface(lookup.matches.single);
+      return _prepareReadableSurface(
+        lookup.matches.single,
+        captureExtent ?? logicalSize,
+      );
     }
     // Only a surface that may still appear is worth waiting for. An ambiguous
     // layout (several matching canvases, or several Flutter views) will not
@@ -74,9 +134,17 @@ class WebRenderedSurfaceCapture extends RenderedSurfaceCapture {
           _lastSkipReason = null;
           final availability = await _prepareReadableSurface(
             lookup.matches.single,
+            captureExtent ?? logicalSize,
           );
           if (availability == RenderedSurfaceAvailability.unavailable) {
             return availability;
+          }
+          // The copy already fixed this frame's pixels. Reporting a platform
+          // frame here would make the capturer await the next painted frame
+          // before walking masks, which on an animating screen always lands
+          // and strands the snapshot one frame behind the masks.
+          if (_requiresSameFrameSnapshot) {
+            return RenderedSurfaceAvailability.available;
           }
           return RenderedSurfaceAvailability.availableAfterBrowserFrame;
         }
@@ -89,21 +157,27 @@ class WebRenderedSurfaceCapture extends RenderedSurfaceCapture {
 
   Future<RenderedSurfaceAvailability> _prepareReadableSurface(
     web.HTMLCanvasElement canvas,
+    Size logicalSize,
   ) async {
     _requiresSameFrameSnapshot =
         !kIsWasm &&
         (canvas.getContext('webgl2') != null ||
             canvas.getContext('webgl') != null);
     if (_requiresSameFrameSnapshot) {
+      _armFrameCounter();
       // Register after Flutter's requested frame so rasterization runs before
       // this callback, but snapshot before the browser clears the WebGL buffer.
       // This must happen before the mask walk: requesting a frame afterward
       // would perpetually re-arm the capture scheduler on a static screen.
       SchedulerBinding.instance.scheduleFrame();
-      if (!await _nextAnimationFrame()) {
+      if (!await _snapshotWithinAnimationFrame(canvas, logicalSize)) {
         return RenderedSurfaceAvailability.unavailable;
       }
-      return RenderedSurfaceAvailability.availableAfterBrowserFrame;
+      // The copy already fixed this frame's pixels, so the capturer must walk
+      // masks now. Reporting a platform frame here makes it await the next
+      // painted frame first, which on an animating screen always lands and
+      // leaves the masks one frame ahead of the pixels.
+      return RenderedSurfaceAvailability.available;
     }
     return RenderedSurfaceAvailability.available;
   }
@@ -115,6 +189,114 @@ class WebRenderedSurfaceCapture extends RenderedSurfaceCapture {
     if (reason == _lastSkipReason) return;
     _lastSkipReason = reason;
     _logger.warning(reason);
+  }
+
+  /// Copies [canvas] into [_frameSnapshot] from inside the animation frame
+  /// callback, so no task boundary separates the rasterized buffer from the
+  /// read. Awaiting the frame and copying afterwards is not equivalent: the
+  /// resumption is a microtask on some engines and a macrotask on others, and
+  /// the buffer is already gone in the latter case.
+  Future<bool> _snapshotWithinAnimationFrame(
+    web.HTMLCanvasElement canvas,
+    Size logicalSize,
+  ) {
+    _frameSnapshotIsFresh = false;
+    _frameSnapshotFrame = null;
+    if (_isDisposed || web.document.hidden) return Future.value(false);
+    final completer = Completer<bool>();
+    late final int frameId;
+    late final JSFunction onVisibilityChange;
+    void finish(bool captured) {
+      if (completer.isCompleted) return;
+      web.window.cancelAnimationFrame(frameId);
+      web.document.removeEventListener('visibilitychange', onVisibilityChange);
+      completer.complete(captured);
+    }
+
+    onVisibilityChange = ((web.Event _) {
+      if (web.document.hidden) finish(false);
+    }).toJS;
+    web.document.addEventListener('visibilitychange', onVisibilityChange);
+    frameId = web.window.requestAnimationFrame(
+      ((num _) => finish(_copyIntoFrameSnapshot(canvas, logicalSize))).toJS,
+    );
+    return completer.future;
+  }
+
+  /// Synchronous by contract. Anything awaited here would forfeit the frame.
+  ///
+  /// Copies at the largest size any capture can ask for rather than the
+  /// canvas's device-pixel size. A 2x display backs a 1188x777 capture with a
+  /// 2800x1831 canvas, so copying the whole surface would move ~4.6x the
+  /// pixels a capture can use, inside the frame callback. Downscaling here
+  /// also relieves `createImageBitmap` of the same resize later, so most of
+  /// this cost is moved rather than added.
+  bool _copyIntoFrameSnapshot(web.HTMLCanvasElement source, Size logicalSize) {
+    // A frame callback queued before [dispose] still runs after it. Without
+    // this, the copy below would allocate a replacement for the canvas
+    // cleanup just released and leak it for the life of the page.
+    if (_isDisposed) return false;
+    if (source.width == 0 || source.height == 0) return false;
+    final snapshotWatch = Stopwatch()..start();
+    final wanted = _snapshotExtent(source, logicalSize);
+    final width = wanted.$1;
+    final height = wanted.$2;
+    if (width == 0 || height == 0) return false;
+    try {
+      var target = _frameSnapshot;
+      if (target == null || target.width != width || target.height != height) {
+        target = web.document.createElement('canvas') as web.HTMLCanvasElement;
+        target.width = width;
+        target.height = height;
+        _frameSnapshot = target;
+      }
+      final context = target.getContext('2d');
+      if (context == null) return false;
+      final canvas2d = context as web.CanvasRenderingContext2D;
+      canvas2d.clearRect(0, 0, width.toDouble(), height.toDouble());
+      canvas2d.drawImage(
+        source,
+        0,
+        0,
+        source.width.toDouble(),
+        source.height.toDouble(),
+        0,
+        0,
+        width.toDouble(),
+        height.toDouble(),
+      );
+      _frameSnapshotIsFresh = true;
+      _frameSnapshotFrame = _framesPainted;
+      _lastFrameSnapshot = snapshotWatch.elapsed;
+      if (_lastFrameSnapshot > _slowSnapshotThreshold) {
+        // Inside the frame callback, so this directly delays presentation.
+        _logger.warning(
+          'In-frame surface snapshot took '
+          '${_lastFrameSnapshot.inMilliseconds}ms for ${width}x$height; '
+          'frame delivery may suffer on this device',
+        );
+      }
+      return true;
+    } catch (error) {
+      _reportSkip('Web surface snapshot failed: $error');
+      return false;
+    }
+  }
+
+  /// Above this, the copy is a plausible cause of a dropped frame rather than
+  /// noise, so it is worth a line in the log on slow devices.
+  static const _slowSnapshotThreshold = Duration(milliseconds: 8);
+
+  /// The largest extent a capture can request, never upscaling past the
+  /// surface actually rendered.
+  (int, int) _snapshotExtent(web.HTMLCanvasElement source, Size wanted) {
+    final width = wanted.width.ceil();
+    final height = wanted.height.ceil();
+    if (width <= 0 || height <= 0) return (source.width, source.height);
+    return (
+      width < source.width ? width : source.width,
+      height < source.height ? height : source.height,
+    );
   }
 
   static Future<bool> _nextAnimationFrame() {
@@ -144,6 +326,15 @@ class WebRenderedSurfaceCapture extends RenderedSurfaceCapture {
     if (!_requiresSameFrameSnapshot) await _nextAnimationFrame();
   }
 
+  /// Whether [_frameSnapshot] still describes the frame Flutter has painted.
+  ///
+  /// Checked at the mask walk rather than at encode time: the walk is the
+  /// moment masks and pixels have to agree, and frames painted after it
+  /// cannot invalidate a pair that already matched.
+  @override
+  bool get snapshotMatchesCurrentFrame =>
+      !_requiresSameFrameSnapshot || _frameSnapshotFrame == _framesPainted;
+
   @override
   Future<CapturedSurface?> capture({
     required Size logicalSize,
@@ -161,11 +352,30 @@ class WebRenderedSurfaceCapture extends RenderedSurfaceCapture {
     }
     final matchingCanvases = lookup.matches;
 
+    // On WebGL surfaces the live canvas has already been cleared by now, so
+    // the bitmap is built from the copy taken inside the frame callback.
+    final web.HTMLCanvasElement bitmapSource;
+    if (_requiresSameFrameSnapshot) {
+      final snapshot = _frameSnapshot;
+      if (snapshot == null || !_frameSnapshotIsFresh) {
+        _reportSkip(
+          'No in-frame surface snapshot for this capture; dropping the frame',
+        );
+        return null;
+      }
+      bitmapSource = snapshot;
+      // One capture per snapshot: a later attempt must take its own frame
+      // rather than re-encode stale pixels.
+      _frameSnapshotIsFresh = false;
+    } else {
+      bitmapSource = matchingCanvases.single;
+    }
+
     web.ImageBitmap? imageBitmap;
     try {
       imageBitmap = await web.window
           .createImageBitmap(
-            matchingCanvases.single,
+            bitmapSource,
             web.ImageBitmapOptions(
               resizeWidth: outputWidth,
               resizeHeight: outputHeight,
@@ -185,6 +395,7 @@ class WebRenderedSurfaceCapture extends RenderedSurfaceCapture {
         outputHeight,
         (workerProcessing) {
           lastCaptureTimings = WebImageCaptureTimings(
+            frameSnapshot: _lastFrameSnapshot,
             surfaceLookup: surfaceLookup,
             bitmapCreation: bitmapCreation,
             snapshotValidation:
@@ -211,7 +422,16 @@ class WebRenderedSurfaceCapture extends RenderedSurfaceCapture {
   static web.ShadowRoot? _shadowRoot(web.Element? host) => host?.shadowRoot;
 
   @override
-  Future<void> dispose() => _encoder.dispose();
+  Future<void> dispose() {
+    _isDisposed = true;
+    // Drop the backing bitmap; a stale one would otherwise outlive the SDK.
+    _frameSnapshot?.width = 0;
+    _frameSnapshot?.height = 0;
+    _frameSnapshot = null;
+    _frameSnapshotIsFresh = false;
+    _frameSnapshotFrame = null;
+    return _encoder.dispose();
+  }
 }
 
 /// One inspection of the DOM for Flutter's rendering surface.
@@ -373,18 +593,22 @@ class _WebCapturedSurface implements CapturedSurface {
 
 class WebImageCaptureTimings {
   const WebImageCaptureTimings({
+    this.frameSnapshot = Duration.zero,
     required this.surfaceLookup,
     required this.bitmapCreation,
     required this.snapshotValidation,
     required this.workerProcessing,
   });
 
+  /// Zero unless the surface needed an in-frame copy (WebGL canvases).
+  final Duration frameSnapshot;
   final Duration surfaceLookup;
   final Duration bitmapCreation;
   final Duration snapshotValidation;
   final Duration workerProcessing;
 
   Map<String, int> toMillisecondsJson() => {
+    'frame_snapshot_ms': frameSnapshot.inMilliseconds,
     'surface_lookup_ms': surfaceLookup.inMilliseconds,
     'bitmap_creation_ms': bitmapCreation.inMilliseconds,
     'snapshot_validation_window_ms': snapshotValidation.inMilliseconds,
