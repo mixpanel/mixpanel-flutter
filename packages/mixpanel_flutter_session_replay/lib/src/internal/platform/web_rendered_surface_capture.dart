@@ -173,7 +173,11 @@ class WebRenderedSurfaceCapture extends RenderedSurfaceCapture {
       if (!await _snapshotWithinAnimationFrame(canvas, logicalSize)) {
         return RenderedSurfaceAvailability.unavailable;
       }
-      return RenderedSurfaceAvailability.availableAfterBrowserFrame;
+      // The copy already fixed this frame's pixels, so the capturer must walk
+      // masks now. Reporting a platform frame here makes it await the next
+      // painted frame first, which on an animating screen always lands and
+      // leaves the masks one frame ahead of the pixels.
+      return RenderedSurfaceAvailability.available;
     }
     return RenderedSurfaceAvailability.available;
   }
