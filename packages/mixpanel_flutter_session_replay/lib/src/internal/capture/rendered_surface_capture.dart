@@ -12,9 +12,14 @@ abstract class RenderedSurfaceCapture {
   /// Discovers the surface and requests any fresh rendering needed before
   /// reading masks. WebGL buffers can expire after browser presentation, so
   /// callers must proceed to snapshot without unrelated asynchronous work.
+  /// [captureExtent] is the raster size the acquirer will ask for, so a
+  /// platform that must copy the surface can size that copy to what will
+  /// actually be encoded instead of the whole device-pixel canvas. Raster
+  /// sizing stays the acquirer's to decide.
   Future<RenderedSurfaceAvailability> waitUntilRenderedSurfaceAvailable(
-    Size logicalSize,
-  ) async => RenderedSurfaceAvailability.available;
+    Size logicalSize, {
+    Size? captureExtent,
+  }) async => RenderedSurfaceAvailability.available;
 
   /// Waits for presentation only when the prepared surface needs it and its
   /// readable buffer survives it.

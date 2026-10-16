@@ -81,8 +81,9 @@ class _DirectSurfaceCapture extends RenderedSurfaceCapture {
   bool get isAvailable => true;
   @override
   Future<RenderedSurfaceAvailability> waitUntilRenderedSurfaceAvailable(
-    Size logicalSize,
-  ) async => availability;
+    Size logicalSize, {
+    Size? captureExtent,
+  }) async => availability;
   @override
   Future<void> waitForRenderedSurfacePresentation() async {
     await duringPresentation?.call();

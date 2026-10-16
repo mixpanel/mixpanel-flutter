@@ -70,8 +70,15 @@ class RenderedSurfaceFrameAcquirer extends FrameAcquirer {
   /// The surface owns any browser-specific repaint and presentation waits.
   @override
   Future<FrameSourceStatus> prepare(Size logicalSize) async {
+    final plannedRatio = capturePixelRatioFor(
+      logicalSize,
+    ).clamp(0, _surface.maximumCapturePixelRatio).toDouble();
     final availability = await _surface.waitUntilRenderedSurfaceAvailable(
       logicalSize,
+      captureExtent: Size(
+        (logicalSize.width * plannedRatio).ceilToDouble(),
+        (logicalSize.height * plannedRatio).ceilToDouble(),
+      ),
     );
     if (availability == RenderedSurfaceAvailability.unavailable) {
       return FrameSourceStatus.unavailable;
