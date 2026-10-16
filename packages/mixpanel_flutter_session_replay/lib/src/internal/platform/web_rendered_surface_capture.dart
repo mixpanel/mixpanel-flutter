@@ -51,8 +51,13 @@ class WebRenderedSurfaceCapture extends RenderedSurfaceCapture {
   /// Frames Flutter has drawn, counted here because
   /// `SchedulerBinding.currentFrameTimeStamp` asserts outside a frame and the
   /// copy runs in a browser callback after the frame has ended.
-  int _framesPainted = 0;
-  bool _frameCounterArmed = false;
+  ///
+  /// Static because the callback below can never be removed: an instance field
+  /// would make the closure capture `this`, pinning every disposed capture and
+  /// adding a second callback each time replay reinitializes. Only equality
+  /// between two reads of this counter matters, so one shared count is enough.
+  static int _framesPainted = 0;
+  static bool _frameCounterArmed = false;
 
   /// The value of [_framesPainted] when the copy was taken.
   ///
@@ -86,8 +91,8 @@ class WebRenderedSurfaceCapture extends RenderedSurfaceCapture {
   void _armFrameCounter() {
     if (_frameCounterArmed) return;
     _frameCounterArmed = true;
-    // Persistent callbacks cannot be removed, so this only ever increments a
-    // counter and holds nothing.
+    // Persistent callbacks cannot be removed, so this closure must stay free
+    // of instance state; it touches only the static counter above.
     SchedulerBinding.instance.addPersistentFrameCallback((_) {
       _framesPainted++;
     });
