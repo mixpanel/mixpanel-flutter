@@ -291,7 +291,7 @@ void main() {
     test('Set Company Property', () async {
       await identify();
       clearCalls();
-      (await mixpanel.getCompany()).set('tier', 'enterprise');
+      (await mixpanel.getCompany())!.set('tier', 'enterprise');
 
       // getCompany reads the identified company from the native SDK
       expectCalls([
@@ -316,7 +316,7 @@ void main() {
       await identify();
       final company = await mixpanel.getCompany();
       clearCalls();
-      company.setOnce('created', '2026-10-27');
+      company!.setOnce('created', '2026-10-27');
 
       expectCalls([
         groupPropertiesCall('groupSetPropertyOnce', '\$company_id', companyId,
@@ -328,7 +328,7 @@ void main() {
       await identify();
       final company = await mixpanel.getCompany();
       clearCalls();
-      company.union('tags', ['android']);
+      company!.union('tags', ['android']);
 
       expectCalls([
         groupListCall('groupUnionProperty', '\$company_id', companyId, 'tags',
@@ -340,7 +340,7 @@ void main() {
       await identify();
       final company = await mixpanel.getCompany();
       clearCalls();
-      company.remove('tags', 'android');
+      company!.remove('tags', 'android');
 
       expectCalls([
         groupListCall('groupRemovePropertyValue', '\$company_id', companyId,
@@ -352,7 +352,7 @@ void main() {
       await identify();
       final company = await mixpanel.getCompany();
       clearCalls();
-      company.unset('tier');
+      company!.unset('tier');
 
       expectCalls([groupUnsetCall('\$company_id', companyId, 'tier')]);
     });
@@ -612,9 +612,9 @@ void main() {
     });
 
     test('Set Company Property Before Identify (Unsupported)', () async {
-      (await mixpanel.getCompany()).set('tier', 'enterprise');
+      (await mixpanel.getCompany())?.set('tier', 'enterprise');
 
-      // getCompany finds no company, so the Dart layer drops the update
+      // getCompany finds no company, so the Dart layer returns null
       expectCalls([isMethodCall('getIdentity', arguments: null)]);
     });
 
@@ -624,10 +624,10 @@ void main() {
           await Mixpanel.init(token, trackAutomaticEvents: true);
       await identify();
       clearCalls();
-      (await mixpanelWithoutHG.getCompany()).set('tier', 'enterprise');
+      (await mixpanelWithoutHG.getCompany())?.set('tier', 'enterprise');
 
       // getCompany is for hierarchical groups projects only, so the Dart layer
-      // drops the update without asking the native SDK for the identity
+      // returns null without asking the native SDK for the identity
       expect(calls, isEmpty);
     });
 

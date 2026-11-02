@@ -69,23 +69,23 @@ class _HierarchicalGroupsScreenState extends State<HierarchicalGroupsScreen> {
   List<_HgAction> _groupActions(
       Mixpanel mixpanel,
       String label,
-      Future<MixpanelGroup> Function() group,
+      Future<MixpanelGroup?> Function() group,
       Future<void> Function() deleteGroup) {
     return [
       _HgAction('$label: Set Property', () async {
-        (await group()).set('tier', 'enterprise');
+        (await group())?.set('tier', 'enterprise');
       }),
       _HgAction('$label: Set Property Once', () async {
-        (await group()).setOnce('created', '2026-10-27');
+        (await group())?.setOnce('created', '2026-10-27');
       }),
       _HgAction('$label: Union Property', () async {
-        (await group()).union('tags', ['flutter']);
+        (await group())?.union('tags', ['flutter']);
       }),
       _HgAction('$label: Remove Property', () async {
-        (await group()).remove('tags', 'flutter');
+        (await group())?.remove('tags', 'flutter');
       }),
       _HgAction('$label: Unset Property', () async {
-        (await group()).unset('tier');
+        (await group())?.unset('tier');
       }),
       _HgAction('$label: Delete Group', deleteGroup),
     ];

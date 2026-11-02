@@ -2058,7 +2058,7 @@ void main() {
       };
       calls.clear();
       final company = await mixpanel.getCompany();
-      company.set('tier', 'enterprise');
+      company!.set('tier', 'enterprise');
       expect(calls.map((c) => c.method),
           ['getIdentity', 'groupSetProperties']);
       expect(
@@ -2090,7 +2090,7 @@ void main() {
         'deviceId': 'device_1',
       };
       calls.clear();
-      company.unset('tier');
+      company!.unset('tier');
       expect(
         calls.single,
         isMethodCall(
@@ -2105,7 +2105,7 @@ void main() {
       );
     });
 
-    test('getCompany drops updates before a company is identified',
+    test('getCompany returns null before a company is identified',
         () async {
       final mixpanel = await Mixpanel.init('test token',
           trackAutomaticEvents: true, hierarchicalGroups: true);
@@ -2114,23 +2114,18 @@ void main() {
         'companyId': null,
         'deviceId': 'device_1',
       };
-      final company = await mixpanel.getCompany();
       calls.clear();
-      company.set('tier', 'enterprise');
-      company.setOnce('tier', 'enterprise');
-      company.unset('tier');
-      company.remove('tags', 'a');
-      company.union('tags', ['a']);
-      expect(calls, isEmpty);
+      final company = await mixpanel.getCompany();
+      expect(company, isNull);
+      expect(calls.map((c) => c.method), ['getIdentity']);
     });
 
-    test('getCompany drops updates without hierarchical groups', () async {
+    test('getCompany returns null without hierarchical groups', () async {
       final mixpanel =
           await Mixpanel.init('test token', trackAutomaticEvents: true);
       calls.clear();
       final company = await mixpanel.getCompany();
-      company.set('tier', 'enterprise');
-      company.union('tags', ['a']);
+      expect(company, isNull);
       // No native call at all: not even getIdentity.
       expect(calls, isEmpty);
     });

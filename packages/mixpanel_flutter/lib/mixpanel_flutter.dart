@@ -902,25 +902,28 @@ class Mixpanel {
   /// ```dart
   /// await mixpanel.identifyWithIdentity(
   ///     MixpanelIdentity(userId: 'user_123', companyId: 'acme'));
-  /// (await mixpanel.getCompany()).set('tier', 'enterprise');
+  /// (await mixpanel.getCompany())?.set('tier', 'enterprise');
   /// ```
   ///
   /// Only for projects that use hierarchical groups, enabled with
   /// `hierarchicalGroups: true` in [init]. On any other project, or before a
-  /// company is identified, the returned group drops every update with a log,
-  /// so it is never null.
+  /// company is identified, this logs the reason and resolves to null.
   ///
   /// The company is fixed when this is called, so a group kept across [reset]
   /// or a new identify still updates the earlier company.
-  Future<MixpanelGroup> getCompany() async {
+  Future<MixpanelGroup?> getCompany() async {
     if (!_hierarchicalGroups) {
-      return _UnavailableMixpanelGroup(_token,
-          'getCompany() is only for hierarchical groups projects, enabled with hierarchicalGroups: true in Mixpanel.init.');
+      developer.log(
+          'getCompany() is only for hierarchical groups projects, enabled with hierarchicalGroups: true in Mixpanel.init.',
+          name: 'Mixpanel');
+      return null;
     }
     final companyId = (await getIdentity()).companyId;
     if (companyId == null || companyId.isEmpty) {
-      return _UnavailableMixpanelGroup(_token,
-          'getCompany() needs a company. Call identifyWithIdentity(MixpanelIdentity(userId: userId, companyId: companyId)) first.');
+      developer.log(
+          'getCompany() needs a company. Call identifyWithIdentity(MixpanelIdentity(userId: userId, companyId: companyId)) first.',
+          name: 'Mixpanel');
+      return null;
     }
     return getGroup(_companyIdGroupKey, companyId);
   }
@@ -1442,35 +1445,6 @@ class MixpanelGroup {
       'value': _MixpanelHelper.ensureSerializableValue(value)
     });
   }
-}
-
-/// The group [Mixpanel.getCompany] returns when it has no company to update.
-/// Every update is dropped with a log.
-class _UnavailableMixpanelGroup extends MixpanelGroup {
-  final String _reason;
-
-  _UnavailableMixpanelGroup(String token, String reason)
-      : _reason = reason,
-        super(token, Mixpanel._companyIdGroupKey, null);
-
-  void _drop() {
-    developer.log('$_reason The update was dropped.', name: 'Mixpanel');
-  }
-
-  @override
-  void set(String prop, String to) => _drop();
-
-  @override
-  void setOnce(String prop, String to) => _drop();
-
-  @override
-  void unset(String prop) => _drop();
-
-  @override
-  void remove(String name, dynamic value) => _drop();
-
-  @override
-  void union(String name, List<dynamic> value) => _drop();
 }
 
 /// Core class for using Mixpanel Feature Flags.
