@@ -459,7 +459,7 @@ class _FrustrationSignalsScreenState extends State<FrustrationSignalsScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(title: const Text('Frustration signals — Beta')),
+        appBar: AppBar(title: const Text('Frustration signals')),
         body: FutureBuilder<Mixpanel>(
             future: _instance,
             builder: (context, snapshot) {
