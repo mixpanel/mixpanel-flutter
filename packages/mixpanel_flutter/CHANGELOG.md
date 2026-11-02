@@ -1,5 +1,12 @@
 # Changelog
 
+## [v3.2.0](https://github.com/mixpanel/mixpanel-flutter/tree/v3.2.0) (2026-11-02)
+
+### Features
+- graduate autocapture from beta to general availability ([#301](https://github.com/mixpanel/mixpanel-flutter/pull/301))
+
+[Full Changelog](https://github.com/mixpanel/mixpanel-flutter/compare/v3.1.0...v3.2.0)
+
 ## [v3.1.0](https://github.com/mixpanel/mixpanel-flutter/tree/v3.1.0) (2026-10-15)
 
 ### Features
