@@ -471,10 +471,9 @@ class Mixpanel {
   ///  include app sessions, first app opens, app updated, etc.
   ///  * [superProperties] Optional super properties to register
   ///  * [config] Optional A dictionary of config options to override (WEB ONLY)
-  ///  * [autocaptureOptions] Opt into **experimental (beta)** pointer signals on Android, iOS, macOS and web.
+  ///  * [autocaptureOptions] Opt into autocaptured pointer signals on Android, iOS, macOS and web.
   ///    Also wrap the app in MixpanelAutocaptureWidget. Omit to disable.
-  ///    See [AutocaptureOptions] for the Beta notice: APIs and captured properties
-  ///    may change before general availability.
+  ///    See [AutocaptureOptions].
   ///  * [featureFlags] Optional Feature flags configuration
   ///  * [serverURL] Optional base URL for Mixpanel API requests. Use for EU/India data
   ///  residency or a custom proxy. Defaults to https://api.mixpanel.com
@@ -686,10 +685,6 @@ class Mixpanel {
 
   /// Returns an Autocapture object that can be used to manually track
   /// screen and frustration signal events with autocapture metadata.
-  ///
-  /// **Experimental (beta).** Autocapture may contain issues, and its API and the
-  /// properties it captures may change in a future release before general
-  /// availability. Pin your SDK version if you build reports on autocaptured events.
   Autocapture get autocapture {
     _autocapture ??= Autocapture();
     return _autocapture!;
@@ -1394,10 +1389,6 @@ class FeatureFlags {
 /// with autocapture metadata.
 ///
 /// Access via `mixpanel.autocapture`.
-///
-/// **Experimental (beta).** Autocapture may contain issues, and its API and the
-/// properties it captures may change in a future release before general
-/// availability. Pin your SDK version if you build reports on autocaptured events.
 class Autocapture {
   // ignore: prefer_const_declarations
   static final MethodChannel _channel = kIsWeb
@@ -1408,8 +1399,6 @@ class Autocapture {
   Autocapture();
 
   /// Manually tracks a `$mp_click` event using [clickEvent] metadata.
-  ///
-  /// **Experimental (beta).** See [Autocapture] for the Beta notice.
   ///
   /// Does not start automatic rage or dead click detection.
   /// Blank identifiers and nonfinite coordinates are silently ignored.
@@ -1422,8 +1411,6 @@ class Autocapture {
 
   /// Manually tracks a `$mp_rage_click` event using [clickEvent] metadata.
   ///
-  /// **Experimental (beta).** See [Autocapture] for the Beta notice.
-  ///
   /// The caller determines whether a rage click occurred.
   /// Validation and property precedence are the same as [trackClick].
   Future<void> trackRageClick(ClickEvent clickEvent,
@@ -1432,8 +1419,6 @@ class Autocapture {
   }
 
   /// Manually tracks a `$mp_dead_click` event using [clickEvent] metadata.
-  ///
-  /// **Experimental (beta).** See [Autocapture] for the Beta notice.
   ///
   /// The caller determines whether a dead click occurred.
   /// Use this for app-detected signals on surfaces whose UI response cannot be
