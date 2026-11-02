@@ -100,6 +100,9 @@ class MixpanelFlutterPlugin {
       case "optInTracking":
         handleOptInTracking();
         break;
+      case "optInTrackingWithIdentity":
+        handleOptInTrackingWithIdentity(call);
+        break;
       case "optOutTracking":
         handleOptOutTracking();
         break;
@@ -108,6 +111,9 @@ class MixpanelFlutterPlugin {
         break;
       case "identify":
         handleIdentify(call);
+        break;
+      case "identifyWithIdentity":
+        handleIdentifyWithIdentity(call);
         break;
       case "alias":
         handleAlias(call);
@@ -144,6 +150,8 @@ class MixpanelFlutterPlugin {
         break;
       case "getDistinctId":
         return handleGetDistinctId();
+      case "getIdentity":
+        return handleGetIdentity();
       case "set":
         handleSet(call);
         break;
@@ -224,6 +232,10 @@ class MixpanelFlutterPlugin {
     dynamic config = args['config'];
     Map<String, dynamic> initConfig = Map<String, dynamic>.from(config ?? {});
 
+    if (args['hierarchicalGroups'] == true) {
+      initConfig['hierarchical_groups'] = true;
+    }
+
     final serverURL = args['serverURL'];
     if (serverURL is String && serverURL.isNotEmpty) {
       initConfig['api_host'] = serverURL;
@@ -282,6 +294,22 @@ class MixpanelFlutterPlugin {
     Map<Object?, Object?> args = call.arguments as Map<Object?, Object?>;
     String distinctId = args['distinctId'] as String;
     identify(distinctId);
+  }
+
+  void handleIdentifyWithIdentity(MethodCall call) {
+    Map<Object?, Object?> args = call.arguments as Map<Object?, Object?>;
+    identify_with_identity(safeJsify(_jsIdentity(args['identity'])));
+  }
+
+  /// Converts a Dart identity map to the `{user_id, company_id, device_id}`
+  /// object mixpanel-js takes, leaving out unset values.
+  Map<String, dynamic> _jsIdentity(dynamic identity) {
+    final map = identity is Map ? identity : const {};
+    return <String, dynamic>{
+      if (map['userId'] != null) 'user_id': map['userId'],
+      if (map['companyId'] != null) 'company_id': map['companyId'],
+      if (map['deviceId'] != null) 'device_id': map['deviceId'],
+    };
   }
 
   void handleTrackWithGroups(MethodCall call) {
@@ -354,6 +382,16 @@ class MixpanelFlutterPlugin {
 
   String handleGetDistinctId() {
     return get_distinct_id();
+  }
+
+  Map<String, dynamic> handleGetIdentity() {
+    final identity = get_identity().dartify();
+    final map = identity is Map ? identity : const {};
+    return <String, dynamic>{
+      'userId': map['user_id'],
+      'companyId': map['company_id'],
+      'deviceId': map['device_id'],
+    };
   }
 
   void handleSet(MethodCall call) {
@@ -471,6 +509,21 @@ class MixpanelFlutterPlugin {
 
   void handleOptInTracking() {
     opt_in_tracking();
+  }
+
+  // NOTE: The `identity` option of opt_in_tracking is being finalized in
+  // mixpanel-js alongside hierarchical groups support.
+  void handleOptInTrackingWithIdentity(MethodCall call) {
+    Map<Object?, Object?> args = call.arguments as Map<Object?, Object?>;
+    dynamic properties = args['properties'];
+    Map<String, dynamic> props = {
+      ..._mixpanelProperties,
+      ...(properties ?? {})
+    };
+    opt_in_tracking_with_options(safeJsify(<String, dynamic>{
+      'identity': _jsIdentity(args['identity']),
+      'track_properties': props,
+    }));
   }
 
   void handleOptOutTracking() {

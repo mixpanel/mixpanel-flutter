@@ -530,6 +530,7 @@ void main() {
     });
 
     test('check getDistinctId call', () async {
+      // ignore: deprecated_member_use_from_same_package
       _mixpanel.getDistinctId();
       expect(
         methodCall,
@@ -1867,6 +1868,292 @@ void main() {
 
       expect(variant1 == variant2, true);
       expect(variant1.hashCode == variant2.hashCode, true);
+    });
+  });
+
+  group('Hierarchical groups', () {
+    final List<MethodCall> calls = <MethodCall>[];
+    Map<String, dynamic>? identityResponse;
+
+    setUp(() {
+      calls.clear();
+      identityResponse = null;
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (MethodCall m) async {
+        calls.add(m);
+        if (m.method == 'getIdentity') {
+          return identityResponse;
+        }
+        return null;
+      });
+    });
+
+    tearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+    });
+
+    test('initialize forwards hierarchicalGroups when true', () async {
+      await Mixpanel.init('test token',
+          trackAutomaticEvents: true, hierarchicalGroups: true);
+      expect(
+        calls.single,
+        isMethodCall(
+          'initialize',
+          arguments: <String, dynamic>{
+            'token': 'test token',
+            'optOutTrackingDefault': false,
+            'trackAutomaticEvents': true,
+            'mixpanelProperties': {
+              '\$lib_version': sdkVersion,
+              'mp_lib': 'flutter',
+            },
+            'superProperties': null,
+            'config': null,
+            'hierarchicalGroups': true,
+          },
+        ),
+      );
+    });
+
+    test('initialize omits hierarchicalGroups by default', () async {
+      await Mixpanel.init('test token', trackAutomaticEvents: true);
+      expect(
+          (calls.single.arguments as Map).containsKey('hierarchicalGroups'),
+          isFalse);
+    });
+
+    test('identifyWithIdentity sends user, company and device ids', () async {
+      final mixpanel = await Mixpanel.init('test token',
+          trackAutomaticEvents: true, hierarchicalGroups: true);
+      calls.clear();
+      await mixpanel.identifyWithIdentity(
+          const MixpanelIdentity(userId: 'user_123', companyId: 'acme'));
+      expect(
+        calls.single,
+        isMethodCall(
+          'identifyWithIdentity',
+          arguments: <String, dynamic>{
+            'identity': <String, dynamic>{
+              'userId': 'user_123',
+              'companyId': 'acme',
+              'deviceId': null,
+            },
+          },
+        ),
+      );
+    });
+
+    test('identifyWithIdentity leaves validation to the native SDK',
+        () async {
+      // The native SDKs own the hierarchical groups rules and their error
+      // logs, so an incomplete identity is still forwarded.
+      final mixpanel = await Mixpanel.init('test token',
+          trackAutomaticEvents: true, hierarchicalGroups: true);
+      calls.clear();
+      await mixpanel
+          .identifyWithIdentity(const MixpanelIdentity(userId: 'user_123'));
+      expect(
+        calls.single,
+        isMethodCall(
+          'identifyWithIdentity',
+          arguments: <String, dynamic>{
+            'identity': <String, dynamic>{
+              'userId': 'user_123',
+              'companyId': null,
+              'deviceId': null,
+            },
+          },
+        ),
+      );
+    });
+
+    test('getIdentity decodes the native identity', () async {
+      final mixpanel =
+          await Mixpanel.init('test token', trackAutomaticEvents: true);
+      identityResponse = <String, dynamic>{
+        'userId': 'user_123',
+        'companyId': 'acme',
+        'deviceId': 'device_1',
+      };
+      final identity = await mixpanel.getIdentity();
+      expect(calls.last, isMethodCall('getIdentity', arguments: null));
+      expect(
+          identity,
+          const MixpanelIdentity(
+              userId: 'user_123', companyId: 'acme', deviceId: 'device_1'));
+    });
+
+    test('getIdentity returns an anonymous identity before identify',
+        () async {
+      final mixpanel =
+          await Mixpanel.init('test token', trackAutomaticEvents: true);
+      identityResponse = <String, dynamic>{
+        'userId': null,
+        'companyId': null,
+        'deviceId': 'device_1',
+      };
+      final identity = await mixpanel.getIdentity();
+      expect(identity.userId, isNull);
+      expect(identity.companyId, isNull);
+      expect(identity.deviceId, 'device_1');
+    });
+
+    test('getIdentity handles a null native response', () async {
+      final mixpanel =
+          await Mixpanel.init('test token', trackAutomaticEvents: true);
+      final identity = await mixpanel.getIdentity();
+      expect(identity, const MixpanelIdentity(userId: null));
+    });
+
+    test('optInTrackingWithIdentity sends identity and properties', () async {
+      final mixpanel = await Mixpanel.init('test token',
+          trackAutomaticEvents: true, hierarchicalGroups: true);
+      calls.clear();
+      await mixpanel.optInTrackingWithIdentity(
+          const MixpanelIdentity(userId: 'user_123', companyId: 'acme'),
+          properties: {'source': 'settings'});
+      expect(
+        calls.single,
+        isMethodCall(
+          'optInTrackingWithIdentity',
+          arguments: <String, dynamic>{
+            'identity': <String, dynamic>{
+              'userId': 'user_123',
+              'companyId': 'acme',
+              'deviceId': null,
+            },
+            'properties': {'source': 'settings'},
+          },
+        ),
+      );
+    });
+
+    test('optInTrackingWithIdentity sends null properties when omitted',
+        () async {
+      final mixpanel = await Mixpanel.init('test token',
+          trackAutomaticEvents: true, hierarchicalGroups: true);
+      calls.clear();
+      await mixpanel.optInTrackingWithIdentity(
+          const MixpanelIdentity(userId: 'user_123', companyId: 'acme'));
+      expect(calls.single.method, 'optInTrackingWithIdentity');
+      expect((calls.single.arguments as Map)['properties'], isNull);
+    });
+
+    test('optInTracking without identity is unchanged', () async {
+      final mixpanel = await Mixpanel.init('test token',
+          trackAutomaticEvents: true, hierarchicalGroups: true);
+      calls.clear();
+      mixpanel.optInTracking();
+      expect(calls.single, isMethodCall('optInTracking', arguments: null));
+    });
+
+    test('getCompany updates the identified company group', () async {
+      final mixpanel = await Mixpanel.init('test token',
+          trackAutomaticEvents: true, hierarchicalGroups: true);
+      identityResponse = <String, dynamic>{
+        'userId': 'user_123',
+        'companyId': 'acme',
+        'deviceId': 'device_1',
+      };
+      calls.clear();
+      final company = await mixpanel.getCompany();
+      company.set('tier', 'enterprise');
+      expect(calls.map((c) => c.method),
+          ['getIdentity', 'groupSetProperties']);
+      expect(
+        calls.last,
+        isMethodCall(
+          'groupSetProperties',
+          arguments: <String, dynamic>{
+            'token': 'test token',
+            'groupKey': '\$company_id',
+            'groupID': 'acme',
+            'properties': {'tier': 'enterprise'},
+          },
+        ),
+      );
+    });
+
+    test('getCompany keeps the company it was created with', () async {
+      final mixpanel = await Mixpanel.init('test token',
+          trackAutomaticEvents: true, hierarchicalGroups: true);
+      identityResponse = <String, dynamic>{
+        'userId': 'user_123',
+        'companyId': 'acme',
+        'deviceId': 'device_1',
+      };
+      final company = await mixpanel.getCompany();
+      identityResponse = <String, dynamic>{
+        'userId': 'user_456',
+        'companyId': 'globex',
+        'deviceId': 'device_1',
+      };
+      calls.clear();
+      company.unset('tier');
+      expect(
+        calls.single,
+        isMethodCall(
+          'groupUnsetProperty',
+          arguments: <String, dynamic>{
+            'token': 'test token',
+            'groupKey': '\$company_id',
+            'groupID': 'acme',
+            'propertyName': 'tier',
+          },
+        ),
+      );
+    });
+
+    test('getCompany drops updates before a company is identified',
+        () async {
+      final mixpanel = await Mixpanel.init('test token',
+          trackAutomaticEvents: true, hierarchicalGroups: true);
+      identityResponse = <String, dynamic>{
+        'userId': null,
+        'companyId': null,
+        'deviceId': 'device_1',
+      };
+      final company = await mixpanel.getCompany();
+      calls.clear();
+      company.set('tier', 'enterprise');
+      company.setOnce('tier', 'enterprise');
+      company.unset('tier');
+      company.remove('tags', 'a');
+      company.union('tags', ['a']);
+      expect(calls, isEmpty);
+    });
+
+    test('getCompany drops updates without hierarchical groups', () async {
+      final mixpanel =
+          await Mixpanel.init('test token', trackAutomaticEvents: true);
+      calls.clear();
+      final company = await mixpanel.getCompany();
+      company.set('tier', 'enterprise');
+      company.union('tags', ['a']);
+      // No native call at all: not even getIdentity.
+      expect(calls, isEmpty);
+    });
+
+    test('MixpanelIdentity equality, hashCode and toString', () {
+      const a = MixpanelIdentity(userId: 'u', companyId: 'c');
+      const b = MixpanelIdentity(userId: 'u', companyId: 'c');
+      const c = MixpanelIdentity(userId: 'u', companyId: 'other');
+      expect(a, b);
+      expect(a.hashCode, b.hashCode);
+      expect(a == c, isFalse);
+      expect(a.toString(), 'MixpanelIdentity(userId=u, companyId=c)');
+      expect(const MixpanelIdentity(userId: 'u').toString(),
+          'MixpanelIdentity(userId=u)');
+      expect(const MixpanelIdentity(userId: null).toString(),
+          'MixpanelIdentity()');
+    });
+
+    test('MixpanelIdentity map round trip', () {
+      const identity =
+          MixpanelIdentity(userId: 'u', companyId: 'c', deviceId: 'd');
+      expect(MixpanelIdentity.fromMap(identity.toMap()), identity);
+      expect(MixpanelIdentity.fromMap(null), const MixpanelIdentity(userId: null));
     });
   });
 }

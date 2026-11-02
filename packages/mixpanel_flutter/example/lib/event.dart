@@ -99,6 +99,7 @@ class _EventScreenState extends State<EventScreen> {
             child: MixpanelButton(
               text: 'Get Distinct ID',
               onPressed: () async {
+                // ignore: deprecated_member_use
                 String? distinctId = await _mixpanel.getDistinctId();
                 Widget okButton = TextButton(
                   child: Text("OK"),
@@ -122,6 +123,20 @@ class _EventScreenState extends State<EventScreen> {
                     return alert;
                   },
                 );
+              },
+            ),
+          ),
+          SizedBox(
+            height: 20,
+          ),
+          SizedBox(
+            width: MediaQuery.of(context).size.width * 0.65,
+            child: MixpanelButton(
+              text: 'Get Identity',
+              onPressed: () async {
+                MixpanelIdentity identity = await _mixpanel.getIdentity();
+                if (!context.mounted) return;
+                _showAlert(context, "Result", identity.toString());
               },
             ),
           ),

@@ -106,11 +106,17 @@ public class SwiftMixpanelFlutterPlugin: NSObject, FlutterPlugin {
         case "optInTracking":
             handleOptInTracking(call, result: result)
             break
+        case "optInTrackingWithIdentity":
+            handleOptInTrackingWithIdentity(call, result: result)
+            break
         case "optOutTracking":
             handleOptOutTracking(call, result: result)
             break
         case "identify":
             handleIdentify(call, result: result)
+            break
+        case "identifyWithIdentity":
+            handleIdentifyWithIdentity(call, result: result)
             break
         case "alias":
             handleAlias(call, result: result)
@@ -159,6 +165,9 @@ public class SwiftMixpanelFlutterPlugin: NSObject, FlutterPlugin {
             break
         case "getDistinctId":
             handleGetDistinctId(call, result: result)
+            break
+        case "getIdentity":
+            handleGetIdentity(call, result: result)
             break
         case "flush":
             handleFlush(call, result: result)
@@ -263,6 +272,7 @@ public class SwiftMixpanelFlutterPlugin: NSObject, FlutterPlugin {
         let serverURL = (arguments["serverURL"] as? String).flatMap { $0.trimmingCharacters(in: .whitespaces).isEmpty ? nil : $0 }
         self.token = token
         let trackAutomaticEvents = arguments["trackAutomaticEvents"] as! Bool
+        let hierarchicalGroups = arguments["hierarchicalGroups"] as? Bool ?? false
 
         // Check for feature flags configuration
         var featureFlagOptions: FeatureFlagOptions? = nil
@@ -287,7 +297,8 @@ public class SwiftMixpanelFlutterPlugin: NSObject, FlutterPlugin {
             optOutTrackingByDefault: optOutTrackingDefault ?? false,
             superProperties: MixpanelTypeHandler.mixpanelProperties(properties: superProperties, mixpanelProperties: mixpanelProperties),
             serverURL: serverURL,
-            featureFlagOptions: featureFlagOptions
+            featureFlagOptions: featureFlagOptions,
+            hierarchicalGroups: hierarchicalGroups
         )
         instance = Mixpanel.initialize(options: options)
 
@@ -324,6 +335,14 @@ public class SwiftMixpanelFlutterPlugin: NSObject, FlutterPlugin {
         result(nil)
     }
     
+    private func handleOptInTrackingWithIdentity(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+        let arguments = call.arguments as? [String: Any] ?? [String: Any]()
+        let identity = mixpanelIdentity(from: arguments["identity"])
+        let properties = arguments["properties"] as? [String: Any]
+        instance?.optInTracking(identity: identity, properties: MixpanelTypeHandler.mixpanelProperties(properties: properties, mixpanelProperties: mixpanelProperties))
+        result(nil)
+    }
+
     private func handleOptOutTracking(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
         instance?.optOutTracking()
         result(nil)
@@ -336,6 +355,21 @@ public class SwiftMixpanelFlutterPlugin: NSObject, FlutterPlugin {
         result(nil)
     }
     
+    private func handleIdentifyWithIdentity(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+        let arguments = call.arguments as? [String: Any] ?? [String: Any]()
+        instance?.identify(identity: mixpanelIdentity(from: arguments["identity"]))
+        result(nil)
+    }
+
+    private func mixpanelIdentity(from value: Any?) -> MixpanelIdentity {
+        let identity = value as? [String: Any] ?? [String: Any]()
+        return MixpanelIdentity(
+            userId: identity["userId"] as? String,
+            companyId: identity["companyId"] as? String,
+            deviceId: identity["deviceId"] as? String
+        )
+    }
+
     private func handleAlias(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
         let arguments = call.arguments as? [String: Any] ?? [String: Any]()
         let alias = arguments["alias"] as! String
@@ -444,6 +478,18 @@ public class SwiftMixpanelFlutterPlugin: NSObject, FlutterPlugin {
     
     private func handleGetDistinctId(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
         result(instance?.distinctId)
+    }
+
+    private func handleGetIdentity(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+        guard let identity = instance?.identity else {
+            result(nil)
+            return
+        }
+        result([
+            "userId": identity.userId as Any,
+            "companyId": identity.companyId as Any,
+            "deviceId": identity.deviceId as Any
+        ])
     }
     
     private func handleFlush(_ call: FlutterMethodCall, result: @escaping FlutterResult) {

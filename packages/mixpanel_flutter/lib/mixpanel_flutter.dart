@@ -395,6 +395,82 @@ class FeatureFlagsConfig {
   }
 }
 
+/// Names who events and profile updates belong to.
+///
+/// On a project that uses hierarchical groups (see the `hierarchicalGroups`
+/// option of [Mixpanel.init]), Mixpanel builds the user's distinct id from
+/// `$company_id` and `$user_id`, so the company is part of the user's identity:
+/// the same user id in two companies is two users. Other projects ignore
+/// [companyId].
+///
+/// ```dart
+/// await mixpanel.identifyWithIdentity(
+///     MixpanelIdentity(userId: 'user_123', companyId: 'acme'));
+/// ```
+///
+/// Instances are immutable and compare by value.
+class MixpanelIdentity {
+  /// The user's id. On a hierarchical groups project it only needs to be
+  /// unique within the company.
+  final String? userId;
+
+  /// The id of the user's top-level company, on a hierarchical groups project.
+  final String? companyId;
+
+  /// The device id the SDK assigned. It is reported by
+  /// [Mixpanel.getIdentity] and ignored when identifying, because the SDK
+  /// owns the device id.
+  final String? deviceId;
+
+  const MixpanelIdentity({required this.userId, this.companyId, this.deviceId});
+
+  /// Creates a MixpanelIdentity from a Map (used for platform channel deserialization).
+  factory MixpanelIdentity.fromMap(Map<dynamic, dynamic>? map) {
+    return MixpanelIdentity(
+      userId: map?['userId'] as String?,
+      companyId: map?['companyId'] as String?,
+      deviceId: map?['deviceId'] as String?,
+    );
+  }
+
+  /// Converts this identity to a Map for serialization.
+  Map<String, dynamic> toMap() {
+    return {
+      'userId': userId,
+      'companyId': companyId,
+      'deviceId': deviceId,
+    };
+  }
+
+  @override
+  String toString() {
+    final parts = <String>[
+      if (userId != null) 'userId=$userId',
+      if (companyId != null) 'companyId=$companyId',
+      if (deviceId != null) 'deviceId=$deviceId',
+    ];
+    return 'MixpanelIdentity(${parts.join(', ')})';
+  }
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    return other is MixpanelIdentity &&
+        userId == other.userId &&
+        companyId == other.companyId &&
+        deviceId == other.deviceId;
+  }
+
+  @override
+  int get hashCode {
+    var result = 17;
+    result = 37 * result + (userId?.hashCode ?? 0);
+    result = 37 * result + (companyId?.hashCode ?? 0);
+    result = 37 * result + (deviceId?.hashCode ?? 0);
+    return result;
+  }
+}
+
 /// The primary class for integrating Mixpanel with your app.
 class Mixpanel {
   // ignore: prefer_const_declarations
@@ -455,6 +531,8 @@ class Mixpanel {
   Autocapture? _autocapture;
   // Set by init when automatic capture is enabled; read by the capture widget.
   AutocaptureOptions? _autocaptureOptions;
+  // Set by init; fixed for the life of the instance.
+  bool _hierarchicalGroups = false;
   // Cancels a pending automatic dead-click check. Static because every Dart
   // handle shares one native identity; set by the capture widget.
   static VoidCallback? _cancelPendingAutocapture;
@@ -481,6 +559,12 @@ class Mixpanel {
   ///  * [featureFlags] Optional Feature flags configuration
   ///  * [serverURL] Optional base URL for Mixpanel API requests. Use for EU/India data
   ///  residency or a custom proxy. Defaults to https://api.mixpanel.com
+  ///  * [hierarchicalGroups] Optional Whether the project uses hierarchical groups, where
+  ///  Mixpanel identifies a user by company and user id. Identify with
+  ///  [identifyWithIdentity]; [identify] and [alias] are not supported. User profile
+  ///  updates are sent as group profiles keyed by `$user_id`, so increment, append,
+  ///  trackCharge and clearCharges are dropped. Fixed for the life of the instance.
+  ///  Defaults to false, which behaves exactly as before.
   ///
   static Future<Mixpanel> init(String token,
       {bool optOutTrackingDefault = false,
@@ -489,7 +573,8 @@ class Mixpanel {
       Map<String, dynamic>? config,
       FeatureFlagsConfig? featureFlags,
       String? serverURL,
-      AutocaptureOptions? autocaptureOptions}) async {
+      AutocaptureOptions? autocaptureOptions,
+      bool hierarchicalGroups = false}) async {
     // Defer the reverse-channel wiring until something actually reads
     // MixpanelEventBridge.events. Apps that never subscribe pay only the
     // stored function reference — no MethodCallHandler, no native subscribe.
@@ -510,8 +595,12 @@ class Mixpanel {
     if (serverURL != null && _MixpanelHelper.isValidString(serverURL)) {
       allProperties['serverURL'] = serverURL;
     }
+    if (hierarchicalGroups) {
+      allProperties['hierarchicalGroups'] = true;
+    }
     await _channel.invokeMethod<void>('initialize', allProperties);
     final instance = Mixpanel(token);
+    instance._hierarchicalGroups = hierarchicalGroups;
     // Opt-out is enforced by the native SDKs, which drop tracked events.
     if (autocaptureOptions != null && autocaptureOptions.isEnabled) {
       instance._autocaptureOptions = autocaptureOptions;
@@ -584,6 +673,28 @@ class Mixpanel {
     _channel.invokeMethod<void>('optInTracking');
   }
 
+  /// Use this method to opt-in an already opted-out user from tracking and
+  /// identify them. People updates and track calls will be sent to Mixpanel
+  /// after using this method. This method will internally track an opt-in
+  /// event to your project.
+  ///
+  /// Opting out clears the user's identity, so on a hierarchical groups
+  /// project use this to opt back in with the user's company: the opt-in event
+  /// and every event after it carry the user and company.
+  ///
+  /// * [identity] the user, and on a hierarchical groups project their company.
+  /// This calls [identifyWithIdentity] before the opt-in event is tracked.
+  /// * [properties] Optional properties to add to the opt-in event.
+  Future<void> optInTrackingWithIdentity(MixpanelIdentity identity,
+      {Map<String, dynamic>? properties}) async {
+    _cancelPendingAutocapture?.call();
+    await _channel.invokeMethod<void>(
+        'optInTrackingWithIdentity', <String, dynamic>{
+      'identity': identity.toMap(),
+      'properties': _MixpanelHelper.ensureSerializableProperties(properties)
+    });
+  }
+
   /// Use this method to opt-out a user from tracking. Events and people updates that haven't been
   /// flushed yet will be deleted. Use flush() before calling this method if you want
   /// to send all the queues to Mixpanel before.
@@ -617,6 +728,9 @@ class Mixpanel {
   /// Mixpanel using the same disinct_id will be considered associated with the
   /// same visitor/customer for retention and funnel reporting, so be sure that the given
   /// value is globally unique for each individual user you intend to track.
+  ///
+  /// Not supported on a hierarchical groups project, where it is logged and
+  /// ignored. Use [identifyWithIdentity] instead.
   Future<void> identify(String distinctId) async {
     if (_MixpanelHelper.isValidString(distinctId)) {
       // A pending check must not emit under the new identity.
@@ -629,6 +743,32 @@ class Mixpanel {
     }
   }
 
+  /// Associate all future calls to track() with the given user and, on a
+  /// hierarchical groups project, their company.
+  ///
+  /// On a hierarchical groups project both [MixpanelIdentity.userId] and
+  /// [MixpanelIdentity.companyId] are required, and every later event carries
+  /// `$company_id` beside `$user_id` and `$device_id`. Identifying the current
+  /// user with a different company is an identity change, as switching users
+  /// is. A user can't change company, so call [reset] when a different user
+  /// logs in.
+  ///
+  /// On any other project Mixpanel ignores `$company_id`, so an identity that
+  /// names a company is logged and ignored; identify with just a user id.
+  ///
+  /// The SDK owns the device id, so [MixpanelIdentity.deviceId] is ignored.
+  ///
+  /// Once identified, the identity persists across restarts of your
+  /// application until [reset] or [optOutTracking].
+  ///
+  /// * [identity] the user, and on a hierarchical groups project their company
+  Future<void> identifyWithIdentity(MixpanelIdentity identity) async {
+    // A pending check must not emit under the new identity.
+    _cancelPendingAutocapture?.call();
+    await _channel.invokeMethod<void>(
+        'identifyWithIdentity', <String, dynamic>{'identity': identity.toMap()});
+  }
+
   /// The alias method creates an alias which Mixpanel will use to remap one id to another.
   /// Multiple aliases can point to the same identifier.
   ///
@@ -637,6 +777,8 @@ class Mixpanel {
   ///
   /// This call does not identify the user after. You must still call both identify() and
   /// People.identify() if you wish the new alias to be used for Events and People.
+  ///
+  /// Not supported on a hierarchical groups project, where the alias is logged and dropped.
   ///
   ///  * [alias] A unique identifier that you want to use as an identifier for this user.
   ///  * [distinctId] the current distinct_id that alias will be mapped to.
@@ -751,6 +893,39 @@ class Mixpanel {
   MixpanelGroup getGroup(String groupKey, dynamic groupID) {
     return MixpanelGroup(_token, groupKey, _MixpanelHelper.ensureSerializableValue(groupID));
   }
+
+  /// Returns the identified user's company profile on a hierarchical groups
+  /// project, as a MixpanelGroup to set properties on. This is
+  /// `getGroup('$company_id', companyId)` with the company from the last
+  /// [identifyWithIdentity].
+  ///
+  /// ```dart
+  /// await mixpanel.identifyWithIdentity(
+  ///     MixpanelIdentity(userId: 'user_123', companyId: 'acme'));
+  /// (await mixpanel.getCompany()).set('tier', 'enterprise');
+  /// ```
+  ///
+  /// Only for projects that use hierarchical groups, enabled with
+  /// `hierarchicalGroups: true` in [init]. On any other project, or before a
+  /// company is identified, the returned group drops every update with a log,
+  /// so it is never null.
+  ///
+  /// The company is fixed when this is called, so a group kept across [reset]
+  /// or a new identify still updates the earlier company.
+  Future<MixpanelGroup> getCompany() async {
+    if (!_hierarchicalGroups) {
+      return _UnavailableMixpanelGroup(_token,
+          'getCompany() is only for hierarchical groups projects, enabled with hierarchicalGroups: true in Mixpanel.init.');
+    }
+    final companyId = (await getIdentity()).companyId;
+    if (companyId == null || companyId.isEmpty) {
+      return _UnavailableMixpanelGroup(_token,
+          'getCompany() needs a company. Call identifyWithIdentity(MixpanelIdentity(userId: userId, companyId: companyId)) first.');
+    }
+    return getGroup(_companyIdGroupKey, companyId);
+  }
+
+  static const String _companyIdGroupKey = '\$company_id';
 
   /// Add a group to this user's membership for a particular group key
   ///
@@ -912,11 +1087,32 @@ class Mixpanel {
   ///
   /// ```
   ///
+  /// On a hierarchical groups project this returns Mixpanel's combined form,
+  /// `$company:{companyId}|$user:{userId}`, once a user and company are
+  /// identified, and `$device:{deviceId}` before that.
+  ///
   /// return Future<String> the distinct id associated with Mixpanel event and People Analytics
+  @Deprecated(
+      'Use getIdentity() instead. Its user, company and device ids are what every Mixpanel SDK accepts directly.')
   Future<String> getDistinctId() {
     return _channel
         .invokeMethod<String>('getDistinctId')
         .then<String>((String? value) => value ?? '');
+  }
+
+  /// Returns who events are currently attributed to: the identified user,
+  /// their company on a hierarchical groups project, and the device id.
+  ///
+  /// Before an identify the user id is null and only the device id is set.
+  /// The company id is null on projects that don't use hierarchical groups.
+  /// The returned identity is a snapshot.
+  ///
+  /// ```dart
+  /// final identity = await mixpanel.getIdentity();
+  /// ```
+  Future<MixpanelIdentity> getIdentity() async {
+    final result = await _channel.invokeMethod<Map>('getIdentity');
+    return MixpanelIdentity.fromMap(result);
   }
 
   /// Push all queued Mixpanel events and People Analytics changes to Mixpanel servers.
@@ -1246,6 +1442,35 @@ class MixpanelGroup {
       'value': _MixpanelHelper.ensureSerializableValue(value)
     });
   }
+}
+
+/// The group [Mixpanel.getCompany] returns when it has no company to update.
+/// Every update is dropped with a log.
+class _UnavailableMixpanelGroup extends MixpanelGroup {
+  final String _reason;
+
+  _UnavailableMixpanelGroup(String token, String reason)
+      : _reason = reason,
+        super(token, Mixpanel._companyIdGroupKey, null);
+
+  void _drop() {
+    developer.log('$_reason The update was dropped.', name: 'Mixpanel');
+  }
+
+  @override
+  void set(String prop, String to) => _drop();
+
+  @override
+  void setOnce(String prop, String to) => _drop();
+
+  @override
+  void unset(String prop) => _drop();
+
+  @override
+  void remove(String name, dynamic value) => _drop();
+
+  @override
+  void union(String name, List<dynamic> value) => _drop();
 }
 
 /// Core class for using Mixpanel Feature Flags.
