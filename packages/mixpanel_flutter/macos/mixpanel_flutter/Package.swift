@@ -15,7 +15,7 @@ let package = Package(
     dependencies: [
         .package(
             url: "https://github.com/mixpanel/mixpanel-swift.git",
-            exact: "7.1.0"
+            exact: "7.0.0"
         ),
         .package(name: "FlutterFramework", path: "../FlutterFramework")
     ],

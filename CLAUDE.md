@@ -47,9 +47,9 @@ Future<void> methodName(parameters) async {
 - `MixpanelGroup` - Group analytics management (accessible via `mixpanel.getGroup()`)
 
 ### Platform Dependencies
-- Android: Mixpanel Android SDK v8.12.0
-- iOS: Mixpanel-swift 7.1.0 (iOS 15+)
-- macOS: Mixpanel-swift 7.1.0 (macOS 12+)
+- Android: Mixpanel Android SDK v8.11.1
+- iOS: Mixpanel-swift 7.0.0 (iOS 15+)
+- macOS: Mixpanel-swift 7.0.0 (macOS 12+)
 - Web: Mixpanel JavaScript library (loaded from CDN)
 
 ## Development Commands
