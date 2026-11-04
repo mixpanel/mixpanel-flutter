@@ -687,6 +687,9 @@ class Mixpanel {
   /// * [properties] Optional properties to add to the opt-in event.
   Future<void> optInTrackingWithIdentity(MixpanelIdentity identity,
       {Map<String, dynamic>? properties}) async {
+    if (!_isValidIdentity(identity, 'optInTrackingWithIdentity')) {
+      return;
+    }
     _cancelPendingAutocapture?.call();
     await _channel.invokeMethod<void>(
         'optInTrackingWithIdentity', <String, dynamic>{
@@ -763,10 +766,31 @@ class Mixpanel {
   ///
   /// * [identity] the user, and on a hierarchical groups project their company
   Future<void> identifyWithIdentity(MixpanelIdentity identity) async {
+    if (!_isValidIdentity(identity, 'identifyWithIdentity')) {
+      return;
+    }
     // A pending check must not emit under the new identity.
     _cancelPendingAutocapture?.call();
     await _channel.invokeMethod<void>(
         'identifyWithIdentity', <String, dynamic>{'identity': identity.toMap()});
+  }
+
+  /// Logs and returns false for an identity whose user id is blank, or whose
+  /// company id is given but blank.
+  bool _isValidIdentity(MixpanelIdentity identity, String method) {
+    final userId = identity.userId;
+    if (userId == null || !_MixpanelHelper.isValidString(userId)) {
+      developer.log('`$method` failed: userId cannot be blank',
+          name: 'Mixpanel');
+      return false;
+    }
+    final companyId = identity.companyId;
+    if (companyId != null && !_MixpanelHelper.isValidString(companyId)) {
+      developer.log('`$method` failed: companyId cannot be blank',
+          name: 'Mixpanel');
+      return false;
+    }
+    return true;
   }
 
   /// The alias method creates an alias which Mixpanel will use to remap one id to another.

@@ -1947,7 +1947,7 @@ void main() {
     test('identifyWithIdentity leaves validation to the native SDK',
         () async {
       // The native SDKs own the hierarchical groups rules and their error
-      // logs, so an incomplete identity is still forwarded.
+      // logs, so an identity without a company is still forwarded.
       final mixpanel = await Mixpanel.init('test token',
           trackAutomaticEvents: true, hierarchicalGroups: true);
       calls.clear();
@@ -1966,6 +1966,22 @@ void main() {
           },
         ),
       );
+    });
+
+    test('identity methods reject blank ids before the platform call',
+        () async {
+      final mixpanel = await Mixpanel.init('test token',
+          trackAutomaticEvents: true, hierarchicalGroups: true);
+      calls.clear();
+      for (final identity in const [
+        MixpanelIdentity(userId: null, companyId: 'acme'),
+        MixpanelIdentity(userId: '  ', companyId: 'acme'),
+        MixpanelIdentity(userId: 'user_123', companyId: ''),
+      ]) {
+        await mixpanel.identifyWithIdentity(identity);
+        await mixpanel.optInTrackingWithIdentity(identity);
+      }
+      expect(calls, isEmpty);
     });
 
     test('getIdentity decodes the native identity', () async {
