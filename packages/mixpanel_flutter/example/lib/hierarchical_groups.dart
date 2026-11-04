@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:mixpanel_flutter/mixpanel_flutter.dart';
+import 'package:mixpanel_flutter_example/analytics.dart';
 import 'package:mixpanel_flutter_example/widget.dart';
 
 // Hierarchical groups is an init-time option, so this page uses its own
-// project rather than the one MixpanelManager initializes.
+// project rather than the one MixpanelManager initializes, and restores that
+// one when it closes.
 const String mixpanelHgProjectToken = '0d15128ec05aa2ba0fb3d45185f63a11';
 
 // Filter the console on "HGDemo" to see each button's header line, followed
@@ -30,7 +32,10 @@ class _HgAction {
 }
 
 class _HierarchicalGroupsScreenState extends State<HierarchicalGroupsScreen> {
-  static Future<Mixpanel>? _mixpanelFuture;
+  late final Future<Mixpanel> _mixpanelFuture;
+
+  // Shown in place of the default message after an action that reads state
+  String? _result;
 
   final TextEditingController _userId =
       TextEditingController(text: 'tyler_flutter');
@@ -42,7 +47,7 @@ class _HierarchicalGroupsScreenState extends State<HierarchicalGroupsScreen> {
   @override
   void initState() {
     super.initState();
-    _mixpanelFuture ??= _initMixpanel();
+    _mixpanelFuture = _initMixpanel();
   }
 
   @override
@@ -50,6 +55,8 @@ class _HierarchicalGroupsScreenState extends State<HierarchicalGroupsScreen> {
     _userId.dispose();
     _companyId.dispose();
     _teamId.dispose();
+    // The other pages' handle calls the native instance this page replaced
+    MixpanelManager.restore();
     super.dispose();
   }
 
@@ -112,8 +119,9 @@ class _HierarchicalGroupsScreenState extends State<HierarchicalGroupsScreen> {
         final identity = await mixpanel.getIdentity();
         final optedOut = await mixpanel.hasOptedOutTracking();
         final superProperties = await mixpanel.getSuperProperties();
-        _log('identity=$identity optedOut=$optedOut '
-            'superProperties=$superProperties');
+        _result = 'identity=$identity optedOut=$optedOut '
+            'superProperties=$superProperties';
+        _log(_result!);
       }),
 
       // Opt out and in
@@ -187,7 +195,8 @@ class _HierarchicalGroupsScreenState extends State<HierarchicalGroupsScreen> {
       ..._groupActions(mixpanel, 'Company', mixpanel.getCompany, () async {
         final companyId = (await mixpanel.getIdentity()).companyId;
         if (companyId == null || companyId.isEmpty) {
-          _log('No company identified, nothing to delete');
+          _result = 'No company identified, nothing to delete';
+          _log(_result!);
           return;
         }
         mixpanel.deleteGroup('\$company_id', companyId);
@@ -248,10 +257,19 @@ class _HierarchicalGroupsScreenState extends State<HierarchicalGroupsScreen> {
                     text: hgAction.title,
                     onPressed: () async {
                       _log('===== ${hgAction.title} =====');
+                      _result = null;
                       await hgAction.action();
                       // Flush after every call so its requests show up on
                       // their own
                       await mixpanel.flush();
+                      if (!mounted) return;
+                      ScaffoldMessenger.of(this.context)
+                        ..hideCurrentSnackBar()
+                        ..showSnackBar(SnackBar(
+                          content: Text(_result ??
+                              '${hgAction.title}: done. Filter the console on '
+                                  '"$_logTag" for the SDK logs.'),
+                        ));
                     },
                   ),
                 ),
