@@ -535,7 +535,7 @@ void main() {
       expectCalls([
         isMethodCall('optInTrackingWithIdentity', arguments: <String, dynamic>{
           ...identityArgs,
-          'properties': null,
+          'properties': <String, dynamic>{},
         }),
       ]);
     });

@@ -694,7 +694,7 @@ class Mixpanel {
     await _channel.invokeMethod<void>(
         'optInTrackingWithIdentity', <String, dynamic>{
       'identity': identity.toMap(),
-      'properties': _MixpanelHelper.ensureSerializableProperties(properties)
+      'properties': _MixpanelHelper.ensureSerializableProperties(properties) ?? {}
     });
   }
 

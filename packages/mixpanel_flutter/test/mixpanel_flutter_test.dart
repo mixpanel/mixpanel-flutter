@@ -2045,7 +2045,7 @@ void main() {
       );
     });
 
-    test('optInTrackingWithIdentity sends null properties when omitted',
+    test('optInTrackingWithIdentity sends empty properties when omitted',
         () async {
       final mixpanel = await Mixpanel.init('test token',
           trackAutomaticEvents: true, hierarchicalGroups: true);
@@ -2053,7 +2053,7 @@ void main() {
       await mixpanel.optInTrackingWithIdentity(
           const MixpanelIdentity(userId: 'user_123', companyId: 'acme'));
       expect(calls.single.method, 'optInTrackingWithIdentity');
-      expect((calls.single.arguments as Map)['properties'], isNull);
+      expect((calls.single.arguments as Map)['properties'], isEmpty);
     });
 
     test('optInTracking without identity is unchanged', () async {
