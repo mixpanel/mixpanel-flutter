@@ -99,7 +99,6 @@ class _EventScreenState extends State<EventScreen> {
             child: MixpanelButton(
               text: 'Get Distinct ID',
               onPressed: () async {
-                // ignore: deprecated_member_use
                 String? distinctId = await _mixpanel.getDistinctId();
                 Widget okButton = TextButton(
                   child: Text("OK"),

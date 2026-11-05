@@ -547,7 +547,6 @@ public class MixpanelFlutterPlugin implements FlutterPlugin, MethodCallHandler {
         result.success(null);
     }
 
-    @SuppressWarnings("deprecation")
     private void handleGetDistinctId(MethodCall call, Result result) {
         result.success(mixpanel.getDistinctId());
     }

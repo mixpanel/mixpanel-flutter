@@ -530,7 +530,6 @@ void main() {
     });
 
     test('check getDistinctId call', () async {
-      // ignore: deprecated_member_use_from_same_package
       _mixpanel.getDistinctId();
       expect(
         methodCall,

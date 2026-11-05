@@ -1043,11 +1043,11 @@ class Mixpanel {
   ///
   /// On a hierarchical groups project this returns Mixpanel's combined form,
   /// `$company:{companyId}|$user:{userId}`, once a user and company are
-  /// identified, and `$device:{deviceId}` before that.
+  /// identified, and `$device:{deviceId}` before that. Don't use this on a
+  /// hierarchical groups project; prefer [getIdentity], whose user, company and
+  /// device ids every Mixpanel SDK accepts directly.
   ///
   /// return Future<String> the distinct id associated with Mixpanel event and People Analytics
-  @Deprecated(
-      'Use getIdentity() instead. Its user, company and device ids are what every Mixpanel SDK accepts directly.')
   Future<String> getDistinctId() {
     return _channel
         .invokeMethod<String>('getDistinctId')
