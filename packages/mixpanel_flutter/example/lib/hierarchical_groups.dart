@@ -6,7 +6,7 @@ import 'package:mixpanel_flutter_example/widget.dart';
 // Hierarchical groups is an init-time option, so this page uses its own
 // project rather than the one MixpanelManager initializes, and restores that
 // one when it closes.
-const String mixpanelHgProjectToken = '0d15128ec05aa2ba0fb3d45185f63a11';
+const String mixpanelHgProjectToken = 'YOUR_HG_PROJECT_TOKEN';
 
 // Filter the console on "HGDemo" to see each button's header line, followed
 // by the SDK's own logs for that call.
