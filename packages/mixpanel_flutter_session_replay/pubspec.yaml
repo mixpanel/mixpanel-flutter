@@ -28,7 +28,7 @@ dependencies:
   sqflite: ^2.3.0
   clock: ^1.1.1
   shared_preferences: ^2.3.0
-  mixpanel_flutter_common: ^1.0.0
+  mixpanel_flutter_common: ^1.1.0
 
 dev_dependencies:
   flutter_test:
