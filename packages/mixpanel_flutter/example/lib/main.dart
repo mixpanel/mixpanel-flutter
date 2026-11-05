@@ -9,6 +9,7 @@ import 'event_bridge.dart';
 import 'feature_flags.dart';
 import 'gdpr.dart';
 import 'group.dart';
+import 'hierarchical_groups.dart';
 import 'profile.dart';
 
 // This is the main page only, check out the example app in https://github.com/mixpanel/mixpanel-flutter/tree/main/example
@@ -95,6 +96,8 @@ class _MyAppState extends State<MyApp> {
             '/group': (context) => GroupScreen(),
             '/feature_flags': (context) => FeatureFlagsScreen(),
             '/event_bridge': (context) => EventBridgeScreen(),
+            '/hierarchical_groups': (context) =>
+                const HierarchicalGroupsScreen(),
           },
         ));
   }
@@ -185,6 +188,18 @@ class FirstScreen extends StatelessWidget {
               text: 'EVENT BRIDGE',
               onPressed: () {
                 Navigator.pushNamed(context, '/event_bridge');
+              },
+            ),
+          ),
+          SizedBox(
+            height: 20,
+          ),
+          SizedBox(
+            width: MediaQuery.of(context).size.width * 0.65,
+            child: MixpanelButton(
+              text: 'HIERARCHICAL GROUPS',
+              onPressed: () {
+                Navigator.pushNamed(context, '/hierarchical_groups');
               },
             ),
           ),
