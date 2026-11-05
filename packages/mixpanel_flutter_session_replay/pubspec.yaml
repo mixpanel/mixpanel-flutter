@@ -41,6 +41,12 @@ dev_dependencies:
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
 
+# MixpanelIdentity is new in the in-repo mixpanel_flutter_common. Remove this
+# once mixpanel_flutter_common with MixpanelIdentity is published.
+dependency_overrides:
+  mixpanel_flutter_common:
+    path: ../mixpanel_flutter_common
+
 flutter:
   plugin:
     platforms:

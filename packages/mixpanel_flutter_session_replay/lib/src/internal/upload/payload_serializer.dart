@@ -2,10 +2,12 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:clock/clock.dart';
+import 'package:mixpanel_flutter_common/mixpanel_flutter_common.dart';
 
 import '../../models/session_event.dart';
 import '../../models/session.dart';
 import '../../version.dart';
+import '../replay_identity.dart';
 import 'rrweb_event.dart';
 
 /// Result of payload serialization
@@ -85,8 +87,9 @@ class PayloadSerializer {
   Map<String, String> buildQueryParams(
     Session session,
     String distinctId,
-    int sequenceNumber,
-  ) {
+    int sequenceNumber, {
+    MixpanelIdentity? identity,
+  }) {
     final batchStartTime = clock.now().millisecondsSinceEpoch / 1000.0;
     final replayLength = clock
         .now()
@@ -105,6 +108,7 @@ class PayloadSerializer {
       '\$lib_version': sdkVersion,
       '\$os': operatingSystem,
       'mp_lib': 'flutter-sr',
+      ...ReplayIdentity.queryParams(identity),
     };
   }
 

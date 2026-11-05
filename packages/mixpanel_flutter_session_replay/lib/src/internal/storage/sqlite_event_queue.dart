@@ -1,11 +1,13 @@
 import 'dart:io';
 
+import 'package:mixpanel_flutter_common/mixpanel_flutter_common.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:sqflite/sqflite.dart';
 
 import '../../models/session_event.dart';
 import '../../models/session.dart';
 import '../logger.dart';
+import '../replay_identity.dart';
 import 'event_queue_interface.dart';
 
 /// SQLite-based event queue implementation
@@ -39,8 +41,9 @@ class SqliteEventQueue implements EventQueue {
 
     _db = await openDatabase(
       dbPath,
-      version: 1,
+      version: 2,
       onCreate: _createTables,
+      onUpgrade: _upgradeTables,
       onConfigure: (db) async {
         // Enable WAL mode for concurrency
         final result = await db.rawQuery('PRAGMA journal_mode=WAL');
@@ -60,6 +63,7 @@ class SqliteEventQueue implements EventQueue {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         session_id TEXT NOT NULL,
         distinct_id TEXT NOT NULL,
+        identity TEXT,
         timestamp INTEGER NOT NULL,
         type INTEGER NOT NULL,
         payload_metadata TEXT,
@@ -90,6 +94,17 @@ class SqliteEventQueue implements EventQueue {
     ''');
 
     _logger.debug('Database tables created');
+  }
+
+  /// Version 2 stores the identity each event was captured under
+  Future<void> _upgradeTables(
+    Database db,
+    int oldVersion,
+    int newVersion,
+  ) async {
+    if (oldVersion < 2) {
+      await db.execute('ALTER TABLE events ADD COLUMN identity TEXT');
+    }
   }
 
   @override
@@ -178,6 +193,7 @@ class SqliteEventQueue implements EventQueue {
   Future<List<PersistedSessionReplayEvent>> fetchBatch({
     required String sessionId,
     required String distinctId,
+    MixpanelIdentity? identity,
     required int maxBytes,
     required int maxCount,
   }) async {
@@ -185,13 +201,17 @@ class SqliteEventQueue implements EventQueue {
       throw StateError('Storage not initialized');
     }
 
-    // Get CONSECUTIVE events for the given sessionId and distinctId,
-    // stopping at the first event where distinctId changes.
+    // Get CONSECUTIVE events for the given sessionId, distinctId and identity,
+    // stopping at the first event where either changes.
     //
     // This ensures we don't mix different users in the same upload batch.
 
-    // Step 1: Find the boundary - first event where distinctId changes
-    final boundaryId = await _findDistinctIdBoundary(sessionId, distinctId);
+    // Step 1: Find the boundary - first event where the user changes
+    final boundaryId = await _findDistinctIdBoundary(
+      sessionId,
+      distinctId,
+      identity,
+    );
 
     // Step 2: Fetch events with size filtering
     final rows = await _fetchEventsWithSizeLimit(
@@ -206,19 +226,21 @@ class SqliteEventQueue implements EventQueue {
         .toList();
   }
 
-  /// Find the first event ID where distinctId changes (boundary detection)
+  /// Find the first event ID where distinctId or identity changes (boundary
+  /// detection)
   Future<int?> _findDistinctIdBoundary(
     String sessionId,
     String distinctId,
+    MixpanelIdentity? identity,
   ) async {
     final rows = await _db!.rawQuery(
       '''
       SELECT MIN(id) as boundary_id
       FROM events
       WHERE session_id = ?
-        AND distinct_id != ?
+        AND (distinct_id != ? OR identity IS NOT ?)
       ''',
-      [sessionId, distinctId],
+      [sessionId, distinctId, ReplayIdentity.encode(identity)],
     );
 
     if (rows.isEmpty || rows.first['boundary_id'] == null) {
@@ -242,10 +264,10 @@ class SqliteEventQueue implements EventQueue {
 
     return await _db!.rawQuery(
       '''
-      SELECT id, session_id, distinct_id, timestamp, type, payload_metadata, payload_binary, data_size
+      SELECT id, session_id, distinct_id, identity, timestamp, type, payload_metadata, payload_binary, data_size
       FROM (
         SELECT
-          id, session_id, distinct_id, timestamp, type, payload_metadata, payload_binary, data_size,
+          id, session_id, distinct_id, identity, timestamp, type, payload_metadata, payload_binary, data_size,
           (SELECT SUM(e2.data_size)
            FROM events e2
            WHERE e2.session_id = events.session_id

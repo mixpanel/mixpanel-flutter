@@ -131,10 +131,9 @@ packages:
   mixpanel_flutter_common:
     dependency: "direct main"
     description:
-      name: mixpanel_flutter_common
-      sha256: bb4d48da0297f27086bfd2a9e9b7f5a2192e88bdaa1aa14698e49974860b3b36
-      url: "https://pub.dev"
-    source: hosted
+      path: "../mixpanel_flutter_common"
+      relative: true
+    source: path
     version: "1.0.0"
   path:
     dependency: transitive
@@ -215,4 +214,4 @@ packages:
     version: "14.3.1"
 sdks:
   dart: ">=3.9.0-0 <4.0.0"
-  flutter: ">=3.18.0-18.0.pre.54"
+  flutter: ">=3.19.0"

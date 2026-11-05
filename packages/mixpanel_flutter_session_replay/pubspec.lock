@@ -275,10 +275,9 @@ packages:
   mixpanel_flutter_common:
     dependency: "direct main"
     description:
-      name: mixpanel_flutter_common
-      sha256: bb4d48da0297f27086bfd2a9e9b7f5a2192e88bdaa1aa14698e49974860b3b36
-      url: "https://pub.dev"
-    source: hosted
+      path: "../mixpanel_flutter_common"
+      relative: true
+    source: path
     version: "1.0.0"
   native_toolchain_c:
     dependency: transitive

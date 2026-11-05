@@ -1,3 +1,4 @@
+import 'package:mixpanel_flutter_common/mixpanel_flutter_common.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/storage/event_queue_interface.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/session_event.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/session.dart';
@@ -32,6 +33,7 @@ class InMemoryEventQueue implements EventQueue {
         dataSize: dataSize,
         sessionId: event.sessionId,
         distinctId: event.distinctId,
+        identity: event.identity,
         timestamp: event.timestamp,
         type: event.type,
         payload: event.payload,
@@ -77,6 +79,7 @@ class InMemoryEventQueue implements EventQueue {
   Future<List<PersistedSessionReplayEvent>> fetchBatch({
     required String sessionId,
     required String distinctId,
+    MixpanelIdentity? identity,
     required int maxBytes,
     required int maxCount,
   }) async {
@@ -86,7 +89,9 @@ class InMemoryEventQueue implements EventQueue {
     int totalBytes = 0;
 
     for (final event in _events) {
-      if (event.sessionId != sessionId || event.distinctId != distinctId) {
+      if (event.sessionId != sessionId ||
+          event.distinctId != distinctId ||
+          event.identity != identity) {
         break;
       }
 

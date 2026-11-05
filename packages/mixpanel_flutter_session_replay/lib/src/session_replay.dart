@@ -3,6 +3,7 @@ import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart' show debugPrint, kDebugMode;
 import 'package:http/http.dart' as http;
 import 'package:meta/meta.dart';
+import 'package:mixpanel_flutter_common/mixpanel_flutter_common.dart';
 
 import 'models/debug_overlay_colors.dart';
 import 'models/results.dart';
@@ -22,6 +23,7 @@ import 'internal/settings/settings_storage_provider.dart';
 import 'internal/session_replay_coordinator.dart';
 import 'internal/wireframe/wireframe_emitter.dart';
 import 'internal/logger.dart';
+import 'internal/replay_identity.dart';
 
 /// Mixpanel Session Replay for Flutter
 class MixpanelSessionReplay {
@@ -36,6 +38,9 @@ class MixpanelSessionReplay {
 
   /// Current distinct ID (can be updated at runtime)
   String _distinctId;
+
+  /// Current identity, or null when identified with a distinct ID
+  MixpanelIdentity? _identity;
 
   MixpanelSessionReplay._internal({
     required MixpanelLogger logger,
@@ -65,6 +70,50 @@ class MixpanelSessionReplay {
     return initializeWithDependencies(
       token: token,
       distinctId: distinctId,
+      options: options,
+      eventQueue: null, // Use default SqliteEventQueue
+    );
+  }
+
+  /// Initialize Mixpanel Session Replay for an identity, so recordings resolve
+  /// to the same user as the app's events, including on a project that uses
+  /// hierarchical groups.
+  ///
+  /// Pass the identity analytics reports, and pass it to
+  /// [identifyWithIdentity] again whenever analytics identifies:
+  ///
+  /// ```dart
+  /// await MixpanelSessionReplay.initializeWithIdentity(
+  ///   token: token,
+  ///   identity: await mixpanel.getIdentity(),
+  /// );
+  /// ```
+  ///
+  /// Replays carry `$user_id`, `$company_id` and `$device_id` alongside
+  /// `distinct_id`. The identity needs a user id or a device id; otherwise
+  /// initialization fails with [InitializationError.invalidToken], like any
+  /// other invalid configuration. Otherwise this behaves like [initialize].
+  static Future<InitializationResult<MixpanelSessionReplay>>
+  initializeWithIdentity({
+    required String token,
+    required MixpanelIdentity identity,
+    SessionReplayOptions options = const SessionReplayOptions(),
+  }) async {
+    final distinctId = ReplayIdentity.distinctId(identity);
+    if (distinctId == null) {
+      final message =
+          "Can't initialize Session Replay with $identity: it needs a user id "
+          'or a device id';
+      MixpanelLogger(options.logLevel).error(message);
+      return InitializationResult.failure(
+        InitializationError.invalidToken,
+        message,
+      );
+    }
+    return initializeWithDependencies(
+      token: token,
+      distinctId: distinctId,
+      identity: identity,
       options: options,
       eventQueue: null, // Use default SqliteEventQueue
     );
@@ -112,6 +161,7 @@ class MixpanelSessionReplay {
   initializeWithDependencies({
     required String token,
     required String distinctId,
+    MixpanelIdentity? identity,
     SessionReplayOptions options = const SessionReplayOptions(),
     EventQueue? eventQueue,
     http.Client? httpClient,
@@ -254,17 +304,22 @@ class MixpanelSessionReplay {
       );
 
       // Create instance first (before components) so we can reference it in closures
-      final instance = MixpanelSessionReplay._internal(
-        logger: logger,
-        token: token,
-        distinctId: distinctId,
-      );
+      final instance =
+          MixpanelSessionReplay._internal(
+              logger: logger,
+              token: token,
+              distinctId: distinctId,
+            )
+            .._identity = identity == null
+                ? null
+                : ReplayIdentity.normalize(identity);
 
       // Create event recorder (handles both screenshots and interactions)
       final eventRecorder = EventRecorder(
         eventQueue: queue,
         sessionManager: sessionManager,
         getDistinctId: () => instance.distinctId,
+        getIdentity: () => instance._identity,
         logger: logger,
       );
 
@@ -442,6 +497,38 @@ class MixpanelSessionReplay {
       'Identifying user: updating distinctId from $_distinctId to $distinctId',
     );
     _distinctId = distinctId;
+    _identity = null;
+  }
+
+  /// Attributes recordings to the given identity, so they resolve to the same
+  /// user as the app's events, including on a project that uses hierarchical
+  /// groups. Pass the identity analytics reports, and call this again
+  /// whenever analytics identifies.
+  ///
+  /// Replays then carry `$user_id`, `$company_id` and `$device_id` alongside
+  /// `distinct_id`, which is the identity's user id, or `$device:` and its
+  /// device id before the user is known. Events already captured keep the
+  /// identity they were captured under.
+  ///
+  /// An identity with neither a user id nor a device id is logged and ignored.
+  ///
+  /// Example:
+  /// ```dart
+  /// sessionReplay.identifyWithIdentity(
+  ///     MixpanelIdentity(userId: 'user_123', companyId: 'acme'));
+  /// ```
+  void identifyWithIdentity(MixpanelIdentity identity) {
+    final distinctId = ReplayIdentity.distinctId(identity);
+    if (distinctId == null) {
+      _logger.warning(
+        "Can't identify Session Replay with $identity: it needs a user id or "
+        'a device id',
+      );
+      return;
+    }
+    _logger.info('Identifying user: updating identity to $identity');
+    _distinctId = distinctId;
+    _identity = ReplayIdentity.normalize(identity);
   }
 
   /// Internal coordinator for widget operations

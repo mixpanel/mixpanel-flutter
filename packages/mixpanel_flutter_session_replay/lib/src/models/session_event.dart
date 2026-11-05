@@ -2,6 +2,9 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'dart:ui' show Rect;
 
+import 'package:mixpanel_flutter_common/mixpanel_flutter_common.dart';
+
+import '../internal/replay_identity.dart';
 import 'wireframe.dart';
 import 'wireframes_options.dart' show MaskDecision;
 
@@ -203,6 +206,10 @@ class SessionReplayEvent {
   /// User distinct ID at time of event capture
   final String distinctId;
 
+  /// Identity at time of event capture, when Session Replay was identified
+  /// with one. Its ids are sent alongside [distinctId].
+  final MixpanelIdentity? identity;
+
   /// Event capture time (UTC)
   final DateTime timestamp;
 
@@ -215,6 +222,7 @@ class SessionReplayEvent {
   SessionReplayEvent({
     required this.sessionId,
     required this.distinctId,
+    this.identity,
     required this.timestamp,
     required this.type,
     required this.payload,
@@ -230,6 +238,7 @@ class SessionReplayEvent {
     return {
       'session_id': sessionId,
       'distinct_id': distinctId,
+      'identity': ReplayIdentity.encode(identity),
       'timestamp': timestamp.millisecondsSinceEpoch,
       'type': type.index,
       'payload_metadata': serialized['metadata'],
@@ -385,6 +394,7 @@ class PersistedSessionReplayEvent extends SessionReplayEvent {
     required this.dataSize,
     required super.sessionId,
     required super.distinctId,
+    super.identity,
     required super.timestamp,
     required super.type,
     required super.payload,
@@ -404,6 +414,7 @@ class PersistedSessionReplayEvent extends SessionReplayEvent {
       dataSize: row['data_size'] as int,
       sessionId: row['session_id'] as String,
       distinctId: row['distinct_id'] as String,
+      identity: ReplayIdentity.decode(row['identity'] as String?),
       timestamp: DateTime.fromMillisecondsSinceEpoch(
         row['timestamp'] as int,
         isUtc: true,

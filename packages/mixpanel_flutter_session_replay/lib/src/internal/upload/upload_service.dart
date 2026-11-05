@@ -345,11 +345,13 @@ class UploadService {
 
       final sessionId = oldestEvent.sessionId;
       final distinctId = oldestEvent.distinctId;
+      final identity = oldestEvent.identity;
 
-      // Fetch batch of events for this sessionId and distinctId
+      // Fetch batch of events for this sessionId, distinctId and identity
       final events = await eventQueue.fetchBatch(
         sessionId: sessionId,
         distinctId: distinctId,
+        identity: identity,
         maxBytes: maxPayloadBytes,
         maxCount: maxEventsPerBatch,
       );
@@ -396,6 +398,7 @@ class UploadService {
         session,
         targetDistinctId,
         sequenceNumber,
+        identity: identity,
       );
       final uri = Uri.parse(_endpoint).replace(queryParameters: queryParams);
 

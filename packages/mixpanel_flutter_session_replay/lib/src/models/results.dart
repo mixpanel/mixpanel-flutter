@@ -1,5 +1,7 @@
 import 'dart:typed_data';
 
+import 'package:mixpanel_flutter_common/mixpanel_flutter_common.dart';
+
 import 'masking_directive.dart';
 import 'session_event.dart' show WireframePayload;
 
@@ -131,6 +133,9 @@ final class CaptureSuccess extends CaptureResult {
   /// Distinct ID the frame was painted under, pinned at capture time
   final String distinctId;
 
+  /// Identity the frame was painted under, pinned with [distinctId]
+  final MixpanelIdentity? identity;
+
   /// Wireframe payload for this frame, or `null` when wireframes are not
   /// enabled or the emitter deduped against the previous frame.
   final WireframePayload? wireframes;
@@ -143,6 +148,7 @@ final class CaptureSuccess extends CaptureResult {
     required this.timestamp,
     required this.sessionId,
     required this.distinctId,
+    this.identity,
     this.maskRegions = const [],
     this.wireframes,
   });

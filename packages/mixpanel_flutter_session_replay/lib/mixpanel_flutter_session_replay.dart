@@ -1,6 +1,8 @@
 /// Mixpanel Session Replay for Flutter
 library;
 
+export 'package:mixpanel_flutter_common/mixpanel_flutter_common.dart'
+    show MixpanelIdentity;
 export 'src/session_replay.dart' show MixpanelSessionReplay;
 export 'src/session_replay_options.dart' show SessionReplayOptions;
 export 'src/widgets/widgets.dart'

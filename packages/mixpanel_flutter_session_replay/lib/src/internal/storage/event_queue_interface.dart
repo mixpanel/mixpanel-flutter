@@ -1,3 +1,5 @@
+import 'package:mixpanel_flutter_common/mixpanel_flutter_common.dart';
+
 import '../../models/session_event.dart';
 import '../../models/session.dart';
 
@@ -27,16 +29,19 @@ abstract class EventQueue {
   /// Returns null if no events exist
   Future<PersistedSessionReplayEvent?> fetchNewest();
 
-  /// Fetch batch of consecutive events for a specific sessionId and distinctId
+  /// Fetch batch of consecutive events for a specific sessionId, distinctId
+  /// and identity
   ///
-  /// Returns consecutive events with the same sessionId and distinctId,
-  /// up to [maxBytes] total payload size or [maxCount] events,
+  /// Returns consecutive events with the same sessionId, distinctId and
+  /// identity, up to [maxBytes] total payload size or [maxCount] events,
   /// whichever limit is reached first.
   ///
-  /// Stops at the first event where distinctId changes (boundary detection).
+  /// Stops at the first event where distinctId or identity changes (boundary
+  /// detection).
   Future<List<PersistedSessionReplayEvent>> fetchBatch({
     required String sessionId,
     required String distinctId,
+    MixpanelIdentity? identity,
     required int maxBytes,
     required int maxCount,
   });
