@@ -1995,7 +1995,7 @@ void main() {
       expect(calls.last, isMethodCall('getIdentity', arguments: null));
       expect(
           identity,
-          const MixpanelIdentity(
+          const MixpanelIdentity.withDeviceId(
               userId: 'user_123', companyId: 'acme', deviceId: 'device_1'));
     });
 
@@ -2161,7 +2161,7 @@ void main() {
 
     test('MixpanelIdentity map round trip', () {
       const identity =
-          MixpanelIdentity(userId: 'u', companyId: 'c', deviceId: 'd');
+          MixpanelIdentity.withDeviceId(userId: 'u', companyId: 'c', deviceId: 'd');
       expect(MixpanelIdentity.fromMap(identity.toMap()), identity);
       expect(MixpanelIdentity.fromMap(null), const MixpanelIdentity(userId: null));
     });

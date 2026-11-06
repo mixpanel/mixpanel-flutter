@@ -11,7 +11,7 @@ class ReplayIdentity {
   /// The identity with empty values unset, so two spellings of "absent"
   /// compare and store the same.
   static MixpanelIdentity normalize(MixpanelIdentity identity) =>
-      MixpanelIdentity(
+      MixpanelIdentity.withDeviceId(
         userId: _nonEmpty(identity.userId),
         companyId: _nonEmpty(identity.companyId),
         deviceId: _nonEmpty(identity.deviceId),

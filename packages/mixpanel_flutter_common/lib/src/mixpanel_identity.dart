@@ -28,11 +28,19 @@ class MixpanelIdentity {
   /// owns the device id.
   final String? deviceId;
 
-  const MixpanelIdentity({required this.userId, this.companyId, this.deviceId});
+  /// Creates an identity for a user and, on a hierarchical groups project,
+  /// their company.
+  const MixpanelIdentity({required this.userId, this.companyId})
+      : deviceId = null;
+
+  /// For internal use by the Mixpanel SDKs only, which own the device id. Apps
+  /// create an identity with the unnamed constructor.
+  const MixpanelIdentity.withDeviceId(
+      {required this.userId, this.companyId, this.deviceId});
 
   /// Creates a MixpanelIdentity from a Map (used for platform channel deserialization).
   factory MixpanelIdentity.fromMap(Map<dynamic, dynamic>? map) {
-    return MixpanelIdentity(
+    return MixpanelIdentity.withDeviceId(
       userId: map?['userId'] as String?,
       companyId: map?['companyId'] as String?,
       deviceId: map?['deviceId'] as String?,

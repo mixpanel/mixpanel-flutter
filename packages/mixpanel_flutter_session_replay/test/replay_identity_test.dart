@@ -17,7 +17,7 @@ void main() {
   sqfliteFfiInit();
   databaseFactory = databaseFactoryFfi;
 
-  const acme = MixpanelIdentity(
+  const acme = MixpanelIdentity.withDeviceId(
     userId: 'user_123',
     companyId: 'acme',
     deviceId: 'device_1',
@@ -30,7 +30,8 @@ void main() {
 
     test('distinct id is the device id before the user is known', () {
       // GIVEN
-      const anonymous = MixpanelIdentity(userId: null, deviceId: 'device_1');
+      const anonymous =
+          MixpanelIdentity.withDeviceId(userId: null, deviceId: 'device_1');
 
       // THEN
       expect(ReplayIdentity.distinctId(anonymous), '\$device:device_1');
@@ -38,7 +39,7 @@ void main() {
 
     test('distinct id is null without a user id or device id', () {
       // GIVEN
-      const companyOnly = MixpanelIdentity(
+      const companyOnly = MixpanelIdentity.withDeviceId(
         userId: '',
         companyId: 'acme',
         deviceId: '',
@@ -173,7 +174,7 @@ void main() {
 
         // WHEN
         instance.identifyWithIdentity(
-          const MixpanelIdentity(userId: null, deviceId: 'device_1'),
+          const MixpanelIdentity.withDeviceId(userId: null, deviceId: 'device_1'),
         );
         final event = await recordTouch(instance, queue);
 
