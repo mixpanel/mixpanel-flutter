@@ -357,8 +357,13 @@ public class SwiftMixpanelFlutterPlugin: NSObject, FlutterPlugin {
     
     private func handleIdentifyWithIdentity(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
         let arguments = call.arguments as? [String: Any] ?? [String: Any]()
-        instance?.identify(identity: mixpanelIdentity(from: arguments["identity"]))
-        result(nil)
+        guard let instance = instance else {
+            result(nil)
+            return
+        }
+        instance.identify(identity: mixpanelIdentity(from: arguments["identity"])) {
+            result(nil)
+        }
     }
 
     private func mixpanelIdentity(from value: Any?) -> MixpanelIdentity {
