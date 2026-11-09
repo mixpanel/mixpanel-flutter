@@ -447,7 +447,51 @@ class MixpanelFlutterPlugin {
     return get_distinct_id();
   }
 
-  Map<String, dynamic> handleGetIdentity() {
+  /// How long [handleGetIdentity] waits for mixpanel-js to finish loading.
+  @visibleForTesting
+  static Duration identityLoadTimeout = const Duration(seconds: 5);
+
+  /// How often [handleGetIdentity] checks whether mixpanel-js has loaded.
+  @visibleForTesting
+  static Duration identityLoadPollInterval = const Duration(milliseconds: 50);
+
+  /// Whether the loaded mixpanel-js library has replaced the snippet stub.
+  /// The stub only queues the calls it lists, and get_identity is not one of
+  /// them, so it exists once the real library is in place.
+  static bool _hasGetIdentity() {
+    final sdk = globalContext.getProperty<JSAny?>('mixpanel'.toJS);
+    if (sdk == null || !sdk.typeofEquals('object')) return false;
+    return (sdk as JSObject)
+        .getProperty<JSAny?>('get_identity'.toJS)
+        .typeofEquals('function');
+  }
+
+  /// Completes with true once mixpanel-js has loaded, or false if it has not
+  /// loaded within [identityLoadTimeout] (for example, blocked by an ad
+  /// blocker).
+  static Future<bool> _waitForGetIdentity() async {
+    if (_hasGetIdentity()) return true;
+    final deadline = DateTime.now().add(identityLoadTimeout);
+    while (DateTime.now().isBefore(deadline)) {
+      await Future<void>.delayed(identityLoadPollInterval);
+      if (_hasGetIdentity()) return true;
+    }
+    return false;
+  }
+
+  Future<Map<String, dynamic>> handleGetIdentity() async {
+    if (!await _waitForGetIdentity()) {
+      developer.log(
+        'getIdentity() timed out waiting for mixpanel-js to load; '
+        'returning an empty identity.',
+        name: 'Mixpanel',
+      );
+      return const <String, dynamic>{
+        'userId': null,
+        'companyId': null,
+        'deviceId': null,
+      };
+    }
     final identity = get_identity().dartify();
     final map = identity is Map ? identity : const {};
     return <String, dynamic>{

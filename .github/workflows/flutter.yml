@@ -24,8 +24,9 @@ jobs:
       - run: flutter test
       # Autocapture runs in Dart on web too; exercise that path in Chrome.
       - run: flutter test --platform chrome test/autocapture
-      # Browser-only suites: the on_track event bridge and web super properties.
-      - run: flutter test --platform chrome test/event_bridge_web_test.dart test/super_properties_web_test.dart
+      # Browser-only suites: the on_track event bridge, web super properties and
+      # getIdentity waiting for mixpanel-js to load.
+      - run: flutter test --platform chrome test/event_bridge_web_test.dart test/super_properties_web_test.dart test/get_identity_web_test.dart
       # Canary: runs the on_track hook against whatever mixpanel-2-latest the
       # CDN currently serves, which is what the shipped snippet loads. A failure
       # here usually means mixpanel-js changed the hook contract upstream.
