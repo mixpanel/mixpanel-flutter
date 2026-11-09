@@ -6,6 +6,7 @@ import 'package:mixpanel_flutter_session_replay/mixpanel_flutter_session_replay.
 import 'package:mixpanel_flutter_session_replay/src/internal/logger.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/replay_identity.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/settings/settings_service.dart';
+import 'package:mixpanel_flutter_session_replay/src/internal/storage/event_queue_interface.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/storage/sqlite_event_queue.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/upload/payload_serializer.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/upload/upload_service.dart';
@@ -148,13 +149,13 @@ void main() {
       return (instance, queue);
     }
 
-    Future<PersistedSessionReplayEvent> recordTouch(
+    Future<QueuedEventHeader> recordTouch(
       MixpanelSessionReplay instance,
       InMemoryEventQueue queue,
     ) async {
       instance.coordinator.captureInteraction(2, Offset.zero, DateTime.now());
       await pumpEventQueue();
-      return (await queue.fetchNewest())!;
+      return (await queue.fetchNewestHeader())!;
     }
 
     test(
@@ -304,7 +305,7 @@ void main() {
       await queue.add(touch(100, acme));
 
       // THEN
-      final event = (await queue.fetchOldest())!;
+      final event = (await queue.fetchOldestHeader())!;
       expect(event.distinctId, 'user_123');
       expect(event.identity, acme);
     });
@@ -349,7 +350,7 @@ void main() {
       expect(params.map((p) => p['\$user_id']), ['user_123', 'user_123', null]);
       expect(params.map((p) => p['\$company_id']), ['acme', 'globex', null]);
       expect(params.map((p) => p['\$device_id']), ['device_1', null, null]);
-      expect(await queue.fetchOldest(), isNull);
+      expect(await queue.fetchOldestHeader(), isNull);
     });
 
     test('a batch stops where the company changes for the same user', () async {
@@ -361,7 +362,7 @@ void main() {
       await queue.add(touch(300, globex));
 
       // WHEN
-      final oldest = (await queue.fetchOldest())!;
+      final oldest = (await queue.fetchOldestHeader())!;
       final batch = await queue.fetchBatch(
         sessionId: oldest.sessionId,
         distinctId: oldest.distinctId,
@@ -403,7 +404,7 @@ void main() {
       await queue.add(touch(100, null));
 
       // THEN
-      final event = (await queue.fetchOldest())!;
+      final event = (await queue.fetchOldestHeader())!;
       expect(event.distinctId, 'user_123');
       expect(event.identity, isNull);
       await queue.dispose();

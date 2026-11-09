@@ -1,9 +1,13 @@
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 
+import '../models/debug_overlay_colors.dart';
 import '../models/masking_directive.dart';
 import '../models/results.dart';
 import '../models/session_event.dart' show TouchPosition;
+import 'capture/frame_acquirer.dart';
+import 'debug_mask_overlay.dart';
 import 'settings/settings_service.dart';
 import 'logger.dart';
 
@@ -24,6 +28,22 @@ abstract class WidgetCoordinator {
 
   /// Whether app is currently in foreground
   bool get isAppInForeground;
+
+  /// Whether a frame rendered during a capture is followed up with one more
+  /// capture. See [FrameAcquirer.followsUpFramesDuringCapture].
+  bool get followsUpFramesDuringCapture;
+
+  /// Whether [AppLifecycleState.inactive] counts as leaving the foreground,
+  /// or only [AppLifecycleState.hidden] does.
+  bool get leavesForegroundWhenInactive;
+
+  /// Creates the debug mask overlay for a capture boundary, drawn wherever
+  /// this coordinator's capture cannot see it.
+  DebugMaskOverlay createDebugMaskOverlay({
+    required ValueListenable<List<MaskRegionInfo>> regions,
+    required DebugOverlayColors colors,
+    required RenderBox? Function() boundary,
+  });
 
   /// Logger instance
   MixpanelLogger get logger;
@@ -50,8 +70,18 @@ abstract class WidgetCoordinator {
   void captureTouchMove(List<TouchPosition> positions, DateTime timestamp);
 
   /// Capture a screenshot from the given boundary
+  ///
+  /// [onRenderTreeRead] runs once the capture has read the render tree, if it
+  /// gets that far.
   Future<void> captureSnapshot(
     RenderRepaintBoundary boundary, {
     required Element boundaryElement,
+    void Function()? onRenderTreeRead,
   });
+
+  /// Notify coordinator of user activity (even when not recording).
+  ///
+  /// Used on web to restart recording after an idle timeout.
+  /// On native (or when no idle timeout is configured), this is a no-op.
+  void onUserActivity();
 }

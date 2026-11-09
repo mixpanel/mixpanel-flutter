@@ -8,10 +8,6 @@
 /// Automatic dead-click detection must separately verify response coverage and
 /// skip unsupported/failed observations; an unchanged or empty Flutter snapshot
 /// is not evidence that an embedded native or custom-painted surface was idle.
-///
-/// **Experimental (beta).** Autocapture may contain issues, and its API and the
-/// properties it captures may change in a future release before general
-/// availability. Pin your SDK version if you build reports on autocaptured events.
 class ClickEvent {
   const ClickEvent({
     required this.x,

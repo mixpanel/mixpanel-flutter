@@ -1,6 +1,5 @@
-import 'dart:io' show Platform;
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 /// Screen comparing Material and Cupertino widgets
@@ -195,12 +194,14 @@ class _PlatformWidgetsScreenState extends State<PlatformWidgetsScreen> {
 
   String _getPlatformName() {
     if (kIsWeb) return 'Web';
-    if (Platform.isAndroid) return 'Android';
-    if (Platform.isIOS) return 'iOS';
-    if (Platform.isMacOS) return 'macOS';
-    if (Platform.isWindows) return 'Windows';
-    if (Platform.isLinux) return 'Linux';
-    return 'Unknown';
+    return switch (defaultTargetPlatform) {
+      TargetPlatform.android => 'Android',
+      TargetPlatform.iOS => 'iOS',
+      TargetPlatform.macOS => 'macOS',
+      TargetPlatform.windows => 'Windows',
+      TargetPlatform.linux => 'Linux',
+      TargetPlatform.fuchsia => 'Fuchsia',
+    };
   }
 
   Future<void> _showMaterialDatePicker() async {

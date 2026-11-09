@@ -299,6 +299,47 @@ void main() {
         expect(payload.height, expectedHeight);
       });
 
+      test('re-emits metadata after the queue dropped the first one', () async {
+        // GIVEN a queue that drops the session's first metadata write, as a
+        // full quota does
+        final droppingQueue = _DroppingMetadataEventQueue();
+        await droppingQueue.initialize();
+        addTearDown(droppingQueue.dispose);
+        await droppingQueue.createSessionMetadata(session);
+        final recorder = EventRecorder(
+          eventQueue: droppingQueue,
+          sessionManager: sessionManager,
+          getDistinctId: () => defaultDistinctId,
+          logger: MixpanelLogger(LogLevel.none),
+        );
+
+        // WHEN two screenshots of the same size are recorded
+        for (var i = 0; i < 2; i++) {
+          await recorder.recordSnapshot(
+            imageData: Uint8List(0),
+            width: 375,
+            height: 812,
+            timestamp: clock.now(),
+            sessionId: session.id,
+            distinctId: defaultDistinctId,
+          );
+        }
+
+        // THEN the viewport metadata is stored with the second screenshot
+        // instead of being considered sent
+        final events = await droppingQueue.fetchBatch(
+          sessionId: session.id,
+          distinctId: defaultDistinctId,
+          maxBytes: 100000,
+          maxCount: 10,
+        );
+        expect(events.map((event) => event.type), [
+          EventType.screenshot,
+          EventType.metadata,
+          EventType.screenshot,
+        ]);
+      });
+
       test('records metadata event when dimensions change', () async {
         // GIVEN - first screenshot establishes initial dimensions
         await recorder.recordSnapshot(
@@ -660,13 +701,27 @@ void main() {
   });
 }
 
+/// Event queue that drops the first metadata event, as a queue at quota does.
+class _DroppingMetadataEventQueue extends InMemoryEventQueue {
+  var _dropped = false;
+
+  @override
+  Future<bool> add(SessionReplayEvent event) async {
+    if (event.type == EventType.metadata && !_dropped) {
+      _dropped = true;
+      return false;
+    }
+    return super.add(event);
+  }
+}
+
 /// Event queue that blocks metadata writes until [releaseMetadata], holding the
 /// recorder inside its metadata await while the session rotates.
 class _PausingMetadataEventQueue extends InMemoryEventQueue {
   final Completer<void> _metadataGate = Completer<void>();
 
   @override
-  Future<void> add(SessionReplayEvent event) async {
+  Future<bool> add(SessionReplayEvent event) async {
     if (event.type == EventType.metadata) {
       await _metadataGate.future;
     }

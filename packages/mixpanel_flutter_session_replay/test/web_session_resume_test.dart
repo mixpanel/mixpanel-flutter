@@ -1,0 +1,609 @@
+@TestOn('browser')
+library;
+
+import 'dart:async';
+import 'dart:js_interop';
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:mixpanel_flutter_session_replay/src/internal/storage/indexed_db_event_queue.dart';
+import 'package:mixpanel_flutter_session_replay/src/internal/session/web_session_resume.dart';
+import 'package:mixpanel_flutter_session_replay/src/models/session.dart';
+import 'package:mixpanel_flutter_session_replay/src/models/session_event.dart';
+import 'package:mixpanel_flutter_session_replay/src/models/configuration.dart';
+import 'package:mixpanel_flutter_session_replay/src/internal/logger.dart';
+import 'package:web/web.dart' as web;
+
+String _dbNameForToken(String token) =>
+    'mixpanel_replay_${token.replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_')}';
+
+Future<void> _deleteDatabase(String name) {
+  final completer = Completer<void>();
+  final request = web.window.indexedDB.deleteDatabase(name);
+  request.onsuccess = (web.Event event) {
+    completer.complete();
+  }.toJS;
+  request.onerror = (web.Event event) {
+    completer.complete();
+  }.toJS;
+  return completer.future;
+}
+
+/// Rewrites one metadata field as a double, reproducing how dart2wasm
+/// dartifies every stored IndexedDB number.
+Future<void> _storeFieldAsDouble(
+  String dbName,
+  String sessionId,
+  String field,
+  double value,
+) async {
+  final open = web.window.indexedDB.open(dbName);
+  await _awaitRequest(open);
+  final db = open.result as web.IDBDatabase;
+  final txn = db.transaction('session_metadata'.toJS, 'readwrite');
+  final store = txn.objectStore('session_metadata');
+  final get = store.get(sessionId.toJS);
+  await _awaitRequest(get);
+  final map = (get.result.dartify()! as Map).cast<String, dynamic>();
+  map[field] = value;
+  await _awaitRequest(store.put(map.jsify()!));
+  db.close();
+}
+
+Future<void> _awaitRequest(web.IDBRequest request) {
+  final completer = Completer<void>();
+  request.onsuccess = (web.Event event) {
+    completer.complete();
+  }.toJS;
+  request.onerror = (web.Event event) {
+    completer.completeError(StateError('IndexedDB request failed'));
+  }.toJS;
+  return completer.future;
+}
+
+void main() {
+  late IndexedDbEventQueue queue;
+  late MixpanelLogger logger;
+  final token = 'test-token-resume';
+
+  setUp(() async {
+    logger = MixpanelLogger(LogLevel.none);
+    queue = IndexedDbEventQueue(token: token, logger: logger);
+    await queue.initialize();
+  });
+
+  tearDown(() async {
+    await queue.dispose();
+    await _deleteDatabase(_dbNameForToken(token));
+  });
+
+  group('checkWebSessionResume', () {
+    test(
+      'should return the stored idle deadline when a session can resume',
+      () async {
+        // GIVEN a session with stored activity and maximum deadlines
+        final now = DateTime.now();
+        final idle = now
+            .add(const Duration(minutes: 30))
+            .millisecondsSinceEpoch;
+        final max = now.add(const Duration(hours: 24)).millisecondsSinceEpoch;
+        await queue.createSessionMetadata(
+          Session(
+            id: 'resumable',
+            startTime: now,
+            status: SessionStatus.active,
+          ),
+        );
+        await updateWebSessionExpiry(
+          queue: queue,
+          sessionId: 'resumable',
+          idleExpiresMs: idle,
+          maxExpiresMs: max,
+        );
+
+        // WHEN the next page load checks for a resumable session
+        final result = await checkWebSessionResume(
+          queue: queue,
+          maxSessionDuration: const Duration(hours: 24),
+          logger: logger,
+        );
+
+        // THEN the stored idle deadline travels with it for revalidation
+        expect(result!.idleExpiry!.millisecondsSinceEpoch, idle);
+        final metadata = await queue.getLatestSessionMetadata();
+        expect(metadata!['idle_expires'], idle);
+        expect(metadata['max_expires'], max);
+      },
+    );
+
+    test('resumes when last_activity was stored as a double', () async {
+      // GIVEN an otherwise resumable replay whose last_activity is a double.
+      // dart2wasm dartifies every stored IndexedDB number that way, so this
+      // is the shape a wasm build reads back on every reload.
+      final now = DateTime.now();
+      final lastActivity = now.subtract(const Duration(minutes: 2));
+      await queue.createSessionMetadata(
+        Session(
+          id: 'wasm-double',
+          startTime: lastActivity,
+          status: SessionStatus.active,
+        ),
+      );
+      await updateWebSessionExpiry(
+        queue: queue,
+        sessionId: 'wasm-double',
+        idleExpiresMs: lastActivity
+            .add(const Duration(minutes: 30))
+            .millisecondsSinceEpoch,
+        maxExpiresMs: now.add(const Duration(hours: 24)).millisecondsSinceEpoch,
+        lastActivityMs: lastActivity.millisecondsSinceEpoch,
+      );
+      await _storeFieldAsDouble(
+        _dbNameForToken(token),
+        'wasm-double',
+        'last_activity',
+        lastActivity.millisecondsSinceEpoch.toDouble(),
+      );
+
+      // WHEN the next page load looks for a replay to resume
+      final result = await checkWebSessionResume(
+        queue: queue,
+        maxSessionDuration: const Duration(hours: 24),
+        logger: logger,
+      );
+
+      // THEN it resumes with the activity time intact. Before the metadata
+      // read normalized this field, the cast threw, the caller treated the
+      // record as unreadable, and the active replay was abandoned.
+      //
+      // This only discriminates under dart2wasm. dart2js collapses a whole
+      // double back to int on dartify, so the faulty cast cannot throw there
+      // and this passes either way. It is here to fail once the web suites
+      // also run with --wasm.
+      expect(result, isNotNull);
+      expect(
+        result!.lastActivity!.millisecondsSinceEpoch,
+        lastActivity.millisecondsSinceEpoch,
+      );
+    });
+
+    test('defers a shrunk idle timeout to the resume decision', () async {
+      // GIVEN a replay last active 20 minutes ago under a 30 minute timeout,
+      // so its stored deadline is still 10 minutes away
+      final now = DateTime.now();
+      final lastActivity = now.subtract(const Duration(minutes: 20));
+      await queue.createSessionMetadata(
+        Session(
+          id: 'shrunk',
+          startTime: lastActivity,
+          status: SessionStatus.active,
+        ),
+      );
+      await updateWebSessionExpiry(
+        queue: queue,
+        sessionId: 'shrunk',
+        idleExpiresMs: lastActivity
+            .add(const Duration(minutes: 30))
+            .millisecondsSinceEpoch,
+        maxExpiresMs: now.add(const Duration(hours: 24)).millisecondsSinceEpoch,
+        lastActivityMs: lastActivity.millisecondsSinceEpoch,
+      );
+
+      // WHEN this load runs
+      final result = await checkWebSessionResume(
+        queue: queue,
+        maxSessionDuration: const Duration(hours: 24),
+        logger: logger,
+      );
+
+      // THEN it is staged with the stored deadline and the raw activity time.
+      // Page load knows only the local timeout, so applying one here would
+      // cut the window short whenever the remote timeout is longer. The
+      // coordinator applies the timeout in force once settings have landed —
+      // see 'does not resume a replay a shortened remote timeout already
+      // ended' in coordinator_web_session_test.dart.
+      expect(result, isNotNull);
+      expect(
+        result!.idleExpiry!.millisecondsSinceEpoch,
+        lastActivity.add(const Duration(minutes: 30)).millisecondsSinceEpoch,
+      );
+      expect(
+        result.lastActivity!.millisecondsSinceEpoch,
+        lastActivity.millisecondsSinceEpoch,
+      );
+    });
+
+    test('still resumes when the shorter timeout has not elapsed', () async {
+      // GIVEN the same shrunk timeout, but only 2 minutes since activity
+      final now = DateTime.now();
+      final lastActivity = now.subtract(const Duration(minutes: 2));
+      await queue.createSessionMetadata(
+        Session(
+          id: 'fresh',
+          startTime: lastActivity,
+          status: SessionStatus.active,
+        ),
+      );
+      await updateWebSessionExpiry(
+        queue: queue,
+        sessionId: 'fresh',
+        idleExpiresMs: lastActivity
+            .add(const Duration(minutes: 30))
+            .millisecondsSinceEpoch,
+        maxExpiresMs: now.add(const Duration(hours: 24)).millisecondsSinceEpoch,
+        lastActivityMs: lastActivity.millisecondsSinceEpoch,
+      );
+
+      // WHEN
+      final result = await checkWebSessionResume(
+        queue: queue,
+        maxSessionDuration: const Duration(hours: 24),
+        logger: logger,
+      );
+
+      // THEN it resumes, carrying the stored deadline unchanged
+      expect(result, isNotNull);
+      expect(
+        result!.idleExpiry!.millisecondsSinceEpoch,
+        lastActivity.add(const Duration(minutes: 30)).millisecondsSinceEpoch,
+      );
+    });
+
+    test('refuses to resume when the idle timeout grew', () async {
+      // GIVEN a replay that already ended: last active 10 minutes ago under
+      // a 5 minute timeout, so its stored deadline passed 5 minutes back
+      final now = DateTime.now();
+      final lastActivity = now.subtract(const Duration(minutes: 10));
+      await queue.createSessionMetadata(
+        Session(
+          id: 'grown',
+          startTime: lastActivity,
+          status: SessionStatus.active,
+        ),
+      );
+      await updateWebSessionExpiry(
+        queue: queue,
+        sessionId: 'grown',
+        idleExpiresMs: lastActivity
+            .add(const Duration(minutes: 5))
+            .millisecondsSinceEpoch,
+        maxExpiresMs: now.add(const Duration(hours: 24)).millisecondsSinceEpoch,
+        lastActivityMs: lastActivity.millisecondsSinceEpoch,
+      );
+
+      // WHEN this load runs
+      final result = await checkWebSessionResume(
+        queue: queue,
+        maxSessionDuration: const Duration(hours: 24),
+        logger: logger,
+      );
+
+      // THEN the replay stays dead. A longer timeout must not reach back and
+      // revive a replay the stored deadline already ended.
+      expect(result, isNull);
+    });
+
+    test('returns null when no sessions exist', () async {
+      final result = await checkWebSessionResume(
+        queue: queue,
+        maxSessionDuration: const Duration(hours: 24),
+        logger: logger,
+      );
+
+      expect(result, isNull);
+    });
+
+    test('returns session info for valid non-expired session', () async {
+      final session = Session(
+        id: 'session-abc',
+        startTime: DateTime.fromMillisecondsSinceEpoch(1000000, isUtc: true),
+        status: SessionStatus.active,
+      );
+      await queue.createSessionMetadata(session);
+
+      // Set expiry far in the future
+      final futureMs = DateTime.now().millisecondsSinceEpoch + 3600000;
+      await queue.updateSessionExpiry(
+        sessionId: 'session-abc',
+        idleExpiresMs: futureMs,
+        maxExpiresMs: futureMs,
+      );
+
+      final result = await checkWebSessionResume(
+        queue: queue,
+        maxSessionDuration: const Duration(hours: 24),
+        logger: logger,
+      );
+
+      expect(result, isNotNull);
+      expect(result!.session.id, 'session-abc');
+      expect(result.session.startTime.millisecondsSinceEpoch, 1000000);
+    });
+
+    test('returns null when max duration exceeded', () async {
+      final session = Session(
+        id: 'session-expired',
+        startTime: DateTime.fromMillisecondsSinceEpoch(1000000, isUtc: true),
+        status: SessionStatus.active,
+      );
+      await queue.createSessionMetadata(session);
+
+      // Set max_expires in the past
+      final pastMs = DateTime.now().millisecondsSinceEpoch - 1000;
+      await queue.updateSessionExpiry(
+        sessionId: 'session-expired',
+        idleExpiresMs: DateTime.now().millisecondsSinceEpoch + 3600000,
+        maxExpiresMs: pastMs,
+      );
+
+      final result = await checkWebSessionResume(
+        queue: queue,
+        maxSessionDuration: const Duration(hours: 24),
+        logger: logger,
+      );
+
+      expect(result, isNull);
+    });
+
+    test('returns null when idle timeout exceeded', () async {
+      final session = Session(
+        id: 'session-idle',
+        startTime: DateTime.fromMillisecondsSinceEpoch(1000000, isUtc: true),
+        status: SessionStatus.active,
+      );
+      await queue.createSessionMetadata(session);
+
+      // Set idle_expires in the past, max_expires in the future
+      final pastMs = DateTime.now().millisecondsSinceEpoch - 1000;
+      final futureMs = DateTime.now().millisecondsSinceEpoch + 3600000;
+      await queue.updateSessionExpiry(
+        sessionId: 'session-idle',
+        idleExpiresMs: pastMs,
+        maxExpiresMs: futureMs,
+      );
+
+      final result = await checkWebSessionResume(
+        queue: queue,
+        maxSessionDuration: const Duration(hours: 24),
+        logger: logger,
+      );
+
+      expect(result, isNull);
+    });
+
+    test(
+      'returns session for legacy session (no expiry data) within max duration',
+      () async {
+        // Legacy session: has metadata but no idle_expires/max_expires
+        final recentStartMs =
+            DateTime.now().millisecondsSinceEpoch - 60000; // 1 min ago
+        final session = Session(
+          id: 'session-legacy',
+          startTime: DateTime.fromMillisecondsSinceEpoch(
+            recentStartMs,
+            isUtc: true,
+          ),
+          status: SessionStatus.active,
+        );
+        await queue.createSessionMetadata(session);
+        // No updateSessionExpiry call — simulates legacy session
+
+        final result = await checkWebSessionResume(
+          queue: queue,
+          maxSessionDuration: const Duration(hours: 24),
+          logger: logger,
+        );
+
+        expect(result, isNotNull);
+        expect(result!.session.id, 'session-legacy');
+      },
+    );
+
+    test('returns null for legacy session exceeding max duration', () async {
+      // Legacy session started long ago
+      final oldStartMs =
+          DateTime.now().millisecondsSinceEpoch -
+          const Duration(hours: 25).inMilliseconds;
+      final session = Session(
+        id: 'session-old-legacy',
+        startTime: DateTime.fromMillisecondsSinceEpoch(oldStartMs, isUtc: true),
+        status: SessionStatus.active,
+      );
+      await queue.createSessionMetadata(session);
+
+      final result = await checkWebSessionResume(
+        queue: queue,
+        maxSessionDuration: const Duration(hours: 24),
+        logger: logger,
+      );
+
+      expect(result, isNull);
+    });
+
+    test('resumes the latest session when multiple exist', () async {
+      final older = Session(
+        id: 'session-old',
+        startTime: DateTime.fromMillisecondsSinceEpoch(1000000, isUtc: true),
+        status: SessionStatus.active,
+      );
+      final newer = Session(
+        id: 'session-new',
+        startTime: DateTime.fromMillisecondsSinceEpoch(2000000, isUtc: true),
+        status: SessionStatus.active,
+      );
+      await queue.createSessionMetadata(older);
+      await queue.createSessionMetadata(newer);
+
+      // Set valid expiry on the newer session
+      final futureMs = DateTime.now().millisecondsSinceEpoch + 3600000;
+      await queue.updateSessionExpiry(
+        sessionId: 'session-new',
+        idleExpiresMs: futureMs,
+        maxExpiresMs: futureMs,
+      );
+
+      final result = await checkWebSessionResume(
+        queue: queue,
+        maxSessionDuration: const Duration(hours: 24),
+        logger: logger,
+      );
+
+      expect(result, isNotNull);
+      expect(result!.session.id, 'session-new');
+    });
+
+    test('does not resume a session owned by another browser tab', () async {
+      final ownedQueue = IndexedDbEventQueue(
+        token: token,
+        ownerId: 'tab-1',
+        logger: logger,
+      );
+      await queue.dispose();
+      queue = ownedQueue;
+      await queue.initialize();
+      final session = Session(
+        id: 'session-tab-1',
+        startTime: DateTime.now().toUtc(),
+        status: SessionStatus.active,
+      );
+      await queue.createSessionMetadata(session);
+      final futureMs = DateTime.now().millisecondsSinceEpoch + 3600000;
+      await queue.updateSessionExpiry(
+        sessionId: session.id,
+        idleExpiresMs: futureMs,
+        maxExpiresMs: futureMs,
+      );
+
+      final otherTab = IndexedDbEventQueue(
+        token: token,
+        ownerId: 'tab-2',
+        logger: logger,
+      );
+      await otherTab.initialize();
+
+      final result = await checkWebSessionResume(
+        queue: otherTab,
+        maxSessionDuration: const Duration(hours: 24),
+        logger: logger,
+      );
+
+      expect(result, isNull);
+      await otherTab.dispose();
+    });
+
+    test('never resumes metadata rebuilt for an orphaned backlog', () async {
+      // GIVEN events for a session whose metadata write was lost, then the
+      // uploader rebuilding that metadata as an ended session
+      await queue.add(
+        SessionReplayEvent(
+          sessionId: 'orphaned',
+          distinctId: 'user-1',
+          timestamp: DateTime.now().toUtc(),
+          type: EventType.interaction,
+          payload: InteractionPayload(interactionType: 1, x: 1, y: 2),
+        ),
+      );
+      await queue.createSessionMetadata(
+        Session(
+          id: 'orphaned',
+          startTime: DateTime.now().toUtc(),
+          status: SessionStatus.ended,
+        ),
+      );
+      final otherTab = IndexedDbEventQueue(
+        token: token,
+        ownerId: 'tab-2',
+        logger: logger,
+      );
+      await otherTab.initialize();
+      addTearDown(otherTab.dispose);
+
+      // WHEN either the rebuilding tab or another tab reloads
+      final sameTab = await checkWebSessionResume(
+        queue: queue,
+        maxSessionDuration: const Duration(hours: 24),
+        logger: logger,
+      );
+      final other = await checkWebSessionResume(
+        queue: otherTab,
+        maxSessionDuration: const Duration(hours: 24),
+        logger: logger,
+      );
+
+      // THEN the rebuilt session stays uploadable but is not resumed
+      expect(sameTab, isNull);
+      expect(other, isNull);
+      expect((await otherTab.fetchOldestHeader())?.sessionId, 'orphaned');
+    });
+
+    test('resumes after reload when tab ownership is unchanged', () async {
+      final firstPage = IndexedDbEventQueue(
+        token: token,
+        ownerId: 'stable-tab',
+        logger: logger,
+      );
+      await queue.dispose();
+      queue = firstPage;
+      await queue.initialize();
+      final session = Session(
+        id: 'session-reload',
+        startTime: DateTime.now().toUtc(),
+        status: SessionStatus.active,
+      );
+      await queue.createSessionMetadata(session);
+      final futureMs = DateTime.now().millisecondsSinceEpoch + 3600000;
+      await queue.updateSessionExpiry(
+        sessionId: session.id,
+        idleExpiresMs: futureMs,
+        maxExpiresMs: futureMs,
+      );
+      await queue.dispose();
+
+      queue = IndexedDbEventQueue(
+        token: token,
+        ownerId: 'stable-tab',
+        logger: logger,
+      );
+      await queue.initialize();
+
+      final result = await checkWebSessionResume(
+        queue: queue,
+        maxSessionDuration: const Duration(hours: 24),
+        logger: logger,
+      );
+
+      expect(result?.session.id, session.id);
+    });
+  });
+
+  group('updateWebSessionExpiry', () {
+    test(
+      'persists expiry timestamps readable by checkWebSessionResume',
+      () async {
+        final session = Session(
+          id: 'session-roundtrip',
+          startTime: DateTime.fromMillisecondsSinceEpoch(1000000, isUtc: true),
+          status: SessionStatus.active,
+        );
+        await queue.createSessionMetadata(session);
+
+        final futureMs = DateTime.now().millisecondsSinceEpoch + 3600000;
+        await updateWebSessionExpiry(
+          queue: queue,
+          sessionId: 'session-roundtrip',
+          idleExpiresMs: futureMs,
+          maxExpiresMs: futureMs,
+        );
+
+        // Verify the expiry is readable and session is resumable
+        final result = await checkWebSessionResume(
+          queue: queue,
+          maxSessionDuration: const Duration(hours: 24),
+          logger: logger,
+        );
+
+        expect(result, isNotNull);
+        expect(result!.session.id, 'session-roundtrip');
+      },
+    );
+  });
+}

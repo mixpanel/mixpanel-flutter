@@ -84,8 +84,8 @@ if (kotlinExt?.hasProperty('compilerOptions')) {
 }
 
 dependencies {
-    implementation "com.mixpanel.android:mixpanel-android:8.11.1"
-    // mixpanel-android:8.11.1 only declares mixpanel-android-common as a
+    implementation "com.mixpanel.android:mixpanel-android:8.12.0"
+    // mixpanel-android:8.12.0 only declares mixpanel-android-common as a
     // runtime dependency, so MixpanelEventBridge is not on the compile
     // classpath unless we add it explicitly here. EventBridgeSubscriber.kt
     // imports it directly.

@@ -106,8 +106,8 @@ class EventRecorder {
     DateTime timestamp,
   ) async {
     try {
-      // Use logical pixel coordinates directly
-      // These will match the coordinate system of the screenshots
+      // Already scaled into the screenshot's pixels by the coordinator, so
+      // the player can position the touch against the frame it renders.
       final x = position.dx;
       final y = position.dy;
 
@@ -175,7 +175,9 @@ class EventRecorder {
   /// or if dimensions change.
   /// Uses the capture [timestamp] so metadata and its accompanying screenshot
   /// share the same time reference, keeping ID order and timestamp order aligned.
-  Future<void> recordMetadata(
+  ///
+  /// Returns whether the event reached the queue.
+  Future<bool> recordMetadata(
     int width,
     int height,
     DateTime timestamp, {
@@ -188,7 +190,7 @@ class EventRecorder {
 
       final payload = MetadataPayload(width: width, height: height);
 
-      await _saveEventToQueue(
+      return await _saveEventToQueue(
         type: EventType.metadata,
         payload: payload,
         timestamp: timestamp,
@@ -199,6 +201,7 @@ class EventRecorder {
     } catch (e) {
       _logger.error('Failed to record metadata: $e');
       // Don't crash the app if storage fails
+      return false;
     }
   }
 
@@ -223,7 +226,10 @@ class EventRecorder {
         _lastMetadataDimensions != currentDimensions;
 
     if (needsMetadata) {
-      await recordMetadata(
+      // Only a stored metadata event counts. One the queue dropped, for
+      // example at quota, is retried with the next screenshot so a replay is
+      // never uploaded without the viewport that describes its frames.
+      final stored = await recordMetadata(
         width,
         height,
         timestamp,
@@ -231,8 +237,10 @@ class EventRecorder {
         distinctId: distinctId,
         identity: identity,
       );
-      _lastMetadataSessionId = sessionId;
-      _lastMetadataDimensions = currentDimensions;
+      if (stored) {
+        _lastMetadataSessionId = sessionId;
+        _lastMetadataDimensions = currentDimensions;
+      }
     }
 
     final payload = ScreenshotPayload(imageData: imageData);
@@ -267,11 +275,11 @@ class EventRecorder {
     );
   }
 
-  /// Common method to save any event to the queue
+  /// Common method to save any event to the queue.
   ///
   /// A pinned [distinctId] comes with its pinned [identity]; without one, both
-  /// are read now.
-  Future<void> _saveEventToQueue({
+  /// are read now. Returns whether the queue stored the event.
+  Future<bool> _saveEventToQueue({
     required EventType type,
     required EventPayload payload,
     required DateTime timestamp,
@@ -295,13 +303,19 @@ class EventRecorder {
         payload: payload,
       );
 
-      await eventQueue.add(event);
-      _logger.debug(
-        '${type.name[0].toUpperCase()}${type.name.substring(1)} event saved to queue successfully',
-      );
+      final stored = await eventQueue.add(event);
+      if (stored) {
+        _logger.debug(
+          '${type.name[0].toUpperCase()}${type.name.substring(1)} event saved to queue successfully',
+        );
+      } else {
+        _logger.warning('${type.name} event was dropped by the queue');
+      }
+      return stored;
     } catch (e) {
       _logger.error('Failed to save ${type.name} event: $e');
       // Don't crash the app if storage fails
+      return false;
     }
   }
 

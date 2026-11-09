@@ -37,7 +37,8 @@ class WireframeElement {
 
   /// Element bounds in boundary-relative logical pixels — same coordinate
   /// space as `MaskRegionInfo.bounds`, so the geometric-masking intersection
-  /// works directly.
+  /// works directly. The emitter scales them into the screenshot's pixels
+  /// last, once that intersection has run.
   final Rect bounds;
 
   /// Which layer produced this element's text state.

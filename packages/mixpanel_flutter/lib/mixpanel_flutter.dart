@@ -410,12 +410,9 @@ class Mixpanel {
     'mp_lib': 'flutter',
   };
 
-  // Wires the reverse path from the native MixpanelEventBridge into the
-  // Dart-side [MixpanelEventBridge]. Runs only when a consumer actually
-  // reads [MixpanelEventBridge.events] — `init()` registers this as a
-  // one-shot hook via [MixpanelEventBridge.setSourceWiringHook], so apps
-  // that never subscribe never install the MethodCallHandler and never
-  // issue start/stopEventBridge over the channel.
+  // Wires native event pushes and web hook activation into the Dart-side
+  // [MixpanelEventBridge]. Runs only when a consumer reads its events stream,
+  // so apps without subscribers never start upstream event forwarding.
   static void _wireEventBridge() {
     _channel.setMethodCallHandler((MethodCall call) async {
       if (call.method == 'onMixpanelEvent') {
@@ -479,10 +476,9 @@ class Mixpanel {
   ///  include app sessions, first app opens, app updated, etc.
   ///  * [superProperties] Optional super properties to register
   ///  * [config] Optional A dictionary of config options to override (WEB ONLY)
-  ///  * [autocaptureOptions] Opt into **experimental (beta)** pointer signals on Android, iOS, macOS and web.
+  ///  * [autocaptureOptions] Opt into autocaptured pointer signals on Android, iOS, macOS and web.
   ///    Also wrap the app in MixpanelAutocaptureWidget. Omit to disable.
-  ///    See [AutocaptureOptions] for the Beta notice: APIs and captured properties
-  ///    may change before general availability.
+  ///    See [AutocaptureOptions].
   ///  * [featureFlags] Optional Feature flags configuration
   ///  * [serverURL] Optional base URL for Mixpanel API requests. Use for EU/India data
   ///  residency or a custom proxy. Defaults to https://api.mixpanel.com
@@ -505,11 +501,9 @@ class Mixpanel {
     // Defer the reverse-channel wiring until something actually reads
     // MixpanelEventBridge.events. Apps that never subscribe pay only the
     // stored function reference — no MethodCallHandler, no native subscribe.
-    // Web is skipped — the JS SDK has no EventBridge.
-    if (!kIsWeb) {
-      // ignore: invalid_use_of_internal_member
-      MixpanelEventBridge.setSourceWiringHook(_wireEventBridge);
-    }
+    // Both native plugins and the web JS hook forward into this bridge.
+    // ignore: invalid_use_of_internal_member
+    MixpanelEventBridge.setSourceWiringHook(_wireEventBridge);
     var allProperties = <String, dynamic>{'token': token};
     allProperties['optOutTrackingDefault'] = optOutTrackingDefault;
     allProperties['trackAutomaticEvents'] = trackAutomaticEvents;
@@ -784,10 +778,6 @@ class Mixpanel {
 
   /// Returns an Autocapture object that can be used to manually track
   /// screen and frustration signal events with autocapture metadata.
-  ///
-  /// **Experimental (beta).** Autocapture may contain issues, and its API and the
-  /// properties it captures may change in a future release before general
-  /// availability. Pin your SDK version if you build reports on autocaptured events.
   Autocapture get autocapture {
     _autocapture ??= Autocapture();
     return _autocapture!;
@@ -1549,10 +1539,6 @@ class FeatureFlags {
 /// with autocapture metadata.
 ///
 /// Access via `mixpanel.autocapture`.
-///
-/// **Experimental (beta).** Autocapture may contain issues, and its API and the
-/// properties it captures may change in a future release before general
-/// availability. Pin your SDK version if you build reports on autocaptured events.
 class Autocapture {
   // ignore: prefer_const_declarations
   static final MethodChannel _channel = kIsWeb
@@ -1563,8 +1549,6 @@ class Autocapture {
   Autocapture();
 
   /// Manually tracks a `$mp_click` event using [clickEvent] metadata.
-  ///
-  /// **Experimental (beta).** See [Autocapture] for the Beta notice.
   ///
   /// Does not start automatic rage or dead click detection.
   /// Blank identifiers and nonfinite coordinates are silently ignored.
@@ -1577,8 +1561,6 @@ class Autocapture {
 
   /// Manually tracks a `$mp_rage_click` event using [clickEvent] metadata.
   ///
-  /// **Experimental (beta).** See [Autocapture] for the Beta notice.
-  ///
   /// The caller determines whether a rage click occurred.
   /// Validation and property precedence are the same as [trackClick].
   Future<void> trackRageClick(ClickEvent clickEvent,
@@ -1587,8 +1569,6 @@ class Autocapture {
   }
 
   /// Manually tracks a `$mp_dead_click` event using [clickEvent] metadata.
-  ///
-  /// **Experimental (beta).** See [Autocapture] for the Beta notice.
   ///
   /// The caller determines whether a dead click occurred.
   /// Use this for app-detected signals on surfaces whose UI response cannot be

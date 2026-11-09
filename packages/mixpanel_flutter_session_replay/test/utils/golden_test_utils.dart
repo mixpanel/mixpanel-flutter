@@ -1,3 +1,4 @@
+import 'package:mixpanel_flutter_session_replay/src/internal/capture/to_image_frame_acquirer.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -17,6 +18,7 @@ import 'package:mixpanel_flutter_session_replay/src/models/masking_directive.dar
 import 'package:mixpanel_flutter_session_replay/src/models/results.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/session_event.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/wireframes_options.dart';
+import '../helpers/dart_png_compressor.dart';
 
 /// Whether the test font has been loaded in this test run.
 bool _fontLoaded = false;
@@ -116,7 +118,10 @@ Future<void> captureGolden(
     directive: MaskingDirective(autoMaskTypes: maskTypes),
     logger: MixpanelLogger(LogLevel.none),
     debugOverlayEnabled: false,
-    compressionMode: CompressionMode.dartPng,
+    frameAcquirer: ToImageFrameAcquirer(
+      DartPngCompressor(),
+      logger: MixpanelLogger(LogLevel.none),
+    ),
   );
 
   // Use runAsync to allow the capture's endOfFrame to complete

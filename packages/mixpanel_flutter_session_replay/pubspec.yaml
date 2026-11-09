@@ -1,7 +1,7 @@
 name: mixpanel_flutter_session_replay
 description: Official Flutter Session Replay SDK for Mixpanel, developed and maintained by Mixpanel, Inc.
 
-version: 1.2.0
+version: 2.1.0
 homepage: https://mixpanel.com
 repository: https://github.com/mixpanel/mixpanel-flutter/tree/main/packages/mixpanel_flutter_session_replay
 issue_tracker: https://github.com/mixpanel/mixpanel-flutter/issues
@@ -18,8 +18,9 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_web_plugins:
+    sdk: flutter
   meta: ^1.12.0
-  image: ^4.3.0
   connectivity_plus: ^7.0.0
   path_provider: ^2.1.0
   http: ^1.2.0
@@ -29,10 +30,13 @@ dependencies:
   clock: ^1.1.1
   shared_preferences: ^2.3.0
   mixpanel_flutter_common: ^1.1.0
+  web: ^1.1.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  # Test-only: golden/raster helpers decode PNGs. No lib/ code imports it.
+  image: ^4.3.0
   flutter_lints: ^6.0.0
   sqflite_common_ffi: ^2.3.0
   fake_async: ^1.3.1
@@ -57,3 +61,6 @@ flutter:
         pluginClass: MixpanelSessionReplayPlugin
       macos:
         pluginClass: MixpanelSessionReplayPlugin
+      web:
+        pluginClass: MixpanelSessionReplayPluginWeb
+        fileName: src/web/mixpanel_session_replay_plugin_web.dart

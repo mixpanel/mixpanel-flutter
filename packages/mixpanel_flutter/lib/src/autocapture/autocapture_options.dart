@@ -2,10 +2,6 @@
 ///
 /// Omit from Mixpanel.init to disable automatic capture. Each signal defaults
 /// to enabled when options are supplied.
-///
-/// **Experimental (beta).** Autocapture may contain issues, and its API and the
-/// properties it captures may change in a future release before general
-/// availability. Pin your SDK version if you build reports on autocaptured events.
 class AutocaptureOptions {
   const AutocaptureOptions({
     this.clickOptions = const ClickOptions(),
@@ -24,10 +20,6 @@ class AutocaptureOptions {
 }
 
 /// Configuration for basic click capture.
-///
-/// **Experimental (beta).** Autocapture may contain issues, and its API and the
-/// properties it captures may change in a future release before general
-/// availability. Pin your SDK version if you build reports on autocaptured events.
 class ClickOptions {
   const ClickOptions({this.enabled = true});
 
@@ -36,10 +28,6 @@ class ClickOptions {
 }
 
 /// Configuration for rage-click detection. Distances use logical pixels.
-///
-/// **Experimental (beta).** Autocapture may contain issues, and its API and the
-/// properties it captures may change in a future release before general
-/// availability. Pin your SDK version if you build reports on autocaptured events.
 class RageClickOptions {
   const RageClickOptions({
     this.enabled = true,
@@ -62,10 +50,6 @@ class RageClickOptions {
 }
 
 /// Configuration for dead-click detection.
-///
-/// **Experimental (beta).** Autocapture may contain issues, and its API and the
-/// properties it captures may change in a future release before general
-/// availability. Pin your SDK version if you build reports on autocaptured events.
 class DeadClickOptions {
   const DeadClickOptions({
     this.enabled = true,

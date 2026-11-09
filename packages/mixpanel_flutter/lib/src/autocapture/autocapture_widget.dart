@@ -9,10 +9,6 @@ part of '../../mixpanel_flutter.dart';
 /// Does not observe keyboard/assistive activation or content inside platform
 /// views. Unknown response coverage suppresses automatic dead clicks; use the
 /// manual APIs for app-detected signals on unsupported surfaces.
-///
-/// **Experimental (beta).** Autocapture may contain issues, and its API and the
-/// properties it captures may change in a future release before general
-/// availability. Pin your SDK version if you build reports on autocaptured events.
 class MixpanelAutocaptureWidget extends StatefulWidget {
   const MixpanelAutocaptureWidget(
       {super.key, required this.instance, required this.child});

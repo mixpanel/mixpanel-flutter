@@ -1,5 +1,10 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart' as http_testing;
 import 'package:mixpanel_flutter_session_replay/mixpanel_flutter_session_replay.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'helpers/in_memory_event_queue.dart';
 
 void main() {
@@ -429,6 +434,89 @@ void main() {
       expect(result.errorMessage, contains('storageQuotaMB must be positive'));
     });
 
+    test('negative web idleTimeout prevents initialization', () async {
+      final queue = await createQueue('negative-web-idle-timeout-test');
+      final invalidOptions = SessionReplayOptions(
+        logLevel: LogLevel.none,
+        platformOptions: const PlatformOptions(
+          web: WebOptions(idleTimeout: Duration(seconds: -1)),
+        ),
+      );
+
+      final result = await MixpanelSessionReplay.initializeWithDependencies(
+        token: 'negative-web-idle-timeout-test',
+        distinctId: testDistinctId,
+        options: invalidOptions,
+        eventQueue: queue,
+      );
+
+      expect(result.success, false);
+      expect(result.error, InitializationError.invalidToken);
+      expect(result.errorMessage, contains('idleTimeout cannot be negative'));
+    });
+
+    test(
+      'non-positive background pause idleTimeout prevents initialization',
+      () async {
+        final queue = await createQueue('invalid-background-pause-idle-test');
+        final invalidOptions = SessionReplayOptions(
+          logLevel: LogLevel.none,
+          platformOptions: const PlatformOptions(
+            mobile: MobileOptions(
+              onBackground: ReplayBackgroundBehavior.pause(
+                idleTimeout: Duration.zero,
+              ),
+            ),
+          ),
+        );
+
+        final result = await MixpanelSessionReplay.initializeWithDependencies(
+          token: 'invalid-background-pause-idle-test',
+          distinctId: testDistinctId,
+          options: invalidOptions,
+          eventQueue: queue,
+        );
+
+        expect(result.success, false);
+        expect(result.error, InitializationError.invalidToken);
+        expect(
+          result.errorMessage,
+          contains('background pause idleTimeout must be positive'),
+        );
+      },
+    );
+
+    test(
+      'non-positive web maxSessionDuration prevents initialization',
+      () async {
+        for (final duration in [Duration.zero, const Duration(seconds: -1)]) {
+          final queue = await createQueue(
+            'invalid-web-max-duration-${duration.inSeconds}',
+          );
+          final invalidOptions = SessionReplayOptions(
+            logLevel: LogLevel.none,
+            platformOptions: PlatformOptions(
+              web: WebOptions(maxSessionDuration: duration),
+            ),
+          );
+
+          final result = await MixpanelSessionReplay.initializeWithDependencies(
+            token: 'invalid-web-max-duration-${duration.inSeconds}',
+            distinctId: testDistinctId,
+            options: invalidOptions,
+            eventQueue: queue,
+          );
+
+          expect(result.success, false);
+          expect(result.error, InitializationError.invalidToken);
+          expect(
+            result.errorMessage,
+            contains('maxSessionDuration must be positive'),
+          );
+        }
+      },
+    );
+
     test(
       'invalid autoRecordSessionsPercent via initializeWithDependencies prevents initialization',
       () async {
@@ -556,6 +644,65 @@ void main() {
       expect(sdk.isEventTriggersEnabled, isTrue);
       sdk.disableEventTriggers();
       expect(sdk.isEventTriggersEnabled, isFalse);
+    });
+
+    test('strict mode without sdk_config blocks uploads as well', () async {
+      // GIVEN a server that enables recording but returns no sdk_config,
+      // which strict mode treats as recording disabled
+      SharedPreferences.setMockInitialValues({});
+      final requests = <http.Request>[];
+      final client = http_testing.MockClient((request) async {
+        requests.add(request);
+        if (request.url.path.endsWith('/settings')) {
+          return http.Response(
+            jsonEncode({
+              'recording': {'is_enabled': true},
+            }),
+            200,
+          );
+        }
+        return http.Response('', 200);
+      });
+      final queue = await createQueue('strict-upload-gate');
+      final result = await MixpanelSessionReplay.initializeWithDependencies(
+        token: 'strict-upload-gate',
+        distinctId: testDistinctId,
+        options: const SessionReplayOptions(
+          logLevel: LogLevel.none,
+          flushInterval: Duration(hours: 1),
+          remoteSettingsMode: RemoteSettingsMode.strict,
+          platformOptions: PlatformOptions(
+            mobile: MobileOptions(wifiOnly: false),
+          ),
+        ),
+        eventQueue: queue,
+        httpClient: client,
+      );
+      final instance = result.instance!;
+
+      // AND events recorded before the verdict arrived
+      instance.startRecording();
+      await pumpEventQueue();
+      expect(instance.recordingState, RecordingState.recording);
+      instance.coordinator.captureInteraction(
+        2,
+        const Offset(1, 1),
+        DateTime.now(),
+      );
+      await pumpEventQueue();
+      expect(queue.eventCount, greaterThan(0));
+
+      // WHEN the strict verdict disables recording and stops the replay
+      instance.coordinator.onAppForegrounded();
+      await pumpEventQueue();
+      expect(instance.recordingState, RecordingState.notRecording);
+
+      // THEN the stop flush follows the same verdict and uploads nothing
+      expect(
+        requests.where((request) => request.url.path.endsWith('/record')),
+        isEmpty,
+      );
+      expect(queue.eventCount, greaterThan(0));
     });
 
     test('coordinator getter returns the internal coordinator', () async {

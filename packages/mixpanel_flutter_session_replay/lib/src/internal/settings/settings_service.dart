@@ -165,9 +165,9 @@ class SettingsService {
       'sdk_config': '1',
       // Only ask for the wireframe kill switch when this app opted in to wireframes.
       if (_wireframesRequested) 'wireframe': '1',
-      'mp_lib': 'flutter-sr',
+      'mp_lib': sdkLibrary,
       '\$lib_version': sdkVersion,
-      '\$os': operatingSystem,
+      if (operatingSystem.isNotEmpty) '\$os': operatingSystem,
     };
 
     // Include app bundle ID and build number to enable server-side SDK blocking
