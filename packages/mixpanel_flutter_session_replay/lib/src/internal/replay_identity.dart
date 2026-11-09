@@ -41,14 +41,42 @@ class ReplayIdentity {
     };
   }
 
-  /// The stored form of [identity]: equal identities encode to the same text,
-  /// so the queue can compare them in SQL.
-  static String? encode(MixpanelIdentity? identity) =>
-      identity == null ? null : jsonEncode(normalize(identity).toMap());
+  /// Starts a stored distinct id that carries an identity. Control
+  /// characters don't occur in real distinct ids, so a plain distinct id
+  /// never starts with it. Not NUL: sqflite on iOS and macOS binds text as a C
+  /// string, which would cut the value off at a NUL.
+  static const String _storedIdentityPrefix = '\u0001mpid:';
 
-  static MixpanelIdentity? decode(String? stored) => stored == null
-      ? null
-      : MixpanelIdentity.fromMap(jsonDecode(stored) as Map<String, dynamic>);
+  /// What the queue stores in its `distinct_id` column: [distinctId] itself
+  /// when there's no [identity], otherwise both encoded behind a marker. Equal
+  /// identities store the same text, so the queue can compare them in SQL.
+  static String storedDistinctId(
+    String distinctId,
+    MixpanelIdentity? identity,
+  ) {
+    if (identity == null) return distinctId;
+    return _storedIdentityPrefix +
+        jsonEncode({
+          'distinct_id': distinctId,
+          'identity': normalize(identity).toMap(),
+        });
+  }
+
+  /// The distinct id and identity a [storedDistinctId] value was made from.
+  static (String, MixpanelIdentity?) fromStoredDistinctId(String stored) {
+    if (!stored.startsWith(_storedIdentityPrefix)) return (stored, null);
+    try {
+      final decoded =
+          jsonDecode(stored.substring(_storedIdentityPrefix.length))
+              as Map<String, dynamic>;
+      return (
+        decoded['distinct_id'] as String,
+        MixpanelIdentity.fromMap(decoded['identity'] as Map<String, dynamic>),
+      );
+    } catch (_) {
+      return (stored, null);
+    }
+  }
 
   static String? _nonEmpty(String? value) =>
       value != null && value.isNotEmpty ? value : null;

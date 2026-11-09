@@ -237,8 +237,7 @@ class SessionReplayEvent {
 
     return {
       'session_id': sessionId,
-      'distinct_id': distinctId,
-      'identity': ReplayIdentity.encode(identity),
+      'distinct_id': ReplayIdentity.storedDistinctId(distinctId, identity),
       'timestamp': timestamp.millisecondsSinceEpoch,
       'type': type.index,
       'payload_metadata': serialized['metadata'],
@@ -409,12 +408,16 @@ class PersistedSessionReplayEvent extends SessionReplayEvent {
       row['payload_binary'] as Uint8List?,
     );
 
+    final (distinctId, identity) = ReplayIdentity.fromStoredDistinctId(
+      row['distinct_id'] as String,
+    );
+
     return PersistedSessionReplayEvent(
       id: row['id'] as int,
       dataSize: row['data_size'] as int,
       sessionId: row['session_id'] as String,
-      distinctId: row['distinct_id'] as String,
-      identity: ReplayIdentity.decode(row['identity'] as String?),
+      distinctId: distinctId,
+      identity: identity,
       timestamp: DateTime.fromMillisecondsSinceEpoch(
         row['timestamp'] as int,
         isUtc: true,
