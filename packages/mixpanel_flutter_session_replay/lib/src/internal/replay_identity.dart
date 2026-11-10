@@ -27,8 +27,15 @@ class ReplayIdentity {
     return deviceId != null ? '\$device:$deviceId' : null;
   }
 
-  /// The identity keys Mixpanel resolves a replay's user from, alongside
-  /// `distinct_id`.
+  /// Whether a request names its user with `distinct_id`. Not when the
+  /// identity has both a user and a company: Mixpanel builds the user from
+  /// `$user_id` and `$company_id`, as it does for events, which carry no
+  /// `distinct_id` either.
+  static bool sendsDistinctId(MixpanelIdentity? identity) =>
+      _nonEmpty(identity?.userId) == null ||
+      _nonEmpty(identity?.companyId) == null;
+
+  /// The identity keys Mixpanel resolves a replay's user from.
   static Map<String, String> queryParams(MixpanelIdentity? identity) {
     if (identity == null) return const {};
     final userId = _nonEmpty(identity.userId);

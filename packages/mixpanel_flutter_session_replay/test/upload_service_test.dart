@@ -727,7 +727,7 @@ void main() {
 
         // THEN
         final params = recorder.requests.map((r) => r.url.queryParameters);
-        expect(params.map((p) => p['distinct_id']), ['user_123', 'user_123']);
+        expect(params.map((p) => p['distinct_id']), [null, null]);
         expect(params.map((p) => p['\$user_id']), ['user_123', 'user_123']);
         expect(params.map((p) => p['\$company_id']), ['acme', 'globex']);
       });

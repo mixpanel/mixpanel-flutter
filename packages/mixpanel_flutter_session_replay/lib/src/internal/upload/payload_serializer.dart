@@ -104,7 +104,7 @@ class PayloadSerializer {
 
     return {
       'format': 'gzip', // Indicate compression via query param (not header)
-      'distinct_id': distinctId,
+      if (ReplayIdentity.sendsDistinctId(identity)) 'distinct_id': distinctId,
       'seq': sequenceNumber.toString(),
       'batch_start_time': batchStartTime.toString(),
       'replay_id': session.id,

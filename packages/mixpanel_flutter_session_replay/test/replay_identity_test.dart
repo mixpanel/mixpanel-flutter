@@ -310,7 +310,7 @@ void main() {
       expect(event.identity, acme);
     });
 
-    test('identity events upload with their ids beside distinct_id', () async {
+    test('identity events send distinct_id only without a company', () async {
       // GIVEN
       await queue.initialize();
       final session = Session(
@@ -342,11 +342,7 @@ void main() {
       final params = recorder.requests
           .map((r) => r.url.queryParameters)
           .toList();
-      expect(params.map((p) => p['distinct_id']), [
-        'user_123',
-        'user_123',
-        'user_123',
-      ]);
+      expect(params.map((p) => p['distinct_id']), [null, null, 'user_123']);
       expect(params.map((p) => p['\$user_id']), ['user_123', 'user_123', null]);
       expect(params.map((p) => p['\$company_id']), ['acme', 'globex', null]);
       expect(params.map((p) => p['\$device_id']), ['device_1', null, null]);
@@ -428,17 +424,53 @@ void main() {
       status: SessionStatus.active,
     );
 
-    test('query params carry the identity beside distinct_id', () {
+    test('query params carry the user and company instead of distinct_id', () {
       // WHEN
       final params = PayloadSerializer(
         'token',
       ).buildQueryParams(session, 'user_123', 0, identity: acme);
 
       // THEN
-      expect(params['distinct_id'], 'user_123');
+      expect(params.keys, isNot(contains('distinct_id')));
       expect(params['\$user_id'], 'user_123');
       expect(params['\$company_id'], 'acme');
       expect(params['\$device_id'], 'device_1');
+    });
+
+    test(
+      'query params carry distinct_id for an identity without a company',
+      () {
+        // WHEN
+        final params = PayloadSerializer('token').buildQueryParams(
+          session,
+          'user_123',
+          0,
+          identity: const MixpanelIdentity(userId: 'user_123', companyId: ''),
+        );
+
+        // THEN
+        expect(params['distinct_id'], 'user_123');
+        expect(params['\$user_id'], 'user_123');
+        expect(params.keys, isNot(contains('\$company_id')));
+      },
+    );
+
+    test('query params carry distinct_id for an identity without a user', () {
+      // WHEN
+      final params = PayloadSerializer('token').buildQueryParams(
+        session,
+        '\$device:device_1',
+        0,
+        identity: const MixpanelIdentity.withDeviceId(
+          userId: null,
+          companyId: 'acme',
+          deviceId: 'device_1',
+        ),
+      );
+
+      // THEN
+      expect(params['distinct_id'], '\$device:device_1');
+      expect(params['\$company_id'], 'acme');
     });
 
     test('query params without an identity are unchanged', () {
