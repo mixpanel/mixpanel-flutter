@@ -61,6 +61,11 @@ android {
     lintOptions {
         disable 'InvalidPackage'
     }
+
+    testOptions {
+        // JVM unit tests run against android.jar stubs; return defaults instead of throwing.
+        unitTests.returnDefaultValues = true
+    }
 }
 
 // kotlin.compilerOptions needs KGP >= 2.0. Flutter <= 3.41 puts KGP 1.8.0 on the buildscript
@@ -92,4 +97,9 @@ dependencies {
     implementation "com.mixpanel.android:mixpanel-android-common:1.1.0"
     implementation "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
     implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.1"
+
+    testImplementation "junit:junit:4.13.2"
+    testImplementation "org.mockito:mockito-core:5.14.2"
+    // Real org.json on the JVM test classpath; android.jar only ships stubs.
+    testImplementation "org.json:json:20240303"
 }

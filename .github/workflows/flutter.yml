@@ -59,6 +59,9 @@ jobs:
       - name: Test Android integration
         working-directory: packages/mixpanel_flutter/example
         run: flutter build apk
+      - name: Android plugin unit tests
+        working-directory: packages/mixpanel_flutter/example/android
+        run: ./gradlew :mixpanel_flutter:testDebugUnitTest
 
   # iOS/macOS jobs run once per supported Xcode. Xcode 27 legs need Flutter
   # 3.47+ (Xcode 27 `lipo -verify_arch` fix, flutter/flutter#188461).
