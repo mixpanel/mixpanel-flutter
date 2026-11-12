@@ -1,0 +1,86 @@
+# TEMPORARY diagnostic for SDK-482. Delete this file, .github/diag/, and the branch once done.
+# Runs the Session Replay JPEG worker pipeline in the runner's Safari, step by step,
+# both under SafariDriver automation and as a plain Safari launch.
+name: DIAG SDK-482 Safari worker
+
+on:
+  push:
+    branches: [rahulraveendran/sdk-482-safari-diag-temp]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  safari-worker-repro:
+    runs-on: macos-26
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+
+      - name: Versions
+        run: |
+          sw_vers
+          echo "Safari: $(defaults read /Applications/Safari.app/Contents/Info.plist CFBundleShortVersionString)"
+          safaridriver --version || true
+
+      - name: Start repro server
+        run: |
+          mkdir -p "$RUNNER_TEMP/results"
+          python3 -I .github/diag/result_server.py .github/diag "$RUNNER_TEMP/results" > "$RUNNER_TEMP/server.log" 2>&1 &
+          for i in {1..20}; do curl -sf -o /dev/null http://127.0.0.1:8765/safari-worker-repro.html && exit 0; sleep 0.5; done
+          cat "$RUNNER_TEMP/server.log"; exit 1
+
+      - name: Run under SafariDriver (same as CI)
+        continue-on-error: true
+        run: |
+          sudo safaridriver --enable
+          safaridriver -p 4444 > "$RUNNER_TEMP/webdriver.log" 2>&1 &
+          for i in {1..30}; do curl -sf http://127.0.0.1:4444/status > /dev/null && break; sleep 1; done
+          sid=$(curl -sf -X POST http://127.0.0.1:4444/session \
+            -H 'Content-Type: application/json' \
+            -d '{"capabilities":{"alwaysMatch":{"browserName":"safari"}}}' | jq -r '.value.sessionId')
+          echo "session: $sid"
+          curl -sf -X POST "http://127.0.0.1:4444/session/$sid/url" \
+            -H 'Content-Type: application/json' \
+            -d '{"url":"http://127.0.0.1:8765/safari-worker-repro.html?mode=webdriver"}' > /dev/null
+          for i in {1..60}; do
+            r=$(curl -sf -X POST "http://127.0.0.1:4444/session/$sid/execute/sync" \
+              -H 'Content-Type: application/json' \
+              -d '{"script":"return window.__results ? JSON.stringify(window.__results) : null","args":[]}' | jq -r '.value')
+            if [ -n "$r" ] && [ "$r" != "null" ]; then echo "$r" | jq .; break; fi
+            sleep 1
+          done
+          curl -s -X DELETE "http://127.0.0.1:4444/session/$sid" > /dev/null || true
+          ls "$RUNNER_TEMP/results"
+
+      - name: Run in plain Safari (no automation)
+        continue-on-error: true
+        run: |
+          pkill -x Safari || true
+          sleep 2
+          open -a Safari "http://127.0.0.1:8765/safari-worker-repro.html?mode=plain"
+          for i in {1..90}; do [ -s "$RUNNER_TEMP/results/result_plain.json" ] && break; sleep 1; done
+          if [ -s "$RUNNER_TEMP/results/result_plain.json" ]; then
+            jq . "$RUNNER_TEMP/results/result_plain.json"
+          else
+            echo "No result from plain Safari launch within 90s"
+            screencapture -x "$RUNNER_TEMP/results/plain-safari.png" || true
+          fi
+
+      - name: Summary
+        if: always()
+        run: |
+          for f in "$RUNNER_TEMP"/results/result_*.json; do
+            [ -f "$f" ] || continue
+            echo "== $(basename "$f")"
+            jq -r '.ua, (.cases[] | "\(.label): ok=\(.ok) step=\(.step // "-") name=\(.name // "-") message=\(.message // .mainError // .postError // .workerOnError // (if .timeout then "timeout" else "-" end))")' "$f"
+          done
+          echo "== server log"; cat "$RUNNER_TEMP/server.log"
+          echo "== webdriver log"; cat "$RUNNER_TEMP/webdriver.log" || true
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: sdk-482-safari-diag
+          path: ${{ runner.temp }}/results

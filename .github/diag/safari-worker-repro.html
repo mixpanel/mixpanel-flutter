@@ -1,0 +1,59 @@
+<!doctype html><meta charset="utf-8"><title>SDK-482 Safari worker repro</title><pre id="o"></pre>
+<script>
+const workerSrc = `
+self.onmessage = async function(e) {
+  let step = 'start';
+  try {
+    const { imageBitmap, width, height, jpegQuality, maskRects } = e.data;
+    step = 'bitmap:' + (imageBitmap && imageBitmap.constructor && imageBitmap.constructor.name) + ' ' + (imageBitmap && imageBitmap.width) + 'x' + (imageBitmap && imageBitmap.height);
+    step += ' | new OffscreenCanvas';
+    const canvas = new OffscreenCanvas(width, height);
+    step += ' | getContext';
+    const ctx = canvas.getContext('2d');
+    step += ' | ctx=' + (ctx === null ? 'null' : 'ok') + ' | drawImage';
+    ctx.drawImage(imageBitmap, 0, 0, width, height);
+    step += ' | close';
+    imageBitmap.close();
+    step += ' | fillRect';
+    ctx.fillStyle = '#cccccc';
+    for (let i = 0; i < maskRects.length; i += 4) ctx.fillRect(maskRects[i], maskRects[i+1], maskRects[i+2], maskRects[i+3]);
+    step += ' | convertToBlob';
+    const blob = await canvas.convertToBlob({ type: 'image/jpeg', quality: jpegQuality });
+    step += ' | blob=' + blob.type + '/' + blob.size + ' | arrayBuffer';
+    const buf = await blob.arrayBuffer();
+    self.postMessage({ ok: true, step, bytes: buf.byteLength });
+  } catch (err) {
+    self.postMessage({ ok: false, step, name: err && err.name, message: err && err.message, stack: err && err.stack });
+  }
+};`;
+const url = URL.createObjectURL(new Blob([workerSrc], {type: 'text/javascript'}));
+const results = { ua: navigator.userAgent, cases: [] };
+function run(label, makeBitmap, w=1, h=1, rects=[]) {
+  return new Promise(async (resolve) => {
+    let bm;
+    try { bm = await makeBitmap(); } catch (e) { results.cases.push({label, mainError: String(e)}); return resolve(); }
+    const wk = new Worker(url);
+    const t = setTimeout(() => { results.cases.push({label, timeout: true}); wk.terminate(); resolve(); }, 5000);
+    wk.onmessage = (e) => { clearTimeout(t); results.cases.push({label, ...e.data}); wk.terminate(); resolve(); };
+    wk.onerror = (e) => { clearTimeout(t); results.cases.push({label, workerOnError: e.message}); resolve(); };
+    try { wk.postMessage({imageBitmap: bm, width: w, height: h, jpegQuality: 0.8, maskRects: rects}, [bm]); }
+    catch (e) { clearTimeout(t); results.cases.push({label, postError: String(e)}); resolve(); }
+  });
+}
+(async () => {
+  // A: exactly what WebJpegEncoder.initialize() does: context-less 1x1 canvas
+  await run('A sdk-init: contextless 1x1 HTMLCanvas', () => createImageBitmap(Object.assign(document.createElement('canvas'), {width:1,height:1})));
+  // B: same, but the canvas has a 2d context and a painted pixel
+  await run('B 1x1 HTMLCanvas with 2d ctx', () => { const c = Object.assign(document.createElement('canvas'), {width:1,height:1}); const x=c.getContext('2d'); x.fillStyle='#f00'; x.fillRect(0,0,1,1); return createImageBitmap(c); });
+  // C: webgl canvas (CanvasKit surface)
+  await run('C 64x64 WebGL canvas', () => { const c = Object.assign(document.createElement('canvas'), {width:64,height:64}); const g=c.getContext('webgl2')||c.getContext('webgl'); g.clearColor(0,1,0,1); g.clear(g.COLOR_BUFFER_BIT); return createImageBitmap(c); }, 64, 64, [1.5,1.5,10,10]);
+  // D: bitmap from ImageData (no canvas source)
+  await run('D ImageData 1x1', () => createImageBitmap(new ImageData(1,1)));
+  await run('F 1920x1080 WebGL canvas scaled to 960x540', () => { const c = Object.assign(document.createElement('canvas'), {width:1920,height:1080}); const g=c.getContext('webgl2')||c.getContext('webgl'); g.clearColor(0,0,1,1); g.clear(g.COLOR_BUFFER_BIT); return createImageBitmap(c); }, 960, 540, [10.5,10.5,100,100]);
+  // E: control - main-thread OffscreenCanvas convertToBlob jpeg
+  try { const oc = new OffscreenCanvas(1,1); oc.getContext('2d').fillRect(0,0,1,1); const b = await oc.convertToBlob({type:'image/jpeg', quality:0.8}); results.cases.push({label:'E main-thread convertToBlob', ok:true, bytes:b.size}); }
+  catch (e) { results.cases.push({label:'E main-thread convertToBlob', ok:false, name:e.name, message:e.message}); }
+  document.getElementById('o').textContent = JSON.stringify(results, null, 2);
+  window.__results = results; fetch('/result' + location.search, {method:'POST', body: JSON.stringify(results)});
+})();
+</script>
