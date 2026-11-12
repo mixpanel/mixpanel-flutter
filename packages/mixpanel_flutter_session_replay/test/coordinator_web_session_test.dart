@@ -11,6 +11,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mixpanel_flutter_common/mixpanel_flutter_common.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/session_replay_coordinator.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/event_recorder.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/screenshot_capturer.dart';
@@ -1792,6 +1793,7 @@ class _ImmediateCapturer extends ScreenshotCapturer {
     RenderRepaintBoundary boundary, {
     required Session Function() getCurrentSession,
     required String Function() getDistinctId,
+    MixpanelIdentity? Function()? getIdentity,
     required Element boundaryElement,
     Set<AutoMaskedView>? maskTypes,
     bool Function()? isCancelled,

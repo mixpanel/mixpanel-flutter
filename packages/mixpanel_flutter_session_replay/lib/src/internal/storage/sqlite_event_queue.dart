@@ -1,11 +1,13 @@
 import 'dart:io';
 
+import 'package:mixpanel_flutter_common/mixpanel_flutter_common.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:sqflite/sqflite.dart';
 
 import '../../models/session_event.dart';
 import '../../models/session.dart';
 import '../logger.dart';
+import '../replay_identity.dart';
 import 'event_queue_interface.dart';
 
 /// SQLite-based event queue implementation
@@ -181,6 +183,7 @@ class SqliteEventQueue implements EventQueue {
   Future<List<PersistedSessionReplayEvent>> fetchBatch({
     required String sessionId,
     required String distinctId,
+    MixpanelIdentity? identity,
     required int maxBytes,
     required int maxCount,
   }) async {
@@ -190,10 +193,12 @@ class SqliteEventQueue implements EventQueue {
 
     // Get CONSECUTIVE events for the given sessionId and distinctId,
     // stopping at the first event where distinctId changes, so a batch never
-    // mixes users or skips another user's earlier event.
+    // mixes users or skips another user's earlier event. An event with an
+    // identity stores it in distinct_id, so a change of identity is a change
+    // of distinct_id too.
     final rows = await _fetchEventsWithSizeLimit(
       sessionId: sessionId,
-      distinctId: distinctId,
+      distinctId: ReplayIdentity.storedDistinctId(distinctId, identity),
       maxBytes: maxBytes,
       maxCount: maxCount,
     );

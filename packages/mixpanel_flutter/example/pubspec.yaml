@@ -23,6 +23,12 @@ dev_dependencies:
   flutter_lints: ^3.0.0
 
 
+# MixpanelIdentity is new in the in-repo mixpanel_flutter_common. Remove this
+# once mixpanel_flutter_common with MixpanelIdentity is published.
+dependency_overrides:
+  mixpanel_flutter_common:
+    path: ../../mixpanel_flutter_common
+
 flutter:
   uses-material-design: true
 

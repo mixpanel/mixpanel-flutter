@@ -1,5 +1,8 @@
+import 'package:mixpanel_flutter_common/mixpanel_flutter_common.dart';
+
 import '../../models/session_event.dart';
 import '../../models/session.dart';
+import '../replay_identity.dart';
 
 /// Payload-free event information used for queue ordering decisions.
 ///
@@ -9,20 +12,45 @@ class QueuedEventHeader {
   final int id;
   final String sessionId;
   final String distinctId;
+
+  /// Identity the event was recorded under, when Session Replay was
+  /// identified with one
+  final MixpanelIdentity? identity;
   final DateTime timestamp;
 
   const QueuedEventHeader({
     required this.id,
     required this.sessionId,
     required this.distinctId,
+    this.identity,
     required this.timestamp,
   });
 
-  factory QueuedEventHeader.fromDbRow(Map<String, dynamic> row) {
+  /// Builds a header from a stored `distinct_id` value, which carries the
+  /// identity when the event had one.
+  factory QueuedEventHeader.fromStored({
+    required int id,
+    required String sessionId,
+    required String storedDistinctId,
+    required DateTime timestamp,
+  }) {
+    final (distinctId, identity) = ReplayIdentity.fromStoredDistinctId(
+      storedDistinctId,
+    );
     return QueuedEventHeader(
+      id: id,
+      sessionId: sessionId,
+      distinctId: distinctId,
+      identity: identity,
+      timestamp: timestamp,
+    );
+  }
+
+  factory QueuedEventHeader.fromDbRow(Map<String, dynamic> row) {
+    return QueuedEventHeader.fromStored(
       id: row['id'] as int,
       sessionId: row['session_id'] as String,
-      distinctId: row['distinct_id'] as String,
+      storedDistinctId: row['distinct_id'] as String,
       timestamp: DateTime.fromMillisecondsSinceEpoch(
         row['timestamp'] as int,
         isUtc: true,
@@ -75,16 +103,19 @@ abstract class EventQueue {
   /// Get payload-free metadata for the newest event across all sessions.
   Future<QueuedEventHeader?> fetchNewestHeader();
 
-  /// Fetch batch of consecutive events for a specific sessionId and distinctId
+  /// Fetch batch of consecutive events for a specific sessionId, distinctId
+  /// and identity
   ///
-  /// Returns consecutive events with the same sessionId and distinctId,
-  /// up to [maxBytes] total payload size or [maxCount] events,
+  /// Returns consecutive events with the same sessionId, distinctId and
+  /// identity, up to [maxBytes] total payload size or [maxCount] events,
   /// whichever limit is reached first.
   ///
-  /// Stops at the first event where distinctId changes (boundary detection).
+  /// Stops at the first event where distinctId or identity changes (boundary
+  /// detection).
   Future<List<PersistedSessionReplayEvent>> fetchBatch({
     required String sessionId,
     required String distinctId,
+    MixpanelIdentity? identity,
     required int maxBytes,
     required int maxCount,
   });

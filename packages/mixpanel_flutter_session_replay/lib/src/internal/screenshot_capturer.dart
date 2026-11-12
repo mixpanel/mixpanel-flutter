@@ -2,6 +2,7 @@ import 'package:clock/clock.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
+import 'package:mixpanel_flutter_common/mixpanel_flutter_common.dart';
 
 import '../models/configuration.dart';
 import '../models/results.dart';
@@ -107,7 +108,8 @@ class ScreenshotCapturer {
   /// - [boundary]: The render boundary to capture
   /// - [boundaryElement]: The root element used for wireframe traversal
   /// - [maskTypes]: Set of view types to auto-mask (overrides directive if provided)
-  /// - [getCurrentSession], [getDistinctId]: read at the frame to pin its identity
+  /// - [getCurrentSession], [getDistinctId], [getIdentity]: read at the frame
+  ///   to pin its identity
   /// - [isCancelled]: polled after every await before pixels are acquired, so
   ///   a frame whose recording stopped or paused while it waited is never
   ///   captured. How far it is honored past that point is the acquirer's
@@ -118,6 +120,7 @@ class ScreenshotCapturer {
     RenderRepaintBoundary boundary, {
     required Session Function() getCurrentSession,
     required String Function() getDistinctId,
+    MixpanelIdentity? Function()? getIdentity,
     required Element boundaryElement,
     Set<AutoMaskedView>? maskTypes,
     bool Function()? isCancelled,
@@ -172,6 +175,7 @@ class ScreenshotCapturer {
       // Pinned here because every step below yields, letting identity move.
       final sessionId = getCurrentSession().id;
       final distinctId = getDistinctId();
+      final identity = getIdentity?.call();
 
       // Detect masks after paint is complete
       final maskDetectionStart = clock.now();
@@ -270,6 +274,7 @@ class ScreenshotCapturer {
             wireframes: wireframePayload,
             sessionId: sessionId,
             distinctId: distinctId,
+            identity: identity,
           );
       }
     } catch (e) {

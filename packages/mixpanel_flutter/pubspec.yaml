@@ -15,12 +15,18 @@ dependencies:
     sdk: flutter
   flutter_web_plugins:
     sdk: flutter
-  mixpanel_flutter_common: ^1.0.0
+  mixpanel_flutter_common: ^1.1.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^3.0.0
+
+# MixpanelIdentity is new in the in-repo mixpanel_flutter_common. Remove this
+# once mixpanel_flutter_common with MixpanelIdentity is published.
+dependency_overrides:
+  mixpanel_flutter_common:
+    path: ../mixpanel_flutter_common
 
 flutter:
   assets:

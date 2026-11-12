@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter/rendering.dart';
+import 'package:mixpanel_flutter_common/mixpanel_flutter_common.dart';
 
 import '../models/session.dart';
 import '../models/session_event.dart';
@@ -22,6 +23,10 @@ class EventRecorder {
   /// Callback to get the current distinct ID
   final String Function() getDistinctId;
 
+  /// Callback to get the current identity, or null when Session Replay was
+  /// identified with a distinct ID
+  final MixpanelIdentity? Function() getIdentity;
+
   /// Logger instance
   final MixpanelLogger _logger;
 
@@ -38,8 +43,11 @@ class EventRecorder {
     required this.eventQueue,
     required this.sessionManager,
     required this.getDistinctId,
+    this.getIdentity = _noIdentity,
     required MixpanelLogger logger,
   }) : _logger = logger;
+
+  static MixpanelIdentity? _noIdentity() => null;
 
   /// Record session start in storage
   ///
@@ -59,7 +67,8 @@ class EventRecorder {
   /// Record a screenshot event
   ///
   /// Saves the provided screenshot data as an event.
-  /// [sessionId] and [distinctId] are the identity pinned at capture time.
+  /// [sessionId], [distinctId] and [identity] are the identity pinned at
+  /// capture time.
   Future<void> recordSnapshot({
     required Uint8List imageData,
     required int width,
@@ -67,6 +76,7 @@ class EventRecorder {
     required DateTime timestamp,
     required String sessionId,
     required String distinctId,
+    MixpanelIdentity? identity,
   }) async {
     _logger.debug('Recording snapshot...');
 
@@ -78,6 +88,7 @@ class EventRecorder {
       timestamp: timestamp,
       sessionId: sessionId,
       distinctId: distinctId,
+      identity: identity,
     );
   }
 
@@ -141,6 +152,7 @@ class EventRecorder {
     required DateTime timestamp,
     required String sessionId,
     required String distinctId,
+    MixpanelIdentity? identity,
   }) async {
     _logger.debug('Recording wireframe (${payload.elements.length} elements)');
     try {
@@ -150,6 +162,7 @@ class EventRecorder {
         timestamp: timestamp,
         sessionId: sessionId,
         distinctId: distinctId,
+        identity: identity,
       );
     } catch (e) {
       _logger.error('Failed to record wireframe: $e');
@@ -170,6 +183,7 @@ class EventRecorder {
     DateTime timestamp, {
     String? sessionId,
     String? distinctId,
+    MixpanelIdentity? identity,
   }) async {
     try {
       _logger.debug('Recording metadata: ${width}x$height');
@@ -182,6 +196,7 @@ class EventRecorder {
         timestamp: timestamp,
         sessionId: sessionId,
         distinctId: distinctId,
+        identity: identity,
       );
     } catch (e) {
       _logger.error('Failed to record metadata: $e');
@@ -198,6 +213,7 @@ class EventRecorder {
     required DateTime timestamp,
     required String sessionId,
     required String distinctId,
+    MixpanelIdentity? identity,
   }) async {
     _logger.debug('Result dimensions: ${width}x$height');
 
@@ -219,6 +235,7 @@ class EventRecorder {
         timestamp,
         sessionId: sessionId,
         distinctId: distinctId,
+        identity: identity,
       );
       if (stored) {
         _lastMetadataSessionId = sessionId;
@@ -234,6 +251,7 @@ class EventRecorder {
       timestamp: timestamp,
       sessionId: sessionId,
       distinctId: distinctId,
+      identity: identity,
     );
   }
 
@@ -259,13 +277,15 @@ class EventRecorder {
 
   /// Common method to save any event to the queue.
   ///
-  /// Returns whether the queue stored the event.
+  /// A pinned [distinctId] comes with its pinned [identity]; without one, both
+  /// are read now. Returns whether the queue stored the event.
   Future<bool> _saveEventToQueue({
     required EventType type,
     required EventPayload payload,
     required DateTime timestamp,
     String? sessionId,
     String? distinctId,
+    MixpanelIdentity? identity,
   }) async {
     try {
       final eventSessionId = sessionId ?? sessionManager.getCurrentSession().id;
@@ -277,6 +297,7 @@ class EventRecorder {
       final event = SessionReplayEvent(
         sessionId: eventSessionId,
         distinctId: distinctId ?? getDistinctId(),
+        identity: distinctId != null ? identity : getIdentity(),
         timestamp: timestamp,
         type: type,
         payload: payload,
