@@ -1,5 +1,13 @@
 # Changelog
 
+## [common-v1.1.0](https://github.com/mixpanel/mixpanel-flutter/tree/common-v1.1.0) (2026-11-16)
+
+### Features
+- add MixpanelIdentity ([#306](https://github.com/mixpanel/mixpanel-flutter/pull/306))
+- update native SDKs for semver and date flag operators ([#281](https://github.com/mixpanel/mixpanel-flutter/pull/281))
+
+[Full Changelog](https://github.com/mixpanel/mixpanel-flutter/compare/common-v1.0.0...common-v1.1.0)
+
 ## [common-v1.0.0](https://github.com/mixpanel/mixpanel-flutter/tree/common-v1.0.0) (2026-06-08)
 
 Initial public release.
