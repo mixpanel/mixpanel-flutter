@@ -1,3 +1,5 @@
+import 'package:meta/meta.dart';
+
 /// Names who events, profile updates and replays belong to.
 ///
 /// Shared by `mixpanel_flutter` and `mixpanel_flutter_session_replay`, so the
@@ -35,10 +37,12 @@ class MixpanelIdentity {
 
   /// For internal use by the Mixpanel SDKs only, which own the device id. Apps
   /// create an identity with the unnamed constructor.
+  @internal
   const MixpanelIdentity.withDeviceId(
       {required this.userId, this.companyId, this.deviceId});
 
   /// Creates a MixpanelIdentity from a Map (used for platform channel deserialization).
+  @internal
   factory MixpanelIdentity.fromMap(Map<dynamic, dynamic>? map) {
     return MixpanelIdentity.withDeviceId(
       userId: map?['userId'] as String?,
