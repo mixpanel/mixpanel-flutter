@@ -11,6 +11,7 @@ class ReplayIdentity {
   /// The identity with empty values unset, so two spellings of "absent"
   /// compare and store the same.
   static MixpanelIdentity normalize(MixpanelIdentity identity) =>
+      // ignore: invalid_use_of_internal_member
       MixpanelIdentity.withDeviceId(
         userId: _nonEmpty(identity.userId),
         companyId: _nonEmpty(identity.companyId),
@@ -78,6 +79,7 @@ class ReplayIdentity {
               as Map<String, dynamic>;
       return (
         decoded['distinct_id'] as String,
+        // ignore: invalid_use_of_internal_member
         MixpanelIdentity.fromMap(decoded['identity'] as Map<String, dynamic>),
       );
     } catch (_) {

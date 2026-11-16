@@ -1055,6 +1055,7 @@ class Mixpanel {
   /// ```
   Future<MixpanelIdentity> getIdentity() async {
     final result = await _channel.invokeMethod<Map>('getIdentity');
+    // ignore: invalid_use_of_internal_member
     return MixpanelIdentity.fromMap(result);
   }
 
