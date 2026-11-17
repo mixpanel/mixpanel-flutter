@@ -311,7 +311,7 @@ class MixpanelSessionReplay {
         final eventRecorder = EventRecorder(
           eventQueue: queue,
           sessionManager: sessionManager,
-          getDistinctId: () => instance.distinctId,
+          getDistinctId: () => instance._distinctId,
           getIdentity: () => instance._identity,
           logger: logger,
         );
@@ -495,7 +495,21 @@ class MixpanelSessionReplay {
   void enableEventTriggers() => _coordinator.enableEventTriggers();
 
   /// Get current distinct ID
-  String get distinctId => _distinctId;
+  ///
+  /// This should not be used for an identity with both a user and a company,
+  /// as on a hierarchical groups project, where Mixpanel identifies the user by
+  /// company and user id: use the identity passed to [identifyWithIdentity]
+  /// instead. It logs a warning there.
+  String get distinctId {
+    if (!ReplayIdentity.sendsDistinctId(_identity)) {
+      _logger.warning(
+        'distinctId should not be used for an identity with a user and a company, which '
+        'Mixpanel identifies by company and user id. Use the identity passed to '
+        'identifyWithIdentity instead.',
+      );
+    }
+    return _distinctId;
+  }
 
   /// Identify the user with a new distinct ID
   ///

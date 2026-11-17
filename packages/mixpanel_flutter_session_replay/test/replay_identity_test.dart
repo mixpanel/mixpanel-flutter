@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:logging/logging.dart';
 import 'package:mixpanel_flutter_session_replay/mixpanel_flutter_session_replay.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/logger.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/replay_identity.dart';
@@ -187,6 +188,47 @@ void main() {
       expect(instance.distinctId, 'user_123');
       expect(event.distinctId, 'user_123');
       expect(event.identity, acme);
+    });
+
+    test(
+      'distinctId warns for an identity with a user and a company',
+      () async {
+        // GIVEN
+        final (instance, _) = await startRecording(identity: acme);
+        final warnings = <String>[];
+        final subscription = Logger('mixpanel.session_replay').onRecord
+            .where((record) => record.level == Level.WARNING)
+            .listen((record) => warnings.add(record.message));
+        addTearDown(subscription.cancel);
+
+        // WHEN
+        final distinctId = instance.distinctId;
+        await Future<void>.delayed(Duration.zero);
+
+        // THEN
+        expect(distinctId, 'user_123');
+        expect(warnings, hasLength(1));
+        expect(warnings.single, contains('identifyWithIdentity'));
+      },
+    );
+
+    test('distinctId does not warn for a plain distinct id', () async {
+      // GIVEN
+      final (instance, _) = await startRecording();
+      instance.identify('plain_user');
+      final warnings = <String>[];
+      final subscription = Logger('mixpanel.session_replay').onRecord
+          .where((record) => record.level == Level.WARNING)
+          .listen((record) => warnings.add(record.message));
+      addTearDown(subscription.cancel);
+
+      // WHEN
+      final distinctId = instance.distinctId;
+      await Future<void>.delayed(Duration.zero);
+
+      // THEN
+      expect(distinctId, 'plain_user');
+      expect(warnings, isEmpty);
     });
 
     test('identifyWithIdentity applies to later events only', () async {
