@@ -85,6 +85,7 @@ public class MixpanelFlutterPlugin implements FlutterPlugin, MethodCallHandler {
                 break;
             case "setFlushBatchSize":
                 handleSetFlushBatchSize(call, result);
+                break;
             case "identify":
                 handleIdentify(call, result);
                 break;
@@ -522,7 +523,6 @@ public class MixpanelFlutterPlugin implements FlutterPlugin, MethodCallHandler {
             result.success(MixpanelFlutterHelper.toMap(mixpanel.getSuperProperties()));
         } catch (JSONException e) {
             result.error("MixpanelFlutterException", e.getLocalizedMessage(), null);
-            result.success(null);
         }
     }
 

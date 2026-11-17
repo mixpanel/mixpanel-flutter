@@ -1,4 +1,4 @@
-##### _June 8, 2026_ - [common-v1.0.0](https://github.com/mixpanel/mixpanel-flutter/releases/tag/common-v1.0.0)
+##### _November 16, 2026_ - [common-v1.1.0](https://github.com/mixpanel/mixpanel-flutter/releases/tag/common-v1.1.0)
 
 # mixpanel_flutter_common
 
@@ -28,7 +28,7 @@ or JSONLogic evaluator.
 
 ```
    dependencies:
-      mixpanel_flutter_common: 1.0.0
+      mixpanel_flutter_common: 1.1.0
 ```
 
 ```
