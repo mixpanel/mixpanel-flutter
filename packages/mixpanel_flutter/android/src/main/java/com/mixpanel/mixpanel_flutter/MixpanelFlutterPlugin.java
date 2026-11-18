@@ -78,9 +78,6 @@ public class MixpanelFlutterPlugin implements FlutterPlugin, MethodCallHandler {
             case "optInTracking":
                 handleOptInTracking(call, result);
                 break;
-            case "optInTrackingWithIdentity":
-                handleOptInTrackingWithIdentity(call, result);
-                break;
             case "optOutTracking":
                 handleOptOutTracking(call, result);
                 break;
@@ -368,21 +365,6 @@ public class MixpanelFlutterPlugin implements FlutterPlugin, MethodCallHandler {
 
     private void handleOptInTracking(MethodCall call, Result result) {
         mixpanel.optInTracking(null, mixpanelProperties);
-        result.success(null);
-    }
-
-    private void handleOptInTrackingWithIdentity(MethodCall call, Result result) {
-        Map<String, Object> identityMap = call.<HashMap<String, Object>>argument("identity");
-        Map<String, Object> mapProperties = call.<HashMap<String, Object>>argument("properties");
-        JSONObject properties;
-        try {
-            properties = new JSONObject(mapProperties == null ? EMPTY_HASHMAP : mapProperties);
-            properties = MixpanelFlutterHelper.getMergedProperties(properties, mixpanelProperties);
-        } catch (JSONException e) {
-            result.error("MixpanelFlutterException", e.getLocalizedMessage(), null);
-            return;
-        }
-        mixpanel.optInTrackingWithIdentity(toMixpanelIdentity(identityMap), properties);
         result.success(null);
     }
 

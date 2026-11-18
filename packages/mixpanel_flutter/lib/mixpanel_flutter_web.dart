@@ -137,9 +137,6 @@ class MixpanelFlutterPlugin {
       case "optInTracking":
         handleOptInTracking();
         break;
-      case "optInTrackingWithIdentity":
-        handleOptInTrackingWithIdentity(call);
-        break;
       case "optOutTracking":
         handleOptOutTracking();
         break;
@@ -629,21 +626,6 @@ class MixpanelFlutterPlugin {
 
   void handleOptInTracking() {
     opt_in_tracking();
-  }
-
-  // NOTE: The `identity` option of opt_in_tracking is being finalized in
-  // mixpanel-js alongside hierarchical groups support.
-  void handleOptInTrackingWithIdentity(MethodCall call) {
-    Map<Object?, Object?> args = call.arguments as Map<Object?, Object?>;
-    dynamic properties = args['properties'];
-    Map<String, dynamic> props = {
-      ..._mixpanelProperties,
-      ...(properties ?? {})
-    };
-    opt_in_tracking_with_options(safeJsify(<String, dynamic>{
-      'identity': _jsIdentity(args['identity']),
-      'track_properties': props,
-    }));
   }
 
   void handleOptOutTracking() {

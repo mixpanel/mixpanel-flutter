@@ -131,8 +131,9 @@ class _HierarchicalGroupsScreenState extends State<HierarchicalGroupsScreen> {
       _HgAction('Opt In', () async {
         mixpanel.optInTracking();
       }),
-      _HgAction('Opt In With Identity', () async {
-        await mixpanel.optInTrackingWithIdentity(_identity);
+      _HgAction('Opt In, Then Identify', () async {
+        mixpanel.optInTracking();
+        await mixpanel.identifyWithIdentity(_identity);
       }),
 
       // Events

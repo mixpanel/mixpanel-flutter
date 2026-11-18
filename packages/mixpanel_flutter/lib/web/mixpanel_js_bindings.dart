@@ -35,9 +35,6 @@ external bool has_opted_out_tracking();
 @JS('mixpanel.opt_in_tracking')
 external void opt_in_tracking();
 
-@JS('mixpanel.opt_in_tracking')
-external void opt_in_tracking_with_options(JSAny? options);
-
 @JS('mixpanel.opt_out_tracking')
 external void opt_out_tracking();
 

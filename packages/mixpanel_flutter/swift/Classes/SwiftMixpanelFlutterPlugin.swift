@@ -106,9 +106,6 @@ public class SwiftMixpanelFlutterPlugin: NSObject, FlutterPlugin {
         case "optInTracking":
             handleOptInTracking(call, result: result)
             break
-        case "optInTrackingWithIdentity":
-            handleOptInTrackingWithIdentity(call, result: result)
-            break
         case "optOutTracking":
             handleOptOutTracking(call, result: result)
             break
@@ -335,14 +332,6 @@ public class SwiftMixpanelFlutterPlugin: NSObject, FlutterPlugin {
         result(nil)
     }
     
-    private func handleOptInTrackingWithIdentity(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
-        let arguments = call.arguments as? [String: Any] ?? [String: Any]()
-        let identity = mixpanelIdentity(from: arguments["identity"])
-        let properties = arguments["properties"] as? [String: Any]
-        instance?.optInTracking(identity: identity, properties: MixpanelTypeHandler.mixpanelProperties(properties: properties, mixpanelProperties: mixpanelProperties))
-        result(nil)
-    }
-
     private func handleOptOutTracking(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
         instance?.optOutTracking()
         result(nil)

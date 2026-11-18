@@ -526,17 +526,16 @@ void main() {
       expectCalls([isMethodCall('optInTracking', arguments: null)]);
     });
 
-    test('Opt In With Identity', () async {
+    test('Opt In, Then Identify', () async {
       mixpanel.optOutTracking();
       clearCalls();
-      await mixpanel.optInTrackingWithIdentity(
+      mixpanel.optInTracking();
+      await mixpanel.identifyWithIdentity(
           const MixpanelIdentity(userId: userId, companyId: companyId));
 
       expectCalls([
-        isMethodCall('optInTrackingWithIdentity', arguments: <String, dynamic>{
-          ...identityArgs,
-          'properties': <String, dynamic>{},
-        }),
+        isMethodCall('optInTracking', arguments: null),
+        isMethodCall('identifyWithIdentity', arguments: identityArgs),
       ]);
     });
 

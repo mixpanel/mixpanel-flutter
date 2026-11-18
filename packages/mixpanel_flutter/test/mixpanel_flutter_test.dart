@@ -1980,7 +1980,6 @@ void main() {
         MixpanelIdentity(userId: 'user_123', companyId: ''),
       ]) {
         await mixpanel.identifyWithIdentity(identity);
-        await mixpanel.optInTrackingWithIdentity(identity);
       }
       expect(calls, isEmpty);
     });
@@ -2021,40 +2020,6 @@ void main() {
           await Mixpanel.init('test token', trackAutomaticEvents: true);
       final identity = await mixpanel.getIdentity();
       expect(identity, const MixpanelIdentity(userId: null));
-    });
-
-    test('optInTrackingWithIdentity sends identity and properties', () async {
-      final mixpanel = await Mixpanel.init('test token',
-          trackAutomaticEvents: true, hierarchicalGroups: true);
-      calls.clear();
-      await mixpanel.optInTrackingWithIdentity(
-          const MixpanelIdentity(userId: 'user_123', companyId: 'acme'),
-          properties: {'source': 'settings'});
-      expect(
-        calls.single,
-        isMethodCall(
-          'optInTrackingWithIdentity',
-          arguments: <String, dynamic>{
-            'identity': <String, dynamic>{
-              'userId': 'user_123',
-              'companyId': 'acme',
-              'deviceId': null,
-            },
-            'properties': {'source': 'settings'},
-          },
-        ),
-      );
-    });
-
-    test('optInTrackingWithIdentity sends empty properties when omitted',
-        () async {
-      final mixpanel = await Mixpanel.init('test token',
-          trackAutomaticEvents: true, hierarchicalGroups: true);
-      calls.clear();
-      await mixpanel.optInTrackingWithIdentity(
-          const MixpanelIdentity(userId: 'user_123', companyId: 'acme'));
-      expect(calls.single.method, 'optInTrackingWithIdentity');
-      expect((calls.single.arguments as Map)['properties'], isEmpty);
     });
 
     test('optInTracking without identity is unchanged', () async {
