@@ -2,6 +2,7 @@ package com.mixpanel.mixpanel_flutter;
 
 import androidx.annotation.NonNull;
 
+import android.annotation.SuppressLint;
 import android.content.Context;
 
 import io.flutter.plugin.common.StandardMethodCodec;
@@ -408,6 +409,8 @@ public class MixpanelFlutterPlugin implements FlutterPlugin, MethodCallHandler {
         result.success(null);
     }
 
+    // The constructor that takes a device id is restricted to Mixpanel's own libraries, which this plugin is
+    @SuppressLint("RestrictedApi")
     private static MixpanelIdentity toMixpanelIdentity(Map<String, Object> identityMap) {
         if (identityMap == null) {
             return null;
