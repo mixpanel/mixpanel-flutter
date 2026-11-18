@@ -477,6 +477,10 @@ class Mixpanel {
   ///  * [featureFlags] Optional Feature flags configuration
   ///  * [serverURL] Optional base URL for Mixpanel API requests. Use for EU/India data
   ///  residency or a custom proxy. Defaults to https://api.mixpanel.com
+  ///  * [useIpAddressForGeolocation] Optional. Whether Mixpanel uses the client IP address
+  ///  to geolocate events and profile updates. Pass false to turn it off before anything
+  ///  is sent, including events queued from a previous app launch. Omit (null) to keep
+  ///  the platform default, which is true. See [setUseIpAddressForGeolocation].
   ///
   static Future<Mixpanel> init(String token,
       {bool optOutTrackingDefault = false,
@@ -485,7 +489,8 @@ class Mixpanel {
       Map<String, dynamic>? config,
       FeatureFlagsConfig? featureFlags,
       String? serverURL,
-      AutocaptureOptions? autocaptureOptions}) async {
+      AutocaptureOptions? autocaptureOptions,
+      bool? useIpAddressForGeolocation}) async {
     // Defer the reverse-channel wiring until something actually reads
     // MixpanelEventBridge.events. Apps that never subscribe pay only the
     // stored function reference — no MethodCallHandler, no native subscribe.
@@ -503,6 +508,9 @@ class Mixpanel {
     }
     if (serverURL != null && _MixpanelHelper.isValidString(serverURL)) {
       allProperties['serverURL'] = serverURL;
+    }
+    if (useIpAddressForGeolocation != null) {
+      allProperties['useIpAddressForGeolocation'] = useIpAddressForGeolocation;
     }
     await _channel.invokeMethod<void>('initialize', allProperties);
     final instance = Mixpanel(token);
@@ -548,6 +556,11 @@ class Mixpanel {
   /// This controls whether to automatically send the client IP Address as part of event tracking.
   /// With an IP address, geo-location is possible down to neighborhoods within a city,
   /// although the Mixpanel Dashboard will just show you city level location specificity.
+  ///
+  /// On Android, iOS and macOS this setting is not persisted and resets to true on
+  /// every launch, so events queued before this call can still be sent with the
+  /// IP address. To turn it off from the first request, pass
+  /// `useIpAddressForGeolocation: false` to [init] instead.
   ///
   /// * [useIpAddressForGeolocation] whether to automatically send the client IP Address. Defaults to true.
   void setUseIpAddressForGeolocation(bool useIpAddressForGeolocation) {

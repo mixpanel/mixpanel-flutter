@@ -176,6 +176,47 @@ void main() {
       );
     });
 
+    test('check initialize forwards useIpAddressForGeolocation', () async {
+      _mixpanel = await Mixpanel.init(
+        "test token",
+        optOutTrackingDefault: false,
+        trackAutomaticEvents: true,
+        useIpAddressForGeolocation: false,
+      );
+      expect(
+        methodCall,
+        isMethodCall(
+          'initialize',
+          arguments: <String, dynamic>{
+            'token': "test token",
+            'optOutTrackingDefault': false,
+            'trackAutomaticEvents': true,
+            'mixpanelProperties': {
+              '\$lib_version': sdkVersion,
+              'mp_lib': 'flutter',
+            },
+            'superProperties': null,
+            'config': null,
+            'useIpAddressForGeolocation': false,
+          },
+        ),
+      );
+    });
+
+    test('check initialize omits useIpAddressForGeolocation when null',
+        () async {
+      _mixpanel = await Mixpanel.init(
+        "test token",
+        optOutTrackingDefault: false,
+        trackAutomaticEvents: true,
+      );
+      expect(
+        (methodCall!.arguments as Map)
+            .containsKey('useIpAddressForGeolocation'),
+        isFalse,
+      );
+    });
+
     test('check setServerURL', () async {
       _mixpanel.setServerURL("https://api-eu.mixpanel.com");
       expect(
