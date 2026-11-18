@@ -598,10 +598,10 @@ void main() {
       expectCalls([userGroupCall('addGroup', 'team_id', teamId)]);
     });
 
-    test('Set User Property Before Identify (Unsupported)', () async {
+    test('Set User Property Before Identify', () async {
       mixpanel.getPeople().set('plan', 'enterprise');
 
-      // Forwarded; the native SDK drops it
+      // Forwarded; the native SDK queues it until identify
       expectCalls([
         isMethodCall('set', arguments: <String, dynamic>{
           'token': token,
