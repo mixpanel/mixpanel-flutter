@@ -269,7 +269,20 @@ class MixpanelFlutterPlugin {
     dynamic config = args['config'];
     Map<String, dynamic> initConfig = Map<String, dynamic>.from(config ?? {});
 
-    if (args['hierarchicalGroups'] == true) {
+    // The hierarchicalGroups argument of Mixpanel.init is the only switch, so
+    // the Dart and JS sides always agree; a hierarchical_groups key passed in
+    // config is replaced.
+    final hierarchicalGroups = args['hierarchicalGroups'] == true;
+    if (initConfig.containsKey('hierarchical_groups') &&
+        initConfig['hierarchical_groups'] != hierarchicalGroups) {
+      developer.log(
+        'Ignoring hierarchical_groups in config; set hierarchicalGroups in '
+        'Mixpanel.init instead.',
+        name: 'Mixpanel',
+      );
+    }
+    initConfig.remove('hierarchical_groups');
+    if (hierarchicalGroups) {
       initConfig['hierarchical_groups'] = true;
     }
 
