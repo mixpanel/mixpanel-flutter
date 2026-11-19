@@ -8,6 +8,9 @@ class MixpanelManager {
       _instance = await Mixpanel.init("YOUR_PROJECT_TOKEN",
           optOutTrackingDefault: false,
           trackAutomaticEvents: true,
+          // Applied before the first flush on every launch. Set to false to
+          // stop Mixpanel using the client IP address for geolocation.
+          useIpAddressForGeolocation: true,
           featureFlags: FeatureFlagsConfig(enabled: true),
           autocaptureOptions: const AutocaptureOptions(
             clickOptions: ClickOptions(),
