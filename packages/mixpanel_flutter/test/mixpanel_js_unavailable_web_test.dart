@@ -179,4 +179,24 @@ void main() {
     expect(await mixpanel.hasOptedOutTracking(), isFalse);
     expect(await mixpanel.getDistinctId(), '');
   });
+
+  for (final optedOut in [true, false]) {
+    test('should return $optedOut when mixpanel-js reports opted out $optedOut',
+        () async {
+      // GIVEN a loaded mixpanel-js whose has_opted_out_tracking returns
+      // a real boolean.
+      final sdk = <String, Object?>{}.jsify() as JSObject;
+      sdk.setProperty('init'.toJS, ((JSString token, JSAny? config) {}).toJS);
+      sdk.setProperty(
+        'has_opted_out_tracking'.toJS,
+        (() => optedOut.toJS).toJS,
+      );
+      setWindowMixpanel(sdk);
+      final mixpanel =
+          await Mixpanel.init('test-token', trackAutomaticEvents: false);
+
+      // WHEN / THEN the Dart API returns the same value.
+      expect(await mixpanel.hasOptedOutTracking(), optedOut);
+    });
+  }
 }
