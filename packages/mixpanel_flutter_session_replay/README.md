@@ -122,6 +122,21 @@ dependencies:
   mixpanel_flutter_session_replay: 2.1.0
 ```
 
+### iOS and macOS: Swift Package Manager or CocoaPods
+
+**Swift Package Manager** (recommended). Supported from v1.1.0. SPM is on by default from Flutter 3.44. If you turned it off, run:
+
+```
+flutter config --enable-swift-package-manager
+```
+
+See [Flutter's SPM guide](https://docs.flutter.dev/packages-and-plugins/swift-package-manager/for-app-developers).
+
+**CocoaPods** (deprecated). If your app uses a Flutter version earlier than 3.44, or keeps SPM turned off, the SDK installs through CocoaPods when you build. No extra steps are needed.
+
+> [!WARNING]
+> CocoaPods support is deprecated and will be removed in a future major version of the SDK, after November 2027. That release will also raise the minimum supported Flutter version to 3.44. We recommend using Swift Package Manager.
+
 ## Initialize
 
 Session Replay requires initializing an instance and wrapping your app with `MixpanelSessionReplayWidget`. The SDK does not use a singleton — store the instance using State, Provider, or whichever state management fits your app.
