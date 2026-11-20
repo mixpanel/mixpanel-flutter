@@ -132,6 +132,9 @@ class MixpanelFlutterPlugin {
       case 'setServerURL':
         handleSetServerURL(call);
         break;
+      case 'setUseIpAddressForGeolocation':
+        handleSetUseIpAddressForGeolocation(call);
+        break;
       case "hasOptedOutTracking":
         return handleHasOptedOutTracking();
       case "optInTracking":
@@ -266,6 +269,11 @@ class MixpanelFlutterPlugin {
       initConfig['api_host'] = serverURL;
     }
 
+    final useIpAddressForGeolocation = args['useIpAddressForGeolocation'];
+    if (useIpAddressForGeolocation is bool) {
+      initConfig['ip'] = useIpAddressForGeolocation;
+    }
+
     // Handle feature flags configuration
     dynamic featureFlags = args['featureFlags'];
     if (featureFlags != null && featureFlags is Map) {
@@ -313,6 +321,13 @@ class MixpanelFlutterPlugin {
     Map<Object?, Object?> args = call.arguments as Map<Object?, Object?>;
     String serverURL = args['serverURL'] as String;
     set_config(safeJsify({'api_host': serverURL}));
+  }
+
+  void handleSetUseIpAddressForGeolocation(MethodCall call) {
+    Map<Object?, Object?> args = call.arguments as Map<Object?, Object?>;
+    bool useIpAddressForGeolocation =
+        args['useIpAddressForGeolocation'] as bool;
+    set_config(safeJsify({'ip': useIpAddressForGeolocation}));
   }
 
   void handleTrack(MethodCall call) {

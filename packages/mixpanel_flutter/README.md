@@ -126,6 +126,32 @@ mixpanel = await Mixpanel.init(
 
 You can also update the endpoint at runtime using `setServerURL()`.
 
+### IP Geolocation
+
+By default, Mixpanel uses the client IP address to set location properties (city, region, country) on events and user profiles. To turn this off from the very first request, pass `useIpAddressForGeolocation: false` at initialization:
+
+```dart
+mixpanel = await Mixpanel.init(
+  "Your Mixpanel Token",
+  trackAutomaticEvents: false,
+  useIpAddressForGeolocation: false,
+);
+```
+
+On Android, iOS and macOS the native SDKs do not persist this setting and reset it to `true` on every launch. Calling `setUseIpAddressForGeolocation(false)` after `init` still works, but events queued from a previous launch can be sent with the IP address before that call runs. Passing the option to `init` applies it before anything is sent. On Android you can also set it in `AndroidManifest.xml`:
+
+```xml
+<application>
+  <meta-data
+    android:name="com.mixpanel.android.MPConfig.UseIpAddressForGeolocation"
+    android:value="false" />
+</application>
+```
+
+On web, the option maps to the mixpanel-js `ip` config.
+
+Turning this off only affects data sent from then on. It does not remove location properties already stored on events or user profiles.
+
 ## 3. Send Data
 
 Once you've initialized the SDK, Mixpanel will <a href="https://mixpanel.com/help/questions/articles/which-common-mobile-events-can-mixpanel-collect-on-my-behalf-automatically" target="_blank">automatically collect common mobile events</a>. You can enable/disable automatic collection through your project settings.

@@ -265,6 +265,7 @@ public class MixpanelFlutterPlugin implements FlutterPlugin, MethodCallHandler {
         Boolean optOutTrackingDefault = call.<Boolean>argument("optOutTrackingDefault");
         Boolean trackAutomaticEvents = call.<Boolean>argument("trackAutomaticEvents");
         String serverURL = call.<String>argument("serverURL");
+        Boolean useIpAddressForGeolocation = call.<Boolean>argument("useIpAddressForGeolocation");
 
         // Parse feature flags config if provided
         Map<String, Object> featureFlagsMap = call.<HashMap<String, Object>>argument("featureFlags");
@@ -324,6 +325,11 @@ public class MixpanelFlutterPlugin implements FlutterPlugin, MethodCallHandler {
 
         boolean trackAutoEvents = trackAutomaticEvents == null ? true : trackAutomaticEvents;
         mixpanel = MixpanelAPI.getInstance(context, token, trackAutoEvents, optionsBuilder.build());
+        // MPConfig keeps this in memory only, so apply it before init returns
+        // and before the first flush can send queued events with ip=1.
+        if (useIpAddressForGeolocation != null) {
+            mixpanel.setUseIpAddressForGeolocation(useIpAddressForGeolocation);
+        }
 
         result.success(Integer.toString(mixpanel.hashCode()));
     }

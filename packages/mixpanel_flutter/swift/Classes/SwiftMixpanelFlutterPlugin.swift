@@ -290,6 +290,11 @@ public class SwiftMixpanelFlutterPlugin: NSObject, FlutterPlugin {
             featureFlagOptions: featureFlagOptions
         )
         instance = Mixpanel.initialize(options: options)
+        // Not persisted by mixpanel-swift, so apply it before init returns and
+        // before the first flush can send queued events with ip=1.
+        if let useIpAddressForGeolocation = arguments["useIpAddressForGeolocation"] as? Bool {
+            instance?.useIPAddressForGeoLocation = useIpAddressForGeolocation
+        }
 
         result(nil)
     }
