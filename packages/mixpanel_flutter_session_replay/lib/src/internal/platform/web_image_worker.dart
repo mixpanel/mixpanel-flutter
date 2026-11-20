@@ -12,13 +12,22 @@ import 'package:web/web.dart' as web;
 /// and transfers the result back as an ArrayBuffer (zero-copy).
 const String _workerScript = '''
 self.onmessage = async function(e) {
+  // Tracks the last API call attempted so a failure names the call. WebKit
+  // reports some binding failures as a bare "Type error", which is useless
+  // on its own.
+  let stage = 'receive';
   try {
     const { imageBitmap, width, height, jpegQuality, maskRects } = e.data;
+    stage = 'OffscreenCanvas';
     const canvas = new OffscreenCanvas(width, height);
+    stage = 'getContext';
     const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('2d context unavailable');
+    stage = 'drawImage';
     ctx.drawImage(imageBitmap, 0, 0, width, height);
     imageBitmap.close();
 
+    stage = 'fillRect';
     ctx.fillStyle = '#cccccc';
     for (let i = 0; i < maskRects.length; i += 4) {
       // Snapped outward to whole pixels: a fractional rect anti-aliases its
@@ -30,14 +39,22 @@ self.onmessage = async function(e) {
       ctx.fillRect(left, top, right - left, bottom - top);
     }
 
+    stage = 'convertToBlob';
     const blob = await canvas.convertToBlob({
       type: 'image/jpeg',
       quality: jpegQuality
     });
+    stage = 'arrayBuffer';
     const jpegBuffer = await blob.arrayBuffer();
+    stage = 'postMessage';
     self.postMessage({ jpegBuffer: jpegBuffer }, [jpegBuffer]);
   } catch (err) {
-    self.postMessage({ error: err.message || String(err) });
+    const name = (err && err.name) || typeof err;
+    const message = (err && err.message) || String(err);
+    const stack = (err && err.stack) ? ' stack=' + err.stack : '';
+    self.postMessage({
+      error: '[' + stage + '] ' + name + ': ' + message + stack
+    });
   }
 };
 ''';
@@ -176,7 +193,20 @@ class WebImageWorker {
     final completer = _pending;
     if (completer == null) return;
     _pending = null;
-    completer.completeError(Exception('Worker ${event.type}'));
+    completer.completeError(Exception('Worker ${_describeErrorEvent(event)}'));
+  }
+
+  /// Names the event, plus the script error details when the browser
+  /// provides them (an uncaught error inside the worker script).
+  static String _describeErrorEvent(web.Event event) {
+    if (!event.isA<web.ErrorEvent>()) return event.type;
+    final errorEvent = event as web.ErrorEvent;
+    final message = errorEvent.message;
+    if (message.isEmpty) return event.type;
+    final location = errorEvent.filename.isEmpty
+        ? ''
+        : ' (${errorEvent.filename}:${errorEvent.lineno})';
+    return '${event.type}: $message$location';
   }
 
   /// Terminates the worker and revokes the Blob URL.
