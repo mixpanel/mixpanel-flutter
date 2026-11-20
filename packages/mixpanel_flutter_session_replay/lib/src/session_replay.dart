@@ -78,7 +78,9 @@ class MixpanelSessionReplay {
   /// hierarchical groups.
   ///
   /// Pass the identity analytics reports, and pass it to
-  /// [identifyWithIdentity] again whenever analytics identifies:
+  /// [identifyWithIdentity] again whenever analytics identifies. Await
+  /// analytics' identify before reading `getIdentity()`, so it reports the new
+  /// identity:
   ///
   /// ```dart
   /// await MixpanelSessionReplay.initializeWithIdentity(
@@ -540,10 +542,14 @@ class MixpanelSessionReplay {
   ///
   /// An identity with neither a user id nor a device id is logged and ignored.
   ///
+  /// Await analytics' identify before reading `getIdentity()`, so it reports
+  /// the new identity.
+  ///
   /// Example:
   /// ```dart
-  /// sessionReplay.identifyWithIdentity(
+  /// await mixpanel.identifyWithIdentity(
   ///     MixpanelIdentity(userId: 'user_123', companyId: 'acme'));
+  /// sessionReplay.identifyWithIdentity(await mixpanel.getIdentity());
   /// ```
   void identifyWithIdentity(MixpanelIdentity identity) {
     final distinctId = ReplayIdentity.distinctId(identity);
