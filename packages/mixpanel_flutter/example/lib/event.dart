@@ -131,6 +131,20 @@ class _EventScreenState extends State<EventScreen> {
           SizedBox(
             width: MediaQuery.of(context).size.width * 0.65,
             child: MixpanelButton(
+              text: 'Get Identity',
+              onPressed: () async {
+                MixpanelIdentity identity = await _mixpanel.getIdentity();
+                if (!context.mounted) return;
+                _showAlert(context, "Result", identity.toString());
+              },
+            ),
+          ),
+          SizedBox(
+            height: 20,
+          ),
+          SizedBox(
+            width: MediaQuery.of(context).size.width * 0.65,
+            child: MixpanelButton(
               text: 'Time Event 2 secs',
               onPressed: () {
                 String eventName = "Timed Event";

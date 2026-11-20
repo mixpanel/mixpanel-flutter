@@ -269,6 +269,7 @@ class SessionReplayCoordinator implements WidgetCoordinator {
       boundary,
       getCurrentSession: _sessionManager.getCurrentSession,
       getDistinctId: _eventRecorder.getDistinctId,
+      getIdentity: _eventRecorder.getIdentity,
       boundaryElement: boundaryElement,
       isCancelled: () => _captureInvalidation.isCancelled(ticket),
       onRenderTreeRead: onRenderTreeRead,
@@ -297,6 +298,7 @@ class SessionReplayCoordinator implements WidgetCoordinator {
         :final maskRegions,
         :final sessionId,
         :final distinctId,
+        :final identity,
         :final wireframes,
       ):
         // Touches recorded from here on belong to this frame's metadata.
@@ -323,6 +325,7 @@ class SessionReplayCoordinator implements WidgetCoordinator {
           timestamp: timestamp,
           sessionId: sessionId,
           distinctId: distinctId,
+          identity: identity,
         );
 
         // Emit wireframe alongside the screenshot with the same timestamp
@@ -337,6 +340,7 @@ class SessionReplayCoordinator implements WidgetCoordinator {
             timestamp: timestamp,
             sessionId: sessionId,
             distinctId: distinctId,
+            identity: identity,
           );
         }
       case CaptureFailure(:final error, :final errorMessage):

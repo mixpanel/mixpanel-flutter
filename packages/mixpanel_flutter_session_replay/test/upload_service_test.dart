@@ -9,6 +9,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart' as http_testing;
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mixpanel_flutter_common/mixpanel_flutter_common.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/storage/event_queue_interface.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/upload/upload_service.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/upload/payload_serializer.dart';
@@ -695,6 +696,40 @@ void main() {
         expect(params['replay_id'], testSessionId);
         expect(params['\$lib_version'], sdkVersion);
         expect(params['\$os'], anyOf('Android', 'iOS', 'Mac OS X'));
+      });
+
+      test('sends each identity in its own batch with its ids', () async {
+        // GIVEN the same user identified in one company, then another
+        final session = await seedQueue(eventCount: 0);
+        for (final (time, company) in [(2000, 'acme'), (2100, 'globex')]) {
+          await eventQueue.add(
+            SessionReplayEvent(
+              sessionId: session.id,
+              distinctId: 'user_123',
+              identity: MixpanelIdentity(
+                userId: 'user_123',
+                companyId: company,
+              ),
+              timestamp: DateTime.fromMillisecondsSinceEpoch(time, isUtc: true),
+              type: EventType.interaction,
+              payload: InteractionPayload(interactionType: 7, x: 1, y: 2),
+            ),
+          );
+        }
+        final recorder = createRecordingHttpClient(statusCode: 200);
+        final service = createService(
+          eventQueue: eventQueue,
+          httpClient: recorder.client,
+        );
+
+        // WHEN
+        await service.flush();
+
+        // THEN
+        final params = recorder.requests.map((r) => r.url.queryParameters);
+        expect(params.map((p) => p['distinct_id']), [null, null]);
+        expect(params.map((p) => p['\$user_id']), ['user_123', 'user_123']);
+        expect(params.map((p) => p['\$company_id']), ['acme', 'globex']);
       });
 
       test('includes authorization header', () async {

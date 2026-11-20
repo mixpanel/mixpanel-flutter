@@ -2,6 +2,7 @@ package com.mixpanel.mixpanel_flutter;
 
 import androidx.annotation.NonNull;
 
+import android.annotation.SuppressLint;
 import android.content.Context;
 
 import io.flutter.plugin.common.StandardMethodCodec;
@@ -20,6 +21,7 @@ import io.flutter.plugin.common.MethodChannel;
 import io.flutter.plugin.common.MethodChannel.MethodCallHandler;
 import io.flutter.plugin.common.MethodChannel.Result;
 
+import com.mixpanel.android.identity.MixpanelIdentity;
 import com.mixpanel.android.mpmetrics.FeatureFlagOptions;
 import com.mixpanel.android.mpmetrics.MixpanelAPI;
 import com.mixpanel.android.mpmetrics.MixpanelFlagVariant;
@@ -85,6 +87,9 @@ public class MixpanelFlutterPlugin implements FlutterPlugin, MethodCallHandler {
             case "identify":
                 handleIdentify(call, result);
                 break;
+            case "identifyWithIdentity":
+                handleIdentifyWithIdentity(call, result);
+                break;
             case "alias":
                 handleAlias(call, result);
                 break;
@@ -132,6 +137,9 @@ public class MixpanelFlutterPlugin implements FlutterPlugin, MethodCallHandler {
                 break;
             case "getDistinctId":
                 handleGetDistinctId(call, result);
+                break;
+            case "getIdentity":
+                handleGetIdentity(call, result);
                 break;
             case "flush":
                 handleFlush(call, result);
@@ -265,6 +273,7 @@ public class MixpanelFlutterPlugin implements FlutterPlugin, MethodCallHandler {
         Boolean optOutTrackingDefault = call.<Boolean>argument("optOutTrackingDefault");
         Boolean trackAutomaticEvents = call.<Boolean>argument("trackAutomaticEvents");
         String serverURL = call.<String>argument("serverURL");
+        Boolean hierarchicalGroups = call.<Boolean>argument("hierarchicalGroups");
 
         // Parse feature flags config if provided
         Map<String, Object> featureFlagsMap = call.<HashMap<String, Object>>argument("featureFlags");
@@ -306,6 +315,10 @@ public class MixpanelFlutterPlugin implements FlutterPlugin, MethodCallHandler {
 
         if (serverURL != null && !serverURL.trim().isEmpty()) {
             optionsBuilder.serverURL(serverURL);
+        }
+
+        if (hierarchicalGroups != null && hierarchicalGroups) {
+            optionsBuilder.hierarchicalGroups(true);
         }
 
         if (featureFlagsEnabled != null && featureFlagsEnabled) {
@@ -370,6 +383,27 @@ public class MixpanelFlutterPlugin implements FlutterPlugin, MethodCallHandler {
         String distinctId = call.argument("distinctId");
         mixpanel.identify(distinctId);
         result.success(null);
+    }
+
+    private void handleIdentifyWithIdentity(MethodCall call, Result result) {
+        Map<String, Object> identityMap = call.<HashMap<String, Object>>argument("identity");
+        mixpanel.identify(toMixpanelIdentity(identityMap));
+        result.success(null);
+    }
+
+    // The constructor that takes a device id is restricted to Mixpanel's own libraries, which this plugin is
+    @SuppressLint("RestrictedApi")
+    private static MixpanelIdentity toMixpanelIdentity(Map<String, Object> identityMap) {
+        if (identityMap == null) {
+            return null;
+        }
+        Object userId = identityMap.get("userId");
+        Object companyId = identityMap.get("companyId");
+        Object deviceId = identityMap.get("deviceId");
+        return new MixpanelIdentity(
+                userId instanceof String ? (String) userId : null,
+                companyId instanceof String ? (String) companyId : null,
+                deviceId instanceof String ? (String) deviceId : null);
     }
 
     private void handleAlias(MethodCall call, Result result) {
@@ -500,6 +534,15 @@ public class MixpanelFlutterPlugin implements FlutterPlugin, MethodCallHandler {
 
     private void handleGetDistinctId(MethodCall call, Result result) {
         result.success(mixpanel.getDistinctId());
+    }
+
+    private void handleGetIdentity(MethodCall call, Result result) {
+        MixpanelIdentity identity = mixpanel.getIdentity();
+        Map<String, Object> identityMap = new HashMap<>();
+        identityMap.put("userId", identity.getUserId());
+        identityMap.put("companyId", identity.getCompanyId());
+        identityMap.put("deviceId", identity.getDeviceId());
+        result.success(identityMap);
     }
 
     private void handleFlush(MethodCall call, Result result) {

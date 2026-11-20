@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mixpanel_flutter_common/mixpanel_flutter_common.dart';
 import 'package:mixpanel_flutter_session_replay/src/internal/storage/event_queue_interface.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/session_event.dart';
 import 'package:mixpanel_flutter_session_replay/src/models/session.dart';
@@ -677,6 +678,82 @@ void runEventQueueContractTests(EventQueue Function() getStorage) {
         expect(batch, hasLength(1));
       },
     );
+  });
+
+  group('Upload Batching - Identity Boundary Tests', () {
+    const acme = MixpanelIdentity(userId: 'user1', companyId: 'acme');
+    const globex = MixpanelIdentity(userId: 'user1', companyId: 'globex');
+
+    SessionReplayEvent touch(int timestampMs, MixpanelIdentity? identity) =>
+        SessionReplayEvent(
+          sessionId: 'session1',
+          distinctId: 'user1',
+          identity: identity,
+          timestamp: DateTime.fromMillisecondsSinceEpoch(
+            timestampMs,
+            isUtc: true,
+          ),
+          type: EventType.interaction,
+          payload: InteractionPayload(interactionType: 1, x: 0, y: 0),
+        );
+
+    test('headers and batches carry the identity of each event', () async {
+      final storage = getStorage();
+      await storage.add(touch(100, acme));
+
+      final oldest = (await storage.fetchOldestHeader())!;
+      expect(oldest.distinctId, 'user1');
+      expect(oldest.identity, acme);
+      final newest = (await storage.fetchNewestHeader())!;
+      expect(newest.identity, acme);
+
+      final batch = await storage.fetchBatch(
+        sessionId: oldest.sessionId,
+        distinctId: oldest.distinctId,
+        identity: oldest.identity,
+        maxBytes: 5000000,
+        maxCount: 100,
+      );
+      expect(batch, hasLength(1));
+      expect(batch.single.distinctId, 'user1');
+      expect(batch.single.identity, acme);
+    });
+
+    test('stops where the company changes for the same user', () async {
+      final storage = getStorage();
+      await storage.add(touch(100, acme));
+      await storage.add(touch(200, acme));
+      await storage.add(touch(300, globex));
+
+      final oldest = (await storage.fetchOldestHeader())!;
+      final batch = await storage.fetchBatch(
+        sessionId: oldest.sessionId,
+        distinctId: oldest.distinctId,
+        identity: oldest.identity,
+        maxBytes: 5000000,
+        maxCount: 100,
+      );
+
+      expect(batch.map((e) => e.timestamp.millisecondsSinceEpoch), [100, 200]);
+    });
+
+    test('stops where an identity starts after events without one', () async {
+      final storage = getStorage();
+      await storage.add(touch(100, null));
+      await storage.add(touch(200, acme));
+
+      final oldest = (await storage.fetchOldestHeader())!;
+      expect(oldest.identity, isNull);
+      final batch = await storage.fetchBatch(
+        sessionId: oldest.sessionId,
+        distinctId: oldest.distinctId,
+        maxBytes: 5000000,
+        maxCount: 100,
+      );
+
+      expect(batch.map((e) => e.timestamp.millisecondsSinceEpoch), [100]);
+      expect(batch.single.identity, isNull);
+    });
   });
 }
 

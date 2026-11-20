@@ -18,4 +18,13 @@ class MixpanelManager {
     }
     return _instance!;
   }
+
+  // Mixpanel.init replaces the native instance that every Dart handle calls, so
+  // a page that initializes its own project calls this when it closes
+  static Future<void> restore() async {
+    if (_instance != null) {
+      _instance = null;
+      await init();
+    }
+  }
 }
