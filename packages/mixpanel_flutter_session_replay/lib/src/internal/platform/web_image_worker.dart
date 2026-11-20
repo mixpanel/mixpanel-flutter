@@ -16,8 +16,16 @@ self.onmessage = async function(e) {
   // reports some binding failures as a bare "Type error", which is useless
   // on its own.
   let stage = 'receive';
+  let received = '';
   try {
     const { imageBitmap, width, height, jpegQuality, maskRects } = e.data;
+    received = ' received=' + (imageBitmap === null ? 'null'
+      : imageBitmap === undefined ? 'undefined'
+      : (imageBitmap.constructor && imageBitmap.constructor.name)
+        + ' ' + imageBitmap.width + 'x' + imageBitmap.height)
+      + ' target=' + width + 'x' + height
+      + ' ImageBitmap=' + typeof self.ImageBitmap
+      + ' OffscreenCanvas=' + typeof self.OffscreenCanvas;
     stage = 'OffscreenCanvas';
     const canvas = new OffscreenCanvas(width, height);
     stage = 'getContext';
@@ -53,7 +61,7 @@ self.onmessage = async function(e) {
     const message = (err && err.message) || String(err);
     const stack = (err && err.stack) ? ' stack=' + err.stack : '';
     self.postMessage({
-      error: '[' + stage + '] ' + name + ': ' + message + stack
+      error: '[' + stage + '] ' + name + ': ' + message + received + stack
     });
   }
 };
