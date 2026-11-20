@@ -88,6 +88,30 @@ Please add the following snippet to your `web/index.html` inside `<head></head>`
 <script src="./assets/packages/mixpanel_flutter/assets/mixpanel.js"></script>
 ```
 
+We recommend inlining the Mixpanel JS snippet in a `<script>` tag instead, as [example/web/index.html](https://github.com/mixpanel/mixpanel-flutter/blob/main/packages/mixpanel_flutter/example/web/index.html) does. The snippet is the same code as `mixpanel.js`, but inline it can't be blocked as a separate file. You can copy the latest snippet from the [Mixpanel JavaScript docs](https://docs.mixpanel.com/docs/tracking-methods/sdks/javascript).
+
+**Ad blockers.** Ad blockers often block `mixpanel.js` and `cdn.mxpnl.com`. If the snippet is blocked, `window.mixpanel` is undefined: `Mixpanel.init` logs `mixpanel-js not loaded` and throws a `PlatformException` with code `MixpanelJsUnavailable`. Catch it so your app can start. No `Mixpanel` instance is returned in that case, so keep it nullable:
+
+```dart
+Mixpanel? mixpanel;
+
+try {
+  mixpanel = await Mixpanel.init("Your Mixpanel Token", trackAutomaticEvents: false);
+} on PlatformException catch (e) {
+  // e.code == 'MixpanelJsUnavailable': tracking is unavailable on this page.
+}
+
+mixpanel?.track('Sent Message');
+```
+
+If only the library on `cdn.mxpnl.com` is blocked, `init` succeeds but events stay queued in the snippet and are never sent. To reduce blocking, serve the library and API through your own domain with a [tracking proxy](https://docs.mixpanel.com/docs/tracking-methods/sdks/javascript#tracking-via-proxy).
+
+**`MIXPANEL_CUSTOM_LIB_URL`.** To load the library from your own server or proxy, set `MIXPANEL_CUSTOM_LIB_URL` before the snippet. It must point to the full library (for example `https://<YOUR_PROXY_DOMAIN>/lib.min.js`, a copy of `mixpanel-2-latest.min.js`), not to the snippet or to `mixpanel.js`. Otherwise the library never loads and no events are sent. Set `serverURL` in `Mixpanel.init` to send events through the proxy too.
+
+**Do Not Track.** mixpanel-js respects the browser's Do Not Track setting by default, so browsers with Do Not Track enabled send no events. If you want to change this, pass `ignore_dnt` through `config`, for example `config: {'ignore_dnt': true}`. Check that this fits your privacy policy first.
+
+**After upgrading.** If you see `MissingPluginException` for `initialize` after deploying a new version, the browser is probably running a stale build or service worker. Run `flutter clean`, rebuild, deploy, then hard-reload the page or unregister the old service worker.
+
 ## 2. Initialize Mixpanel
 
 To start tracking with the SDK you must first initialize with your project token. To initialize the SDK, first add `import 'package:mixpanel_flutter/mixpanel_flutter.dart';` and call `Mixpanel.init(token, trackAutomaticEvents);` with your project token and automatic events setting as it's arguments. You can find your token in [project settings](https://mixpanel.com/settings/project).

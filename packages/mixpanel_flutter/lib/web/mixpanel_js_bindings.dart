@@ -30,7 +30,7 @@ external void init(String token, JSAny? config);
 external void set_config(JSAny? config);
 
 @JS('mixpanel.has_opted_out_tracking')
-external bool has_opted_out_tracking();
+external JSAny? has_opted_out_tracking();
 
 @JS('mixpanel.opt_in_tracking')
 external void opt_in_tracking();
