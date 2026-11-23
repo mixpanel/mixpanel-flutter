@@ -89,10 +89,17 @@ class MixpanelSessionReplay {
   /// );
   /// ```
   ///
-  /// Replays carry `$user_id`, `$company_id` and `$device_id` alongside
-  /// `distinct_id`. The identity needs a user id or a device id; otherwise
-  /// initialization fails with [InitializationError.invalidToken], like any
-  /// other invalid configuration. Otherwise this behaves like [initialize].
+  /// Replays carry `$user_id`, `$company_id` and `$device_id`, plus
+  /// `distinct_id`: the identity's user id, or `$device:` and its device id
+  /// before the user is known. An identity with both a user and a company
+  /// sends no `distinct_id`, as its events don't.
+  ///
+  /// The identity needs a user id or a device id; otherwise initialization
+  /// fails with [InitializationError.invalidToken], like any other invalid
+  /// configuration. On iOS, an install with older stored state can report
+  /// neither before it identifies; use [initialize] with
+  /// `await mixpanel.getDistinctId()` there. Otherwise this behaves like
+  /// [initialize].
   static Future<InitializationResult<MixpanelSessionReplay>>
   initializeWithIdentity({
     required String token,
@@ -535,10 +542,11 @@ class MixpanelSessionReplay {
   /// groups. Pass the identity analytics reports, and call this again
   /// whenever analytics identifies.
   ///
-  /// Replays then carry `$user_id`, `$company_id` and `$device_id` alongside
-  /// `distinct_id`, which is the identity's user id, or `$device:` and its
-  /// device id before the user is known. Events already captured keep the
-  /// identity they were captured under.
+  /// Replays then carry `$user_id`, `$company_id` and `$device_id`, plus
+  /// `distinct_id`: the identity's user id, or `$device:` and its device id
+  /// before the user is known. An identity with both a user and a company
+  /// sends no `distinct_id`, as its events don't. Events already captured keep
+  /// the identity they were captured under.
   ///
   /// An identity with neither a user id nor a device id is logged and ignored.
   ///
