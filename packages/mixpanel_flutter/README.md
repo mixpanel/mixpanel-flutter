@@ -75,7 +75,7 @@ Please add the following snippet to your `web/index.html` inside `<head></head>`
 
 We recommend inlining the Mixpanel JS snippet in a `<script>` tag instead, as [example/web/index.html](https://github.com/mixpanel/mixpanel-flutter/blob/main/packages/mixpanel_flutter/example/web/index.html) does. The snippet is the same code as `mixpanel.js`, but inline it can't be blocked as a separate file. You can copy the latest snippet from the [Mixpanel JavaScript docs](https://docs.mixpanel.com/docs/tracking-methods/sdks/javascript).
 
-**Ad blockers.** Ad blockers often block `mixpanel.js` and `cdn.mxpnl.com`. If the snippet is blocked, `window.mixpanel` is undefined: `Mixpanel.init` logs `mixpanel-js not loaded` and throws a `PlatformException` with code `MixpanelJsUnavailable`. Catch it so your app can start. No `Mixpanel` instance is returned in that case, so keep it nullable:
+**Ad blockers.** Ad blockers often block `mixpanel.js` and `cdn.mxpnl.com`. If the snippet is blocked, `window.mixpanel` is undefined: `Mixpanel.init` logs `mixpanel-js not loaded` and throws a `PlatformException`. Catch it so your app can start. No `Mixpanel` instance is returned in that case, so keep it nullable:
 
 ```dart
 Mixpanel? mixpanel;
@@ -83,7 +83,7 @@ Mixpanel? mixpanel;
 try {
   mixpanel = await Mixpanel.init("Your Mixpanel Token", trackAutomaticEvents: false);
 } on PlatformException catch (e) {
-  // e.code == 'MixpanelJsUnavailable': tracking is unavailable on this page.
+  // mixpanel-js is unavailable: tracking is off on this page.
 }
 
 mixpanel?.track('Sent Message');

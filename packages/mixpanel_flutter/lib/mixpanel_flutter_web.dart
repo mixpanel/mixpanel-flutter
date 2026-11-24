@@ -115,14 +115,9 @@ class MixpanelFlutterPlugin {
     channel.setMethodCallHandler(pluginInstance.handleMethodCall);
   }
 
-  /// Error code of the [PlatformException] thrown by `Mixpanel.init` when
-  /// mixpanel-js is not loaded on the page or its `init` fails.
-  static const String jsUnavailableErrorCode = 'MixpanelJsUnavailable';
-
-  static const String _jsUnavailableMessage =
+  static const String _jsNotLoadedMessage =
       'mixpanel-js not loaded — missing script tag or blocked by an ad '
-      'blocker. Mixpanel calls will be skipped. See the Web section of the '
-      'mixpanel_flutter README.';
+      'blocker. See the Web section of the mixpanel_flutter README.';
 
   /// The mixpanel-js function each channel method calls, relative to
   /// `window.mixpanel`. Before the call is made the plugin checks that the
@@ -155,8 +150,9 @@ class MixpanelFlutterPlugin {
     'remove': 'people.remove',
     'unset': 'people.unset',
     'trackCharge': 'people.track_charge',
-    'clearCharge': 'people.clear_charge',
-    'deleteUsers': 'people.delete_users',
+    // clearCharge and deleteUsers are left unguarded: their bindings call
+    // functions mixpanel-js doesn't have, and guarding them would turn
+    // today's error into a silent no-op even when mixpanel-js is loaded.
     'groupSetProperties': 'get_group',
     'groupSetPropertyOnce': 'get_group',
     'groupUnsetProperty': 'get_group',
@@ -172,9 +168,6 @@ class MixpanelFlutterPlugin {
     'trackScreenLeave': 'track',
   };
 
-  /// Set when `initialize` finds mixpanel-js missing or its `init` fails;
-  /// every later call is skipped until an `initialize` succeeds.
-  bool _jsUnavailable = false;
   bool _warnedSkippedCall = false;
 
   /// Handles method calls over the MethodChannel of this plugin.
@@ -182,8 +175,7 @@ class MixpanelFlutterPlugin {
   /// https://flutter.dev/go/federated-plugins
   Future<dynamic> handleMethodCall(MethodCall call) async {
     final jsFunction = _jsFunctionForMethod[call.method];
-    if (jsFunction != null &&
-        (_jsUnavailable || !_isMixpanelJsFunction(jsFunction))) {
+    if (jsFunction != null && !_isMixpanelJsFunction(jsFunction)) {
       _logSkippedCall(call.method, jsFunction);
       return _resultWhenSkipped(call);
     }
@@ -337,10 +329,8 @@ class MixpanelFlutterPlugin {
   }
 
   void _logSkippedCall(String method, String jsFunction) {
-    final reason = _jsUnavailable
-        ? 'mixpanel-js is not loaded'
-        : 'mixpanel.$jsFunction is not available. mixpanel-js may be '
-            'missing, blocked or still loading, or Mixpanel.init has not run';
+    final reason = 'mixpanel.$jsFunction is not available. mixpanel-js may be '
+        'missing, blocked or still loading, or Mixpanel.init has not run';
     developer.log('`$method` skipped: $reason', name: 'Mixpanel');
     if (!_warnedSkippedCall) {
       _warnedSkippedCall = true;
@@ -371,9 +361,6 @@ class MixpanelFlutterPlugin {
   }
 
   void initialize(MethodCall call) {
-    if (!_isMixpanelJsFunction('init')) {
-      _markJsUnavailable('window.mixpanel.init is not a function');
-    }
     Map<Object?, Object?> args = call.arguments as Map<Object?, Object?>;
     String token = args['token'] as String;
     dynamic config = args['config'];
@@ -427,21 +414,13 @@ class MixpanelFlutterPlugin {
     try {
       init(token, jsConfig);
     } catch (e) {
-      _markJsUnavailable('mixpanel.init failed: $e');
+      // Always logged, then rethrown unchanged so Mixpanel.init fails with
+      // the same PlatformException as before.
+      debugPrint(_isMixpanelJsFunction('init')
+          ? '[Mixpanel] mixpanel.init failed: $e'
+          : '[Mixpanel] $_jsNotLoadedMessage');
+      rethrow;
     }
-    _jsUnavailable = false;
-  }
-
-  /// Logs why mixpanel-js can't be used, skips later calls, and throws the
-  /// typed error `Mixpanel.init` has always surfaced in this case.
-  Never _markJsUnavailable(String details) {
-    _jsUnavailable = true;
-    debugPrint('[Mixpanel] $_jsUnavailableMessage ($details)');
-    throw PlatformException(
-      code: jsUnavailableErrorCode,
-      message: _jsUnavailableMessage,
-      details: details,
-    );
   }
 
   void handleSetServerURL(MethodCall call) {

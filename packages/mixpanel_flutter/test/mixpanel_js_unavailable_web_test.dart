@@ -84,32 +84,34 @@ void main() {
     expect(jsCalls, isEmpty);
   }
 
-  test('should throw MixpanelJsUnavailable when window.mixpanel is missing',
-      () async {
+  test(
+      'should throw the same PlatformException code as before when '
+      'window.mixpanel is missing', () async {
     // GIVEN mixpanel-js was blocked, so window.mixpanel is undefined.
     setWindowMixpanel(null);
 
     // WHEN the app initializes Mixpanel.
     final error = await initError();
 
-    // THEN init throws the typed error, and later calls are safe no-ops.
-    expect(error.code, MixpanelFlutterPlugin.jsUnavailableErrorCode);
+    // THEN init throws with the unchanged `error` code, and later calls
+    // are safe no-ops.
+    expect(error.code, 'error');
     await expectCallsAreSafeNoOps(Mixpanel('test-token'));
   });
 
-  test('should throw MixpanelJsUnavailable when mixpanel.init is not callable',
-      () async {
+  test(
+      'should throw the same PlatformException code as before when '
+      'mixpanel.init is not callable', () async {
     // GIVEN some other script defined window.mixpanel without init.
     setWindowMixpanel(<String, Object?>{}.jsify());
 
-    // WHEN / THEN init throws the typed error.
-    expect(
-        (await initError()).code, MixpanelFlutterPlugin.jsUnavailableErrorCode);
+    // WHEN / THEN init throws with the unchanged `error` code.
+    expect((await initError()).code, 'error');
   });
 
   test(
-      'should throw MixpanelJsUnavailable and skip calls when mixpanel.init '
-      'throws', () async {
+      'should rethrow the init error unchanged and keep calling mixpanel-js '
+      'when mixpanel.init throws', () async {
     // GIVEN a mixpanel-js whose init throws.
     final sdk = <String, Object?>{}.jsify() as JSObject;
     sdk.setProperty(
@@ -125,10 +127,10 @@ void main() {
     final error = await initError();
     await Mixpanel('test-token').track('Event');
 
-    // THEN init throws the typed error and nothing reaches mixpanel-js.
-    expect(error.code, MixpanelFlutterPlugin.jsUnavailableErrorCode);
-    expect(error.details, contains('boom'));
-    expect(jsCalls, isEmpty);
+    // THEN init throws as before, and later calls still reach mixpanel-js.
+    expect(error.code, 'error');
+    expect(error.message, contains('boom'));
+    expect(jsCalls, ['track']);
   });
 
   test('should resume calls when a later init succeeds', () async {
