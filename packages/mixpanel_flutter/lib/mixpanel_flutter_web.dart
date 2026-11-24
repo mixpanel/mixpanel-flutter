@@ -115,10 +115,70 @@ class MixpanelFlutterPlugin {
     channel.setMethodCallHandler(pluginInstance.handleMethodCall);
   }
 
+  static const String _jsNotLoadedMessage =
+      'mixpanel-js not loaded — missing script tag or blocked by an ad '
+      'blocker. See the Web section of the mixpanel_flutter README.';
+
+  /// The mixpanel-js function each channel method calls, relative to
+  /// `window.mixpanel`. Before the call is made the plugin checks that the
+  /// function exists, so a missing or not-yet-initialized library never
+  /// surfaces as a JS TypeError to the app.
+  static const Map<String, String> _jsFunctionForMethod = {
+    'setServerURL': 'set_config',
+    'hasOptedOutTracking': 'has_opted_out_tracking',
+    'optInTracking': 'opt_in_tracking',
+    'optOutTracking': 'opt_out_tracking',
+    'setLoggingEnabled': 'set_config',
+    'identify': 'identify',
+    'alias': 'alias',
+    'track': 'track',
+    'trackWithGroups': 'track_with_groups',
+    'setGroup': 'set_group',
+    'addGroup': 'add_group',
+    'removeGroup': 'remove_group',
+    'registerSuperProperties': 'register',
+    'registerSuperPropertiesOnce': 'register_once',
+    'unregisterSuperProperty': 'unregister',
+    'timeEvent': 'time_event',
+    'reset': 'reset',
+    'getDistinctId': 'get_distinct_id',
+    'set': 'people.set',
+    'setOnce': 'people.set_once',
+    'increment': 'people.increment',
+    'append': 'people.append',
+    'union': 'people.union',
+    'remove': 'people.remove',
+    'unset': 'people.unset',
+    'trackCharge': 'people.track_charge',
+    // clearCharge and deleteUsers are left unguarded: their bindings call
+    // functions mixpanel-js doesn't have, and guarding them would turn
+    // today's error into a silent no-op even when mixpanel-js is loaded.
+    'groupSetProperties': 'get_group',
+    'groupSetPropertyOnce': 'get_group',
+    'groupUnsetProperty': 'get_group',
+    'groupRemovePropertyValue': 'get_group',
+    'groupUnionProperty': 'get_group',
+    'areFlagsReady': 'flags.are_flags_ready',
+    'getVariant': 'flags.get_variant',
+    'getVariantValue': 'flags.get_variant',
+    'isEnabled': 'flags.get_variant',
+    'updateFlagsContext': 'flags.update_context',
+    'loadFlags': 'flags.load_flags',
+    'trackScreenView': 'track',
+    'trackScreenLeave': 'track',
+  };
+
+  bool _warnedSkippedCall = false;
+
   /// Handles method calls over the MethodChannel of this plugin.
   /// Note: Check the "federated" architecture for a new way of doing this:
   /// https://flutter.dev/go/federated-plugins
   Future<dynamic> handleMethodCall(MethodCall call) async {
+    final jsFunction = _jsFunctionForMethod[call.method];
+    if (jsFunction != null && !_isMixpanelJsFunction(jsFunction)) {
+      _logSkippedCall(call.method, jsFunction);
+      return _resultWhenSkipped(call);
+    }
     switch (call.method) {
       case 'initialize':
         initialize(call);
@@ -255,6 +315,51 @@ class MixpanelFlutterPlugin {
     }
   }
 
+  /// Whether `window.mixpanel.<path>` is a callable function.
+  static bool _isMixpanelJsFunction(String path) {
+    JSAny? target = globalContext.getProperty<JSAny?>('mixpanel'.toJS);
+    for (final name in path.split('.')) {
+      if (target == null ||
+          !(target.typeofEquals('object') || target.typeofEquals('function'))) {
+        return false;
+      }
+      target = (target as JSObject).getProperty<JSAny?>(name.toJS);
+    }
+    return target != null && target.typeofEquals('function');
+  }
+
+  void _logSkippedCall(String method, String jsFunction) {
+    final reason = 'mixpanel.$jsFunction is not available. mixpanel-js may be '
+        'missing, blocked or still loading, or Mixpanel.init has not run';
+    developer.log('`$method` skipped: $reason', name: 'Mixpanel');
+    if (!_warnedSkippedCall) {
+      _warnedSkippedCall = true;
+      debugPrint('[Mixpanel] `$method` skipped: $reason. Further skipped '
+          'calls are logged to the `Mixpanel` developer log only.');
+    }
+  }
+
+  /// What a skipped call returns: the value the Dart API would see when
+  /// nothing is set, so callers never get a type error.
+  dynamic _resultWhenSkipped(MethodCall call) {
+    final args = call.arguments is Map ? call.arguments as Map : const {};
+    switch (call.method) {
+      case 'hasOptedOutTracking':
+      case 'areFlagsReady':
+        return false;
+      case 'getVariant':
+        return _jsVariantToMap(
+            null, args['fallback'] as Map<Object?, Object?>? ?? {});
+      case 'getVariantValue':
+        return args['fallbackValue'];
+      case 'isEnabled':
+        return args['fallbackValue'] as bool? ?? false;
+      default:
+        // getDistinctId: the Dart API maps null to ''.
+        return null;
+    }
+  }
+
   void initialize(MethodCall call) {
     Map<Object?, Object?> args = call.arguments as Map<Object?, Object?>;
     String token = args['token'] as String;
@@ -306,7 +411,16 @@ class MixpanelFlutterPlugin {
         name: 'Mixpanel',
       );
     }
-    init(token, jsConfig);
+    try {
+      init(token, jsConfig);
+    } catch (e) {
+      // Always logged, then rethrown unchanged so Mixpanel.init fails with
+      // the same PlatformException as before.
+      debugPrint(_isMixpanelJsFunction('init')
+          ? '[Mixpanel] mixpanel.init failed: $e'
+          : '[Mixpanel] $_jsNotLoadedMessage');
+      rethrow;
+    }
   }
 
   void handleSetServerURL(MethodCall call) {
@@ -529,7 +643,11 @@ class MixpanelFlutterPlugin {
   }
 
   bool handleHasOptedOutTracking() {
-    return has_opted_out_tracking();
+    // The snippet's stub, used until mixpanel-js loads, returns undefined.
+    final optedOut = has_opted_out_tracking();
+    return optedOut != null &&
+        optedOut.typeofEquals('boolean') &&
+        (optedOut as JSBoolean).toDart;
   }
 
   void handleOptInTracking() {
