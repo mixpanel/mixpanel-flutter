@@ -1984,6 +1984,41 @@ void main() {
       expect(calls, isEmpty);
     });
 
+    test('identifyWithIdentity rejects | in a user or company id', () async {
+      final mixpanel = await Mixpanel.init('test token',
+          trackAutomaticEvents: true, hierarchicalGroups: true);
+      calls.clear();
+      for (final identity in const [
+        MixpanelIdentity(userId: 'user|123', companyId: 'acme'),
+        MixpanelIdentity(userId: 'user_123', companyId: 'ac|me'),
+        MixpanelIdentity(userId: 'user|123'),
+      ]) {
+        await mixpanel.identifyWithIdentity(identity);
+      }
+      expect(calls, isEmpty);
+    });
+
+    test('identifyWithIdentity allows | in a user id when disabled', () async {
+      final mixpanel =
+          await Mixpanel.init('test token', trackAutomaticEvents: true);
+      calls.clear();
+      await mixpanel
+          .identifyWithIdentity(const MixpanelIdentity(userId: 'user|123'));
+      expect(
+        calls.single,
+        isMethodCall(
+          'identifyWithIdentity',
+          arguments: <String, dynamic>{
+            'identity': <String, dynamic>{
+              'userId': 'user|123',
+              'companyId': null,
+              'deviceId': null,
+            },
+          },
+        ),
+      );
+    });
+
     test('getIdentity decodes the native identity', () async {
       final mixpanel =
           await Mixpanel.init('test token', trackAutomaticEvents: true);

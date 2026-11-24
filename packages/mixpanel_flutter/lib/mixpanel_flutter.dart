@@ -672,7 +672,8 @@ class Mixpanel {
   }
 
   /// Logs and returns false for an identity whose user id is blank, or whose
-  /// company id is given but blank.
+  /// company id is given but blank. On a hierarchical groups project it also
+  /// does so for a user or company id containing `|`.
   bool _isValidIdentity(MixpanelIdentity identity, String method) {
     final userId = identity.userId;
     if (userId == null || !_MixpanelHelper.isValidString(userId)) {
@@ -683,6 +684,14 @@ class Mixpanel {
     final companyId = identity.companyId;
     if (companyId != null && !_MixpanelHelper.isValidString(companyId)) {
       developer.log('`$method` failed: companyId cannot be blank',
+          name: 'Mixpanel');
+      return false;
+    }
+    if (_hierarchicalGroups &&
+        (userId.contains('|') || (companyId?.contains('|') ?? false))) {
+      developer.log(
+          '`$method` failed: userId and companyId cannot contain | on a '
+          'hierarchical groups project',
           name: 'Mixpanel');
       return false;
     }
