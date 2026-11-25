@@ -655,6 +655,9 @@ class Mixpanel {
   /// On any other project Mixpanel ignores `$company_id`, so an identity that
   /// names a company is logged and ignored; identify with just a user id.
   ///
+  /// On a hierarchical groups project, user and company ids can't contain
+  /// `|`; an identity whose ids do is logged and ignored.
+  ///
   /// The SDK owns the device id, so [MixpanelIdentity.deviceId] is ignored.
   ///
   /// Once identified, the identity persists across restarts of your
