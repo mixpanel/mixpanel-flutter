@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:js_interop';
 import 'dart:typed_data';
 
+import 'package:mixpanel_flutter_common/mixpanel_flutter_common.dart';
 import 'package:web/web.dart' as web;
 import 'package:uuid/uuid.dart';
 
@@ -9,6 +10,7 @@ import 'event_queue_interface.dart';
 import '../../models/session_event.dart';
 import '../../models/session.dart';
 import '../logger.dart';
+import '../replay_identity.dart';
 import '../session/recording_limits.dart';
 import 'upload_lease.dart';
 
@@ -430,10 +432,10 @@ class IndexedDbEventQueue
         return;
       }
       completer.complete(
-        QueuedEventHeader(
+        QueuedEventHeader.fromStored(
           id: _asInt(key[0]),
           sessionId: key[1] as String,
-          distinctId: key[2] as String,
+          storedDistinctId: key[2] as String,
           timestamp: DateTime.fromMillisecondsSinceEpoch(
             _asInt(key[3]),
             isUtc: true,
@@ -447,10 +449,18 @@ class IndexedDbEventQueue
   Future<List<PersistedSessionReplayEvent>> fetchBatch({
     required String sessionId,
     required String distinctId,
+    MixpanelIdentity? identity,
     required int maxBytes,
     required int maxCount,
   }) async {
     await _ensureOpen();
+
+    // An event with an identity stores it in distinct_id, so a change of
+    // identity is a change of distinct_id too.
+    final storedDistinctId = ReplayIdentity.storedDistinctId(
+      distinctId,
+      identity,
+    );
 
     final txn = _transaction(_eventsStore.toJS, 'readonly');
     final store = txn.objectStore(_eventsStore);
@@ -481,7 +491,7 @@ class IndexedDbEventQueue
       final eventDistinctId = row['distinct_id'] as String;
 
       // Stop at distinctId boundary
-      if (eventDistinctId != distinctId) {
+      if (eventDistinctId != storedDistinctId) {
         completer.complete(batch);
         return;
       }

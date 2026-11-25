@@ -1,12 +1,14 @@
 import 'dart:convert';
 
 import 'package:clock/clock.dart';
+import 'package:mixpanel_flutter_common/mixpanel_flutter_common.dart';
 
 import '../platform/gzip_compressor.dart';
 
 import '../../models/session_event.dart';
 import '../../models/session.dart';
 import '../../version.dart';
+import '../replay_identity.dart';
 import 'rrweb_event.dart';
 
 /// Result of payload serialization
@@ -90,8 +92,9 @@ class PayloadSerializer {
   Map<String, String> buildQueryParams(
     Session session,
     String distinctId,
-    int sequenceNumber,
-  ) {
+    int sequenceNumber, {
+    MixpanelIdentity? identity,
+  }) {
     final batchStartTime = clock.now().millisecondsSinceEpoch / 1000.0;
     final replayLength = clock
         .now()
@@ -101,7 +104,7 @@ class PayloadSerializer {
 
     return {
       'format': 'gzip', // Indicate compression via query param (not header)
-      'distinct_id': distinctId,
+      if (ReplayIdentity.sendsDistinctId(identity)) 'distinct_id': distinctId,
       'seq': sequenceNumber.toString(),
       'batch_start_time': batchStartTime.toString(),
       'replay_id': session.id,
@@ -110,6 +113,7 @@ class PayloadSerializer {
       '\$lib_version': sdkVersion,
       if (operatingSystem.isNotEmpty) '\$os': operatingSystem,
       'mp_lib': sdkLibrary,
+      ...ReplayIdentity.queryParams(identity),
     };
   }
 

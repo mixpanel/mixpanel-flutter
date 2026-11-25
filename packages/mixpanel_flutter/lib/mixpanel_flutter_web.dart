@@ -146,6 +146,9 @@ class MixpanelFlutterPlugin {
       case "identify":
         handleIdentify(call);
         break;
+      case "identifyWithIdentity":
+        handleIdentifyWithIdentity(call);
+        break;
       case "alias":
         handleAlias(call);
         break;
@@ -181,6 +184,8 @@ class MixpanelFlutterPlugin {
         break;
       case "getDistinctId":
         return handleGetDistinctId();
+      case "getIdentity":
+        return handleGetIdentity();
       case "set":
         handleSet(call);
         break;
@@ -261,6 +266,23 @@ class MixpanelFlutterPlugin {
     dynamic config = args['config'];
     Map<String, dynamic> initConfig = Map<String, dynamic>.from(config ?? {});
 
+    // The hierarchicalGroups argument of Mixpanel.init is the only switch, so
+    // the Dart and JS sides always agree; a hierarchical_groups key passed in
+    // config is replaced.
+    final hierarchicalGroups = args['hierarchicalGroups'] == true;
+    if (initConfig.containsKey('hierarchical_groups') &&
+        initConfig['hierarchical_groups'] != hierarchicalGroups) {
+      developer.log(
+        'Ignoring hierarchical_groups in config; set hierarchicalGroups in '
+        'Mixpanel.init instead.',
+        name: 'Mixpanel',
+      );
+    }
+    initConfig.remove('hierarchical_groups');
+    if (hierarchicalGroups) {
+      initConfig['hierarchical_groups'] = true;
+    }
+
     final serverURL = args['serverURL'];
     if (serverURL is String && serverURL.isNotEmpty) {
       initConfig['api_host'] = serverURL;
@@ -337,6 +359,22 @@ class MixpanelFlutterPlugin {
     Map<Object?, Object?> args = call.arguments as Map<Object?, Object?>;
     String distinctId = args['distinctId'] as String;
     identify(distinctId);
+  }
+
+  void handleIdentifyWithIdentity(MethodCall call) {
+    Map<Object?, Object?> args = call.arguments as Map<Object?, Object?>;
+    identify_with_identity(safeJsify(_jsIdentity(args['identity'])));
+  }
+
+  /// Converts a Dart identity map to the `{user_id, company_id, device_id}`
+  /// object mixpanel-js takes, leaving out unset values.
+  Map<String, dynamic> _jsIdentity(dynamic identity) {
+    final map = identity is Map ? identity : const {};
+    return <String, dynamic>{
+      if (map['userId'] != null) 'user_id': map['userId'],
+      if (map['companyId'] != null) 'company_id': map['companyId'],
+      if (map['deviceId'] != null) 'device_id': map['deviceId'],
+    };
   }
 
   void handleTrackWithGroups(MethodCall call) {
@@ -417,6 +455,60 @@ class MixpanelFlutterPlugin {
 
   String handleGetDistinctId() {
     return get_distinct_id();
+  }
+
+  /// How long [handleGetIdentity] waits for mixpanel-js to finish loading.
+  @visibleForTesting
+  static Duration identityLoadTimeout = const Duration(seconds: 5);
+
+  /// How often [handleGetIdentity] checks whether mixpanel-js has loaded.
+  @visibleForTesting
+  static Duration identityLoadPollInterval = const Duration(milliseconds: 50);
+
+  /// Whether the loaded mixpanel-js library has replaced the snippet stub.
+  /// The stub only queues the calls it lists, and get_identity is not one of
+  /// them, so it exists once the real library is in place.
+  static bool _hasGetIdentity() {
+    final sdk = globalContext.getProperty<JSAny?>('mixpanel'.toJS);
+    if (sdk == null || !sdk.typeofEquals('object')) return false;
+    return (sdk as JSObject)
+        .getProperty<JSAny?>('get_identity'.toJS)
+        .typeofEquals('function');
+  }
+
+  /// Completes with true once mixpanel-js has loaded, or false if it has not
+  /// loaded within [identityLoadTimeout] (for example, blocked by an ad
+  /// blocker).
+  static Future<bool> _waitForGetIdentity() async {
+    if (_hasGetIdentity()) return true;
+    final deadline = DateTime.now().add(identityLoadTimeout);
+    while (DateTime.now().isBefore(deadline)) {
+      await Future<void>.delayed(identityLoadPollInterval);
+      if (_hasGetIdentity()) return true;
+    }
+    return false;
+  }
+
+  Future<Map<String, dynamic>> handleGetIdentity() async {
+    if (!await _waitForGetIdentity()) {
+      developer.log(
+        'getIdentity() timed out waiting for mixpanel-js to load; '
+        'returning an empty identity.',
+        name: 'Mixpanel',
+      );
+      return const <String, dynamic>{
+        'userId': null,
+        'companyId': null,
+        'deviceId': null,
+      };
+    }
+    final identity = get_identity().dartify();
+    final map = identity is Map ? identity : const {};
+    return <String, dynamic>{
+      'userId': map['user_id'],
+      'companyId': map['company_id'],
+      'deviceId': map['device_id'],
+    };
   }
 
   void handleSet(MethodCall call) {

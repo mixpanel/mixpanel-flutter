@@ -41,6 +41,11 @@ external void opt_out_tracking();
 @JS('mixpanel.identify')
 external void identify(String distinctId);
 
+// Hierarchical groups: identify with an object naming the user and company,
+// `{user_id, company_id}`.
+@JS('mixpanel.identify')
+external void identify_with_identity(JSAny? identity);
+
 @JS('mixpanel.alias')
 external void alias(String alias, String distinctId);
 
@@ -80,6 +85,10 @@ external void reset();
 
 @JS('mixpanel.get_distinct_id')
 external String get_distinct_id();
+
+// Returns `{user_id, company_id, device_id}`, with null for unset values.
+@JS('mixpanel.get_identity')
+external JSAny? get_identity();
 
 @JS('mixpanel.people.set')
 external void people_set(JSAny? properties);
