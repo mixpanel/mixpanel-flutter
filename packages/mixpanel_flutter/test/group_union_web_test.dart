@@ -56,4 +56,21 @@ void main() {
       ]
     ]);
   });
+
+  test('groupUnionProperty sends an empty array for a non-list value',
+      () async {
+    await Mixpanel.init('test-token', trackAutomaticEvents: false);
+
+    await channel.invokeMethod<void>('groupUnionProperty', <String, dynamic>{
+      'token': 'test-token',
+      'groupKey': 'company',
+      'groupID': 'acme',
+      'name': 'tags',
+      'value': 'not-a-list',
+    });
+
+    expect(unions, [
+      ['tags', []]
+    ]);
+  });
 }
