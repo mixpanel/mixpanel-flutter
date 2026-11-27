@@ -523,9 +523,10 @@ class MixpanelFlutterPlugin {
     dynamic groupID = args['groupID'];
 
     String name = args['name'] as String;
-    JSAny? value = safeJsify(args['value'] as dynamic);
-    get_group(groupKey, safeJsify(groupID))
-        .union(name, value is JSArray ? value : <JSAny>[].toJS);
+    dynamic value = args['value'];
+    // Check the Dart value: an `is JSArray` check is not Wasm-compatible.
+    get_group(groupKey, safeJsify(groupID)).union(
+        name, value is List ? safeJsify(value) as JSArray : <JSAny>[].toJS);
   }
 
   bool handleHasOptedOutTracking() {
