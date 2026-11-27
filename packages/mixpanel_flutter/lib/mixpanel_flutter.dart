@@ -470,6 +470,7 @@ class Mixpanel {
   ///  * [trackAutomaticEvents] Required Whether or not to collect common mobile events
   ///  include app sessions, first app opens, app updated, etc.
   ///  * [superProperties] Optional super properties to register
+  ///    Values must be supported by [StandardMessageCodec], or be a [DateTime] or [Uri].
   ///  * [config] Optional A dictionary of config options to override (WEB ONLY)
   ///  * [autocaptureOptions] Opt into autocaptured pointer signals on Android, iOS, macOS and web.
   ///    Also wrap the app in MixpanelAutocaptureWidget. Omit to disable.
@@ -657,6 +658,7 @@ class Mixpanel {
   ///
   /// * [eventName] The name of the event to send
   /// * [properties] An optional map containing the key value pairs of the properties to include in this event.
+  ///   Values must be supported by [StandardMessageCodec], or be a [DateTime] or [Uri].
   Future<void> track(
     String eventName, {
     Map<String, dynamic>? properties,
@@ -699,7 +701,9 @@ class Mixpanel {
   ///
   ///  * [eventName] The name of the event to send
   ///  * [properties] A Map containing the key value pairs of the properties to include in this event.
+  ///    Values must be supported by [StandardMessageCodec], or be a [DateTime] or [Uri].
   ///  * [groups] A Map containing the group key value pairs for this event.
+  ///    Values must be supported by [StandardMessageCodec], or be a [DateTime] or [Uri].
   Future<void> trackWithGroups(
     String eventName,
     Map<String, dynamic> properties,
@@ -721,6 +725,7 @@ class Mixpanel {
   ///
   /// * [groupKey] The property name associated with this group type (must already have been set up).
   /// * [groupID] The group the user belongs to.
+  ///   Must be supported by [StandardMessageCodec], or be a [DateTime] or [Uri].
   void setGroup(String groupKey, dynamic groupID) {
     if (_MixpanelHelper.isValidString(groupKey)) {
       _channel.invokeMethod<void>('setGroup',
@@ -736,6 +741,7 @@ class Mixpanel {
   ///
   /// * [groupKey] String identifying the type of group (must be already in use as a group key)
   /// * [groupID] Object identifying the specific group
+  ///   Must be supported by [StandardMessageCodec], or be a [DateTime] or [Uri].
   /// return an instance of MixpanelGroup that you can use to update
   ///     records in Mixpanel Group Analytics
   MixpanelGroup getGroup(String groupKey, dynamic groupID) {
@@ -746,6 +752,7 @@ class Mixpanel {
   ///
   /// * [groupKey] The property name associated with this group type (must already have been set up).
   /// * [groupID] The new group the user belongs to.
+  ///   Must be supported by [StandardMessageCodec], or be a [DateTime] or [Uri].
   void addGroup(String groupKey, dynamic groupID) {
     if (_MixpanelHelper.isValidString(groupKey)) {
       _channel.invokeMethod<void>('addGroup',
@@ -760,6 +767,7 @@ class Mixpanel {
   ///
   /// * [groupKey] The property name associated with this group type (must already have been set up).
   /// * [groupID] The group value to remove.
+  ///   Must be supported by [StandardMessageCodec], or be a [DateTime] or [Uri].
   void removeGroup(String groupKey, dynamic groupID) {
     if (_MixpanelHelper.isValidString(groupKey)) {
       _channel.invokeMethod<void>('removeGroup',
@@ -774,6 +782,7 @@ class Mixpanel {
   ///
   /// * [groupKey] String identifying the type of group (must be already in use as a group key)
   /// * [groupID] Object identifying the specific group
+  ///   Must be supported by [StandardMessageCodec], or be a [DateTime] or [Uri].
   ///
   /// Calling deleteGroup deletes an entire record completely. Any future calls
   /// to Group Analytics using the same group value will create and store new values.
@@ -800,6 +809,7 @@ class Mixpanel {
   /// to remove a superProperty, call unregisterSuperProperty() or clearSuperProperties()
   ///
   /// * [properties] A Map containing super properties to register
+  ///   Values must be supported by [StandardMessageCodec], or be a [DateTime] or [Uri].
   Future<void> registerSuperProperties(Map<String, dynamic> properties) async {
     await _channel.invokeMethod<void>(
         'registerSuperProperties', <String, dynamic>{'properties': _MixpanelHelper.ensureSerializableProperties(properties)});
@@ -811,6 +821,7 @@ class Mixpanel {
   /// Calling registerSuperPropertiesOnce will never overwrite existing properties.
   ///
   /// * [properties] A Map containing the super properties to register.
+  ///   Values must be supported by [StandardMessageCodec], or be a [DateTime] or [Uri].
   Future<void> registerSuperPropertiesOnce(
     Map<String, dynamic> properties,
   ) async {
@@ -946,6 +957,7 @@ class People {
   ///
   /// * [prop] The name of the Mixpanel property. This must be a String, for example "Zip Code"
   /// * [to] The value of the Mixpanel property. For "Zip Code", this value might be the String "90210"
+  ///   Must be supported by [StandardMessageCodec], or be a [DateTime] or [Uri].
   ///
   void set(String prop, dynamic to) {
     if (_MixpanelHelper.isValidString(prop)) {
@@ -962,6 +974,7 @@ class People {
   ///
   /// * [prop] The name of the Mixpanel property. This must be a String, for example "Zip Code"
   /// * [to] The value of the Mixpanel property. For "Zip Code", this value might be the String "90210"
+  ///   Must be supported by [StandardMessageCodec], or be a [DateTime] or [Uri].
   void setOnce(String prop, dynamic to) {
     if (_MixpanelHelper.isValidString(prop)) {
       Map<String, dynamic> properties = {prop: to};
@@ -995,6 +1008,7 @@ class People {
   ///  currently have a list value, the append will be ignored.
   ///  * [name] the People Analytics property that should have it's value appended to
   ///  * [value] the new value that will appear at the end of the property's list
+  ///    Must be supported by [StandardMessageCodec], or be a [DateTime] or [Uri].
   void append(String name, dynamic value) {
     if (_MixpanelHelper.isValidString(name)) {
       if (kIsWeb || Platform.isIOS || Platform.isMacOS) {
@@ -1020,6 +1034,7 @@ class People {
   ///
   /// * [name] name of the list-valued property to set or modify
   /// * [value] an array of values to add to the property value if not already present
+  ///   Each item must be supported by [StandardMessageCodec], or be a [DateTime] or [Uri].
   void union(String name, List<dynamic> value) {
     if (_MixpanelHelper.isValidString(name)) {
       if (kIsWeb || Platform.isIOS || Platform.isMacOS) {
@@ -1045,6 +1060,7 @@ class People {
   ///
   /// * [name] the People Analytics property that should have it's value removed from
   /// * [value] the value that will be removed from the property's list
+  ///   Must be supported by [StandardMessageCodec], or be a [DateTime] or [Uri].
   void remove(String name, dynamic value) {
     if (_MixpanelHelper.isValidString(name)) {
       if (kIsWeb || Platform.isIOS || Platform.isMacOS) {
@@ -1081,6 +1097,7 @@ class People {
   ///
   /// * [amount] the amount of money exchanged. Positive amounts represent purchases or income from the customer, negative amounts represent refunds or payments to the customer.
   /// * [properties] an optional collection of properties to associate with this transaction.
+  ///   Values must be supported by [StandardMessageCodec], or be a [DateTime] or [Uri].
   void trackCharge(double amount, {Map<String, dynamic>? properties}) {
     // ignore: unnecessary_null_comparison
     if (amount != null) {
@@ -1195,6 +1212,7 @@ class MixpanelGroup {
   ///
   /// * [name] the Group Analytics list-valued property that should have a value removed
   /// * [value] the value that will be removed from the list
+  ///   Must be supported by [StandardMessageCodec], or be a [DateTime] or [Uri].
   void remove(String name, dynamic value) {
     if (_MixpanelHelper.isValidString(name)) {
       _channel.invokeMethod<void>('groupRemovePropertyValue', <String, dynamic>{
@@ -1216,6 +1234,7 @@ class MixpanelGroup {
   ///
   /// * [name] name of the list-valued property to set or modify
   /// * [value] an array of values to add to the property value if not already present
+  ///   Each item must be supported by [StandardMessageCodec], or be a [DateTime] or [Uri].
   void union(String name, List<dynamic> value) {
     if (!_MixpanelHelper.isValidString(name)) {
       developer.log('`group union` failed: name cannot be blank',
@@ -1333,6 +1352,7 @@ class FeatureFlags {
   /// Update the context used for feature flag evaluation.
   ///
   /// * [context] A Map of context properties to use for flag evaluation.
+  ///   Values must be supported by [StandardMessageCodec], or be a [DateTime] or [Uri].
   ///   This entirely replaces any previously set custom context.
   /// * [options] Reserved for future use. Currently not implemented by the
   ///   native SDKs and will be ignored.
@@ -1404,6 +1424,7 @@ class Autocapture {
   /// Blank identifiers and nonfinite coordinates are silently ignored.
   /// [properties] may contain additional developer-supplied event properties;
   /// click metadata and `$mp_autocapture` take precedence over those values.
+  /// Values in [properties] must be supported by [StandardMessageCodec], or be a [DateTime] or [Uri].
   Future<void> trackClick(ClickEvent clickEvent,
       {Map<String, dynamic>? properties}) async {
     await _trackClickEvent(r'$mp_click', clickEvent, properties);
@@ -1483,6 +1504,7 @@ class Autocapture {
   ///
   /// * [screenName] The name of the screen being viewed
   /// * [properties] Optional additional properties to include with the event
+  ///   Values must be supported by [StandardMessageCodec], or be a [DateTime] or [Uri].
   Future<void> trackScreenView(String screenName,
       {Map<String, dynamic>? properties}) async {
     if (_MixpanelHelper.isValidString(screenName)) {
@@ -1508,6 +1530,7 @@ class Autocapture {
   ///
   /// * [screenName] The name of the screen being left
   /// * [properties] Optional additional properties to include with the event
+  ///   Values must be supported by [StandardMessageCodec], or be a [DateTime] or [Uri].
   Future<void> trackScreenLeave(String screenName,
       {Map<String, dynamic>? properties}) async {
     if (_MixpanelHelper.isValidString(screenName)) {
