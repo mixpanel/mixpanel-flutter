@@ -1,0 +1,10 @@
+include: package:flutter_lints/flutter.yaml
+
+# `is` checks between JS interop types behave differently under dart2wasm.
+linter:
+  rules:
+    - invalid_runtime_check_with_js_interop_types
+
+analyzer:
+  errors:
+    invalid_runtime_check_with_js_interop_types: error
